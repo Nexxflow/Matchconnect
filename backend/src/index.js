@@ -20,7 +20,10 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 
+
+
 const errorHandler = require("./middleware/errorHandler");
+
 
 const authRoutes = require("./routes/authRoutes");
 const teamsRoutes = require("./routes/teamsRoutes");
@@ -29,6 +32,7 @@ const umpiresRoutes = require("./routes/umpiresRoutes");
 const bookingsRoutes = require("./routes/bookingsRoutes");
 const tournamentsRoutes = require("./routes/tournamentsRoutes");
 const challengesRoutes = require("./routes/challengesRoutes");
+
 
 const app = express();
 
@@ -46,6 +50,7 @@ app.use("/api/umpires", umpiresRoutes);
 app.use("/api/bookings", bookingsRoutes);
 app.use("/api/tournaments", tournamentsRoutes);
 app.use("/api/challenges", challengesRoutes);
+app.use("/api/matches", require("./routes/liveScoreRoutes"));
 
 app.use((req, res) => res.status(404).json({ error: "Route not found" }));
 app.use(errorHandler);

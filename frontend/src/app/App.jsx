@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Bell, MapPin, ChevronDown, Phone, Star, CheckCircle, Car, Droplets, Wind, Hash, Plus, Filter, Shield, Swords, Trophy, AlertCircle, CheckCheck, Clock, XCircle, Calendar, Users, X, CreditCard, CalendarCheck, LogOut } from "lucide-react";
 import AuthScreen from "./components/Auth/AuthScreen.jsx";
 import { apiRequest, getStoredToken, setStoredToken } from "./api";
+import LiveScoreTab from "./components/LiveScoreTab";
 
 // ─── Backend → frontend shape transformers ─────────────────────────────────
 const AMENITY_ICON = {
@@ -1252,91 +1253,7 @@ function UmpiresTab({ umpires, onBook, token, onCreated }) {
 }
 
 // ─── LIVE SCORE ───────────────────────────────────────────────────────────────
-function LiveScoreTab() {
-  const balls = [{ val: "4", type: "boundary" }, { val: "0", type: "dot" }, { val: "1", type: "single" }, { val: "W", type: "wicket" }, { val: "6", type: "six" }, { val: "2", type: "single" }, { val: "1", type: "single" }, { val: "0", type: "dot" }, { val: "NB", type: "noball" }, { val: "4", type: "boundary" }];
-  const ballStyle = type => {
-    if (type === "wicket") return { backgroundColor: "#ef4444", color: "#fff", border: "1px solid transparent" };
-    if (type === "six") return { backgroundColor: "#22c55e", color: "#000", border: "1px solid transparent" };
-    if (type === "boundary") return { backgroundColor: "#3b82f6", color: "#fff", border: "1px solid transparent" };
-    if (type === "noball") return { backgroundColor: "#f59e0b", color: "#000", border: "1px solid transparent" };
-    if (type === "dot") return { backgroundColor: "#1e211e", color: "#6b7a6b", border: "1px solid #2a2a2a" };
-    return { backgroundColor: "#222", color: "#c8ccc8", border: "1px solid #2a2a2a" };
-  };
-  return <div className="space-y-6">
-      <h2 className="text-xl font-bold text-white">Live Matches</h2>
 
-      <div className="relative rounded-2xl overflow-hidden p-5" style={{ background: "linear-gradient(135deg,#14532d,#0d2a16 60%,#0d0f0d)", border: "1px solid rgba(22,101,52,0.3)" }}>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
-            </span>
-            <span className="text-xs font-bold text-red-400 tracking-widest">LIVE</span>
-          </div>
-          <span className="text-xs" style={{ color: "#6b7a6b" }}>Shivaji Park · Over 14.3</span>
-        </div>
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex-1 text-center">
-            <div className="font-bold text-white text-sm mb-1">Royal Strikers</div>
-            <div className="text-3xl font-black text-white font-mono">187<span className="text-lg" style={{ color: "#6b7a6b" }}>/4</span></div>
-            <div className="text-xs mt-0.5" style={{ color: "#6b7a6b" }}>20 ov</div>
-          </div>
-          <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ border: "2px solid rgba(34,197,94,0.4)" }}>
-            <span className="text-green-400 font-bold text-xs">VS</span>
-          </div>
-          <div className="flex-1 text-center">
-            <div className="font-bold text-white text-sm mb-1">Mumbai Warriors</div>
-            <div className="text-3xl font-black text-green-400 font-mono">143<span className="text-lg text-green-700">/6</span></div>
-            <div className="text-xs mt-0.5" style={{ color: "#6b7a6b" }}>14.3 ov</div>
-          </div>
-        </div>
-        <div className="mt-3 text-center text-xs rounded-lg py-1.5 text-amber-400 font-medium" style={{ backgroundColor: "rgba(13,15,13,0.5)" }}>
-          Need 45 runs off 33 balls · RRR: 8.18
-        </div>
-      </div>
-
-      <div className={cn(C, "rounded-2xl overflow-hidden")}>
-        <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid #2a2a2a" }}>
-          <span className="text-sm font-semibold text-white">🏏 Batting</span>
-          <span className="text-xs" style={{ color: "#6b7a6b" }}>CRR: 9.86</span>
-        </div>
-        <div className="px-4 py-2 grid grid-cols-5 text-xs font-medium" style={{ color: "#4a5a4a", borderBottom: "1px solid #2a2a2a" }}>
-          <span className="col-span-2">Batter</span>
-          <span className="text-center">R</span><span className="text-center">B</span><span className="text-center">SR</span>
-        </div>
-        {[{ name: "A. Sharma *", runs: 68, balls: 41, sr: "165.8", on: true }, { name: "R. Patel", runs: 34, balls: 28, sr: "121.4", on: false }].map((b, i, arr) => <div key={b.name} className="px-4 py-2.5 grid grid-cols-5 items-center" style={{ borderBottom: i < arr.length - 1 ? "1px solid #2a2a2a" : "none" }}>
-            <span className="col-span-2 text-sm font-medium" style={{ color: b.on ? "#22c55e" : "#fff" }}>{b.name}</span>
-            <span className="text-center font-bold text-white text-sm font-mono">{b.runs}</span>
-            <span className="text-center text-sm font-mono" style={{ color: "#6b7a6b" }}>{b.balls}</span>
-            <span className="text-center text-xs font-mono" style={{ color: "#6b7a6b" }}>{b.sr}</span>
-          </div>)}
-      </div>
-
-      <div className={cn(C, "rounded-2xl overflow-hidden")}>
-        <div className="px-4 py-3" style={{ borderBottom: "1px solid #2a2a2a" }}>
-          <span className="text-sm font-semibold text-white">🎯 Bowling</span>
-        </div>
-        <div className="px-4 py-2 grid grid-cols-5 text-xs font-medium" style={{ color: "#4a5a4a", borderBottom: "1px solid #2a2a2a" }}>
-          <span className="col-span-2">Bowler</span>
-          <span className="text-center">O</span><span className="text-center">W</span><span className="text-center">ER</span>
-        </div>
-        {[{ name: "K. Singh *", overs: "3.3", wkts: 2, er: "7.71", on: true }, { name: "V. Mehta", overs: "4", wkts: 2, er: "8.25", on: false }, { name: "P. Kumar", overs: "4", wkts: 1, er: "9.50", on: false }].map((b, i, arr) => <div key={b.name} className="px-4 py-2.5 grid grid-cols-5 items-center" style={{ borderBottom: i < arr.length - 1 ? "1px solid #2a2a2a" : "none" }}>
-            <span className="col-span-2 text-sm font-medium" style={{ color: b.on ? "#3b82f6" : "#fff" }}>{b.name}</span>
-            <span className="text-center text-sm font-mono" style={{ color: "#6b7a6b" }}>{b.overs}</span>
-            <span className="text-center font-bold text-red-400 text-sm font-mono">{b.wkts}</span>
-            <span className="text-center text-xs font-mono" style={{ color: "#6b7a6b" }}>{b.er}</span>
-          </div>)}
-      </div>
-
-      <div className={cn(C, "rounded-2xl p-4")}>
-        <div className="text-sm font-semibold text-white mb-3">Recent Balls</div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {balls.map((b, i) => <div key={i} className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold" style={ballStyle(b.type)}>{b.val}</div>)}
-        </div>
-      </div>
-    </div>;
-}
 
 // ─── TOURNAMENTS ──────────────────────────────────────────────────────────────
 function TournamentsTab({ registeredIds, onRegister, tournaments }) {
@@ -1787,7 +1704,7 @@ const handleChallengeCreated = (newChallenge) => {
     onCreated={handleUmpireCreated}
     onBook={u => setBookingModal({ type: "umpire", item: u })}
   />,
-  "Live Score": <LiveScoreTab />,
+  "Live Score": <LiveScoreTab/>,
   "Tournaments": <TournamentsTab tournaments={tournaments} registeredIds={registeredIds} onRegister={handleRegister} />,
   "My Team": <MyTeamTab acceptedChallenge={acceptedChallenge} registeredTournaments={registeredTournaments} bookings={bookings} />
 };
