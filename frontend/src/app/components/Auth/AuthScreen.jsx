@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Eye, EyeOff, Mail, Lock, User, Phone, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react";
 import { apiRequest } from "../../api";
 
@@ -62,6 +62,18 @@ function ErrorBanner({ message }) {
   );
 }
 
+function NoticeBanner({ message }) {
+  if (!message) return null;
+  return (
+    <div
+      className="text-xs mb-3 rounded-lg p-2.5 flex items-start gap-2"
+      style={{ backgroundColor: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)", color: "#4ade80" }}
+    >
+      <CheckCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" /> {message}
+    </div>
+  );
+}
+
 function SubmitButton({ children, loading, disabled }) {
   const isDisabled = disabled || loading;
   return (
@@ -81,7 +93,7 @@ function SubmitButton({ children, loading, disabled }) {
 }
 
 // ─── Login ──────────────────────────────────────────────────────────────────
-function LoginForm({ onAuthSuccess, onSwitch }) {
+function LoginForm({ onAuthSuccess, onSwitch, notice }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -103,6 +115,7 @@ function LoginForm({ onAuthSuccess, onSwitch }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
+      {!error && <NoticeBanner message={notice} />}
       <ErrorBanner message={error} />
       <Field icon={Mail} type="email" required placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} />
       <PasswordField value={password} onChange={e => setPassword(e.target.value)} />
@@ -123,7 +136,7 @@ function LoginForm({ onAuthSuccess, onSwitch }) {
 }
 
 // ─── Register ───────────────────────────────────────────────────────────────
-function RegisterForm({ onAuthSuccess, onSwitch }) {
+function RegisterForm({ onSwitch }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -133,6 +146,10 @@ function RegisterForm({ onAuthSuccess, onSwitch }) {
 
   const handleSubmit = async e => {
     e.preventDefault();
+    if (!phone.trim()) {
+      setError("Phone number is required");
+      return;
+    }
     if (password.length < 8) {
       setError("Password must be at least 8 characters");
       return;
@@ -140,11 +157,12 @@ function RegisterForm({ onAuthSuccess, onSwitch }) {
     setLoading(true);
     setError(null);
     try {
-      const { user, token } = await apiRequest("/auth/signup", {
+      await apiRequest("/auth/signup", {
         method: "POST",
-        body: { name, email, phone: phone || undefined, password }
+        body: { name, email, phone, password }
       });
-      onAuthSuccess(user, token);
+      // Registering no longer logs the user in — send them to login instead.
+      onSwitch("login", "Account created! Please log in.");
     } catch (err) {
       setError(err.message || "Registration failed");
     } finally {
@@ -157,7 +175,7 @@ function RegisterForm({ onAuthSuccess, onSwitch }) {
       <ErrorBanner message={error} />
       <Field icon={User} required placeholder="Full name" value={name} onChange={e => setName(e.target.value)} />
       <Field icon={Mail} type="email" required placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} />
-      <Field icon={Phone} type="tel" placeholder="Phone (optional)" value={phone} onChange={e => setPhone(e.target.value)} />
+      <Field icon={Phone} type="tel" required placeholder="Phone number" value={phone} onChange={e => setPhone(e.target.value)} />
       <PasswordField value={password} onChange={e => setPassword(e.target.value)} placeholder="Password (min. 8 characters)" />
       <SubmitButton loading={loading}>Create Account</SubmitButton>
       <p className="text-center text-xs" style={{ color: "#6b7a6b" }}>
@@ -241,6 +259,10 @@ function ResetPasswordForm({ token, onSwitch }) {
 
   const handleSubmit = async e => {
     e.preventDefault();
+    if (!token) {
+      setError("This reset link is missing its token. Please request a new one.");
+      return;
+    }
     if (password.length < 8) {
       setError("Password must be at least 8 characters");
       return;
@@ -254,7 +276,7 @@ function ResetPasswordForm({ token, onSwitch }) {
     try {
       await apiRequest(`/auth/reset-password/${token}`, { method: "POST", body: { password } });
       setDone(true);
-      // Clean the token out of the URL and send them back to a normal login screen.
+      // Clean the token out of the URL so refreshing doesn't re-trigger reset mode.
       window.history.replaceState({}, "", "/");
     } catch (err) {
       setError(err.message || "Could not reset password");
@@ -294,8 +316,26 @@ function ResetPasswordForm({ token, onSwitch }) {
 
 // ─── Root Auth screen ───────────────────────────────────────────────────────
 // mode: "login" | "register" | "forgot" | "reset"
-export default function AuthScreen({ onAuthSuccess, initialMode = "login", resetToken = null }) {
-  const [mode, setMode] = useState(resetToken ? "reset" : initialMode);
+export default function AuthScreen({ onAuthSuccess, initialMode = "login" }) {
+  const [mode, setMode] = useState(initialMode);
+  const [resetToken, setResetToken] = useState(null);
+  const [notice, setNotice] = useState(null);
+
+  // Detect a reset link on load, e.g. https://yourapp.com/reset-password/<token>
+  // This reads the token straight out of the URL, so clicking the emailed
+  // link lands directly on the reset-password form.
+  useEffect(() => {
+    const match = window.location.pathname.match(/^\/reset-password\/([^/]+)/);
+    if (match) {
+      setResetToken(match[1]);
+      setMode("reset");
+    }
+  }, []);
+
+  const handleSwitch = (nextMode, message = null) => {
+    setNotice(message);
+    setMode(nextMode);
+  };
 
   const titles = {
     login: ["Welcome back", "Log in to book grounds, umpires, and find your next match."],
@@ -320,10 +360,10 @@ export default function AuthScreen({ onAuthSuccess, initialMode = "login", reset
           {subtitle && <p className="text-xs mb-5" style={{ color: "#6b7a6b" }}>{subtitle}</p>}
           {mode !== "forgot" && mode !== "reset" && <div className="mb-5" />}
 
-          {mode === "login" && <LoginForm onAuthSuccess={onAuthSuccess} onSwitch={setMode} />}
-          {mode === "register" && <RegisterForm onAuthSuccess={onAuthSuccess} onSwitch={setMode} />}
-          {mode === "forgot" && <ForgotPasswordForm onSwitch={setMode} />}
-          {mode === "reset" && <ResetPasswordForm token={resetToken} onSwitch={setMode} />}
+          {mode === "login" && <LoginForm onAuthSuccess={onAuthSuccess} onSwitch={handleSwitch} notice={notice} />}
+          {mode === "register" && <RegisterForm onSwitch={handleSwitch} />}
+          {mode === "forgot" && <ForgotPasswordForm onSwitch={handleSwitch} />}
+          {mode === "reset" && <ResetPasswordForm token={resetToken} onSwitch={handleSwitch} />}
         </div>
       </div>
     </div>

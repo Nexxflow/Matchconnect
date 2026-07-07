@@ -53,16 +53,16 @@ async function sendResetEmail(toEmail, resetUrl) {
     `
   });
 
-  // Helpful during development: logs a preview URL only if you're using something
-  // like Ethereal test SMTP. Safe to leave in — it's a no-op on real providers.
   console.log("Reset email sent:", info.messageId);
 }
 
 // POST /api/auth/signup
 const signup = asyncHandler(async (req, res) => {
   const { name, email, phone, password } = req.body;
-  if (!name || !email || !password) {
-    return res.status(400).json({ error: "name, email and password are required" });
+
+  // name, email, phone and password are all required now
+  if (!name || !email || !phone || !password) {
+    return res.status(400).json({ error: "name, email, phone and password are required" });
   }
 
   const existing = await pool.query("SELECT id FROM users WHERE email = $1", [email]);
@@ -75,12 +75,14 @@ const signup = asyncHandler(async (req, res) => {
     `INSERT INTO users (name, email, phone, password_hash)
      VALUES ($1, $2, $3, $4)
      RETURNING id, name, email, phone, created_at`,
-    [name, email, phone || null, passwordHash]
+    [name, email, phone, passwordHash]
   );
 
   const user = result.rows[0];
-  const token = signToken(user);
-  res.status(201).json({ user, token });
+
+  // Signing up no longer grants access. No token is issued here —
+  // the user has to log in separately to get one.
+  res.status(201).json({ user, message: "Account created. Please log in." });
 });
 
 // POST /api/auth/login
@@ -130,8 +132,6 @@ const forgotPassword = asyncHandler(async (req, res) => {
     return res.json({ message: "If that email is registered, a reset link has been sent." });
   }
 
-  
-
   const rawToken = crypto.randomBytes(32).toString("hex");
   const hashedToken = crypto.createHash("sha256").update(rawToken).digest("hex");
   const expires = new Date(Date.now() + RESET_TOKEN_EXPIRY_MS);
@@ -146,8 +146,6 @@ const forgotPassword = asyncHandler(async (req, res) => {
   try {
     await sendResetEmail(email, resetUrl);
   } catch (err) {
-    // Don't leak email-provider failures to the client (would reveal whether
-    // the email exists / expose internal errors). Log it for yourself instead.
     console.error("Failed to send reset email:", err);
   }
 
