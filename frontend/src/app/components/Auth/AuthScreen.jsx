@@ -93,8 +93,9 @@ function SubmitButton({ children, loading, disabled }) {
 }
 
 // ─── Login ──────────────────────────────────────────────────────────────────
+// ─── Login ──────────────────────────────────────────────────────────────────
 function LoginForm({ onAuthSuccess, onSwitch, notice }) {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -104,7 +105,10 @@ function LoginForm({ onAuthSuccess, onSwitch, notice }) {
     setLoading(true);
     setError(null);
     try {
-      const { user, token } = await apiRequest("/auth/login", { method: "POST", body: { email, password } });
+      const { user, token } = await apiRequest("/auth/login", {
+        method: "POST",
+        body: { identifier, password }
+      });
       onAuthSuccess(user, token);
     } catch (err) {
       setError(err.message || "Login failed");
@@ -117,7 +121,14 @@ function LoginForm({ onAuthSuccess, onSwitch, notice }) {
     <form onSubmit={handleSubmit} className="space-y-3">
       {!error && <NoticeBanner message={notice} />}
       <ErrorBanner message={error} />
-      <Field icon={Mail} type="email" required placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} />
+      <Field
+        icon={User}
+        type="text"
+        required
+        placeholder="Email or phone number"
+        value={identifier}
+        onChange={e => setIdentifier(e.target.value)}
+      />
       <PasswordField value={password} onChange={e => setPassword(e.target.value)} />
       <div className="flex justify-end">
         <button type="button" onClick={() => onSwitch("forgot")} className="text-xs font-medium text-green-400 hover:text-green-300">

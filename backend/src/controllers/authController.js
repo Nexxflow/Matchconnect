@@ -65,9 +65,26 @@ const signup = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "name, email, phone and password are required" });
   }
 
-  const existing = await pool.query("SELECT id FROM users WHERE email = $1", [email]);
+  // Check email and phone for existing use in a single query, then figure out
+  // which one(s) collided so we can give a precise, helpful error message.
+  const existing = await pool.query(
+    "SELECT email, phone FROM users WHERE email = $1 OR phone = $2",
+    [email, phone]
+  );
+
   if (existing.rows.length > 0) {
-    return res.status(409).json({ error: "Email already registered" });
+    const emailTaken = existing.rows.some((row) => row.email === email);
+    const phoneTaken = existing.rows.some((row) => row.phone === phone);
+
+    if (emailTaken && phoneTaken) {
+      return res.status(409).json({ error: "Email and phone number are already registered" });
+    }
+    if (emailTaken) {
+      return res.status(409).json({ error: "Email already registered" });
+    }
+    if (phoneTaken) {
+      return res.status(409).json({ error: "Phone number already registered" });
+    }
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
@@ -86,28 +103,32 @@ const signup = asyncHandler(async (req, res) => {
 });
 
 // POST /api/auth/login
+// POST /api/auth/login   Body: { identifier, password }
+// `identifier` can be either the account's email or phone number.
 const login = asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: "email and password are required" });
+  const { identifier, password } = req.body;
+  if (!identifier || !password) {
+    return res.status(400).json({ error: "email/phone and password are required" });
   }
 
-  const result = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+  const result = await pool.query(
+    "SELECT * FROM users WHERE email = $1 OR phone = $1",
+    [identifier.trim()]
+  );
   const user = result.rows[0];
   if (!user) {
-    return res.status(401).json({ error: "Invalid email or password" });
+    return res.status(401).json({ error: "Invalid credentials" });
   }
 
   const match = await bcrypt.compare(password, user.password_hash);
   if (!match) {
-    return res.status(401).json({ error: "Invalid email or password" });
+    return res.status(401).json({ error: "Invalid credentials" });
   }
 
   const token = signToken(user);
   delete user.password_hash;
   res.json({ user, token });
 });
-
 // GET /api/auth/me
 const me = asyncHandler(async (req, res) => {
   const result = await pool.query(
