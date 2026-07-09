@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { listChallenges, createChallenge, acceptChallenge, cancelChallenge } = require("../controllers/challengesController");
+const { listChallenges, createChallenge, deleteChallenge, acceptChallenge, cancelChallenge } = require("../controllers/challengesController");
 const { listMessages, sendMessage } = require("../controllers/messagesController");
 const { authRequired } = require("../middleware/auth");
 
@@ -10,5 +10,6 @@ router.post("/:id/accept", authRequired, acceptChallenge);
 router.post("/:id/cancel", authRequired, cancelChallenge);
 router.get("/:id/messages", authRequired, listMessages);
 router.post("/:id/messages", authRequired, sendMessage);
+router.delete("/:id", authRequired, deleteChallenge);
 
 module.exports = router;

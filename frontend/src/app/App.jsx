@@ -1160,7 +1160,87 @@ function TimePicker({ value, onChange }) {
   </div>;
 }
 
-function FindMatchTab({ acceptedChallenge, onChallengeAccepted, token, user, challenges = [], onChallengeCreated, teammatePhones = [] }) {
+
+
+
+
+
+
+
+function MyPostedChallengeCard({ challenge, token, onDeleted }) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState(null);
+  const [confirming, setConfirming] = useState(false);
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    setError(null);
+    try {
+      await apiRequest(`/challenges/${challenge.id}`, { method: "DELETE", token });
+      onDeleted(challenge.id);
+    } catch (err) {
+      setError(err.message || "Could not delete — please try again.");
+    } finally {
+      setDeleting(false);
+      setConfirming(false);
+    }
+  };
+
+  return <div className={cn(C, "rounded-2xl p-4")}>
+    <div className="flex items-center justify-between mb-2">
+      <span className="text-xs font-semibold text-green-400 uppercase tracking-wide">Your Posted Challenge</span>
+      <Tag color="blue">{challenge.status === "on_hold" ? "On Hold" : "Open"}</Tag>
+    </div>
+    <div className="text-sm font-semibold text-white">{challenge.team_name}</div>
+    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+      <Tag color="blue">{challenge.format}</Tag>
+      <Tag color="green">{challenge.match_date} · {challenge.time_slot}</Tag>
+    </div>
+    {challenge.note && <div className="text-xs mt-1.5" style={{ color: "#6b7a6b" }}>{challenge.note}</div>}
+
+    {error && <div className="text-xs text-red-400 rounded-lg p-2 mt-3" style={{ backgroundColor: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}>{error}</div>}
+
+    {!confirming
+      ? <button onClick={() => setConfirming(true)} className="w-full mt-3 py-2 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1.5">
+          <XCircle className="w-3.5 h-3.5" /> Delete Challenge
+        </button>
+      : <div className="flex gap-2 mt-3">
+          <GhostButton onClick={() => setConfirming(false)} disabled={deleting} className="flex-1 text-center">Keep it</GhostButton>
+          <button disabled={deleting} onClick={handleDelete} className="flex-[2] py-2 rounded-xl bg-red-500 text-black font-bold text-xs hover:bg-red-400 transition-colors" style={deleting ? { opacity: 0.6, cursor: "not-allowed" } : {}}>
+            {deleting ? "Deleting..." : "Confirm Delete"}
+          </button>
+        </div>}
+  </div>;
+}
+
+
+// ─── Date/time display helper (Indian time) ────────────────────────────────
+// match_date can arrive as a plain "YYYY-MM-DD" or a full timestamp from the
+// backend — either way we render it in IST so everyone sees the same date
+// regardless of their browser's local timezone.
+// ─── Date/time display helper (Indian time) ────────────────────────────────
+function formatDateIST(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Kolkata"
+  });
+}
+
+function FindMatchTab({
+  acceptedChallenge,
+  onChallengeAccepted,
+  token,
+  user,
+  challenges = [],
+  onChallengeCreated,
+  onChallengeDeleted,
+  teammatePhones = []
+}) {
   const [selectedFormat, setSelectedFormat] = useState(0);
   const [dateFilter, setDateFilter] = useState(null); // ISO date string ("YYYY-MM-DD") or null for "Any Date"
   const [timeFilter, setTimeFilter] = useState(""); // exact time_slot value chosen by the user, "" = Any Time
@@ -1172,8 +1252,9 @@ function FindMatchTab({ acceptedChallenge, onChallengeAccepted, token, user, cha
     team: c.team_name,
     contact_no: c.contact_no,
     format: c.format,
-    date: c.match_date,
-    time: c.time_slot,
+    date: formatDateIST(c.match_date),   // displayed in IST
+    rawDate: c.match_date,               // raw value kept for filter comparisons
+    time: c.time_slot,                   // stored as "HH:MM" (24-hr) from ChallengeForm
     ground: c.ground_name || (c.ground_id ? "Ground booked" : "Not booked yet"),
     note: c.note || "",
     urgent: !!c.urgent,
@@ -1191,19 +1272,10 @@ function FindMatchTab({ acceptedChallenge, onChallengeAccepted, token, user, cha
   // nobody on the same team can accept a teammate's own post.
   const teamPhoneSet = new Set([myPhone, ...teammatePhones].filter(Boolean));
 
-  // My team's own open challenge (posted by me OR any teammate, not yet
-  // accepted by anyone) counts as "active" too — matches the backend's
-  // one-active-challenge-per-team rule, so the Post button disables itself
-  // before someone on the same team fills out a second form.
   const myOpenChallenge = teamPhoneSet.size
     ? challenges.find(c => c.status === "open" && teamPhoneSet.has(normalizePhone(c.contact_no)))
     : null;
 
-  // My team's accepted match, read straight from the shared challenges list.
-  // This is what makes an accept done by ANY teammate immediately count as
-  // "active" for every OTHER teammate too — checking both sides (the
-  // original poster's number and the accepter's number) since either one
-  // could belong to my team.
   const myTeamAcceptedChallenge = teamPhoneSet.size
     ? challenges.find(
         c =>
@@ -1215,11 +1287,6 @@ function FindMatchTab({ acceptedChallenge, onChallengeAccepted, token, user, cha
 
   const hasActive = !!acceptedChallenge || !!myTeamAcceptedChallenge || !!myOpenChallenge;
 
-  // Only ever show open challenges here, and never show a challenge posted
-  // by anyone on my own team — a teammate shouldn't be able to accept
-  // another teammate's post, and it should also disappear once cancelled
-  // (cancel flips status back to "open" server-side, and re-appears here
-  // for every OTHER team once that happens).
   const openChallenges = challenges.filter(
     c => (!c.status || c.status === "open") && !teamPhoneSet.has(normalizePhone(c.contact_no))
   );
@@ -1230,24 +1297,42 @@ function FindMatchTab({ acceptedChallenge, onChallengeAccepted, token, user, cha
     if (!dateStr) return false;
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr === isoTarget;
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}` === isoTarget;
+    const istDateStr = d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }); // en-CA = YYYY-MM-DD
+    return istDateStr === isoTarget;
   };
 
   const query = searchQuery.trim().toLowerCase();
 
+  // Converts EITHER "4:00 PM" (12-hour, from the TimePicker filter) OR
+  // "16:00" (24-hour, as stored by ChallengeForm's TimeField) into minutes
+  // since midnight, so both formats can be compared on equal footing.
+  // Previously this only recognized the 12-hour AM/PM format, so a filter
+  // pick like "4:00 PM" could never match a stored "16:00" — the time
+  // filter silently did nothing.
   const toMinutes = timeStr => {
     if (!timeStr) return null;
-    const match = String(timeStr).match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-    if (!match) return null;
-    let hour = parseInt(match[1], 10);
-    const minute = parseInt(match[2], 10);
-    const period = match[3].toUpperCase();
-    if (period === "PM" && hour !== 12) hour += 12;
-    if (period === "AM" && hour === 12) hour = 0;
-    return hour * 60 + minute;
+    const s = String(timeStr).trim();
+
+    // 12-hour: "4:00 PM" / "4:00PM" / "04:00 am"
+    let match = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (match) {
+      let hour = parseInt(match[1], 10);
+      const minute = parseInt(match[2], 10);
+      const period = match[3].toUpperCase();
+      if (period === "PM" && hour !== 12) hour += 12;
+      if (period === "AM" && hour === 12) hour = 0;
+      return hour * 60 + minute;
+    }
+
+    // 24-hour: "16:00" / "4:00"
+    match = s.match(/^(\d{1,2}):(\d{2})$/);
+    if (match) {
+      const hour = parseInt(match[1], 10);
+      const minute = parseInt(match[2], 10);
+      return hour * 60 + minute;
+    }
+
+    return null;
   };
 
   const sameTime = (timeStr, chosen) => {
@@ -1260,7 +1345,7 @@ function FindMatchTab({ acceptedChallenge, onChallengeAccepted, token, user, cha
 
   const filtered = normalized
     .filter(c => c.format === format.key)
-    .filter(c => !dateFilter || sameDay(c.date, dateFilter))
+    .filter(c => !dateFilter || sameDay(c.rawDate, dateFilter))
     .filter(c => sameTime(c.time, timeFilter))
     .filter(c => {
       if (!query) return true;
@@ -1280,6 +1365,10 @@ function FindMatchTab({ acceptedChallenge, onChallengeAccepted, token, user, cha
     : null;
 
   const activeFilterCount = [dateFilter, timeFilter || null].filter(Boolean).length;
+
+  const myOwnOpenChallenge = challenges.find(
+    c => (c.status === "open" || c.status === "on_hold") && c.creator_id === user?.id
+  );
 
   return <div className="space-y-8">
       <div>
@@ -1340,6 +1429,17 @@ function FindMatchTab({ acceptedChallenge, onChallengeAccepted, token, user, cha
       </div>
 
       <ChallengeForm token={token} user={user} onCreated={onChallengeCreated} disabledReason={postDisabledReason} />
+
+      {myOwnOpenChallenge && (
+        <MyPostedChallengeCard
+          challenge={{
+            ...myOwnOpenChallenge,
+            match_date: formatDateIST(myOwnOpenChallenge.match_date)
+          }}
+          token={token}
+          onDeleted={onChallengeDeleted}
+        />
+      )}
 
       <section>
         <div className="flex items-center justify-between mb-3">
@@ -2327,6 +2427,10 @@ function MyTeamTab({
       {/* ...unchanged Reputation scores + Notifications below... */}
     </div>;
 }
+
+
+
+
 // ─── App root ─────────────────────────────────────────────────────────────────
 export default function App() {
   useForceDark();
@@ -2496,6 +2600,10 @@ const handleChallengeCreated = (newChallenge) => {
   setChallenges(prev => [newChallenge, ...prev]);
 };
 
+const handleChallengeDeleted = (id) => {
+  setChallenges(prev => prev.filter(c => c.id !== id));
+};
+
   // Reset-password link takes priority over everything else, including an
   // already-authenticated session. Render it immediately — no need to wait
   // on authChecked since we skip the session-restore fetch above anyway.
@@ -2522,6 +2630,7 @@ const handleChallengeCreated = (newChallenge) => {
   user={auth.user}
   challenges={challenges}
   onChallengeCreated={handleChallengeCreated}
+  onChallengeDeleted={handleChallengeDeleted}
 />,
   "Grounds": <GroundsTab
     grounds={grounds}

@@ -238,4 +238,30 @@ const cancelChallenge = asyncHandler(async (req, res) => {
   }
 });
 
-module.exports = { listChallenges, createChallenge, acceptChallenge, cancelChallenge };
+
+// DELETE /api/challenges/:id
+// Only the exact user who created the challenge can delete it — unlike
+// cancel, this is NOT team-wide. Only allowed while nobody has accepted it
+// yet; once accepted, the poster (or accepter) should use cancel instead.
+const deleteChallenge = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const existing = await pool.query(
+    `SELECT creator_id, status FROM challenges WHERE id = $1`,
+    [id]
+  );
+  if (existing.rows.length === 0) return res.status(404).json({ error: "Challenge not found" });
+  const { creator_id, status } = existing.rows[0];
+
+  if (creator_id !== req.user.id) {
+    return res.status(403).json({ error: "Only the user who posted this challenge can delete it" });
+  }
+  if (status !== "open" && status !== "on_hold") {
+    return res.status(409).json({ error: "This challenge has already been accepted — cancel the match instead of deleting it" });
+  }
+
+  await pool.query(`DELETE FROM challenges WHERE id = $1`, [id]);
+  res.json({ ok: true, id });
+});
+
+module.exports = { listChallenges, createChallenge, deleteChallenge, acceptChallenge, cancelChallenge };
