@@ -32,7 +32,7 @@ const umpiresRoutes = require("./routes/umpiresRoutes");
 const bookingsRoutes = require("./routes/bookingsRoutes");
 const tournamentsRoutes = require("./routes/tournamentsRoutes");
 const challengesRoutes = require("./routes/challengesRoutes");
-
+const usersRoutes = require("./routes/usersRoutes");
 
 const app = express();
 
@@ -44,13 +44,14 @@ app.use(morgan("dev"));
 app.get("/health", (req, res) => res.json({ status: "ok", service: "matchconnect-backend" }));
 
 app.use("/api/auth", authRoutes);
-app.use("/api/teams", teamsRoutes);
+// app.use("/api/teams", teamsRoutes);
 app.use("/api/grounds", groundsRoutes);
 app.use("/api/umpires", umpiresRoutes);
 app.use("/api/bookings", bookingsRoutes);
 app.use("/api/tournaments", tournamentsRoutes);
 app.use("/api/challenges", challengesRoutes);
 app.use("/api/matches", require("./routes/liveScoreRoutes"));
+app.use("/api/users", usersRoutes);
 
 app.use((req, res) => res.status(404).json({ error: "Route not found" }));
 app.use(errorHandler);

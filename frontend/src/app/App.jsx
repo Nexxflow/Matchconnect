@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
-import { Bell, Search, MapPin, ChevronDown, Phone, Star, CheckCircle, Car, Droplets, Wind, Hash, Plus, Filter, Shield, Swords, Trophy, AlertCircle, CheckCheck, Clock, XCircle, Calendar, Users, X, CreditCard, CalendarCheck, LogOut } from "lucide-react";
+import { Bell, Search, MapPin, ChevronDown, Phone, Star, CheckCircle, Car, Droplets, Wind, Hash, Plus, Filter, Shield, Swords, Trophy, AlertCircle, CheckCheck, Clock, XCircle, Calendar, Users, X, CreditCard, CalendarCheck, LogOut, Pencil } from "lucide-react";
 import AuthScreen from "./components/Auth/AuthScreen.jsx";
 import { apiRequest, getStoredToken, setStoredToken } from "./api";
 import LiveScoreTab from "./components/LiveScoreTab";
-
+// import AuthScreen from "./components/Auth/AuthScreen.jsx";
+import EditProfileModal from "./components/Auth/EditProfileModal.jsx";
+// import {   setStoredToken } from "./api";
 import { useRef } from "react";
 
 // ─── Backend → frontend shape transformers ─────────────────────────────────
@@ -155,6 +157,8 @@ function getNext7Days() {
   return days;
 }
 
+
+
 // ─── BOOKING MODAL (Grounds + Umpires shared flow) ─────────────────────────────
 function BookingModal({ item, type, token, onClose, onConfirm }) {
   const [step, setStep] = useState(1); // 1: date/time, 2: review/payment, 3: success
@@ -282,8 +286,9 @@ function BookingModal({ item, type, token, onClose, onConfirm }) {
 }
 
 // ─── Navbar ───────────────────────────────────────────────────────────────────
-function Navbar({ active, setActive, user, onLogout }) {
+function Navbar({ active, setActive, user, onLogout, token, onUserUpdated }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const tabs = ["Home", "Find Match", "Grounds", "Umpires", "Live Score", "Tournaments", "My Team"];
   const initials = (user?.name || "?")
     .split(" ")
@@ -324,6 +329,9 @@ function Navbar({ active, setActive, user, onLogout }) {
                     {/* Username shown as the account's phone number, not email */}
                     <div className="text-xs font-mono truncate" style={{ color: "#6b7a6b" }}>{user?.phone || "—"}</div>
                   </div>
+                  <button onClick={() => { setMenuOpen(false); setEditing(true); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-medium hover:bg-white/5 transition-colors" style={{ color: "#c8ccc8" }}>
+                    <Pencil className="w-3.5 h-3.5 text-green-400" /> Edit Profile
+                  </button>
                   <button onClick={() => { setMenuOpen(false); onLogout(); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-medium text-red-400 hover:bg-white/5 transition-colors">
                     <LogOut className="w-3.5 h-3.5" /> Log out
                   </button>
@@ -332,6 +340,18 @@ function Navbar({ active, setActive, user, onLogout }) {
           </div>
         </div>
       </div>
+
+      {editing && (
+        <EditProfileModal
+          user={user}
+          token={token}
+          onClose={() => setEditing(false)}
+          onSaved={updated => {
+            onUserUpdated(updated);
+            setEditing(false);
+          }}
+        />
+      )}
     </nav>;
 }
 // Strip everything except digits so "9876543210", "+91 98765 43210",
@@ -1140,7 +1160,7 @@ function TimePicker({ value, onChange }) {
   </div>;
 }
 
-function FindMatchTab({ acceptedChallenge, onChallengeAccepted, token, user, challenges = [], onChallengeCreated }) {
+function FindMatchTab({ acceptedChallenge, onChallengeAccepted, token, user, challenges = [], onChallengeCreated, teammatePhones = [] }) {
   const [selectedFormat, setSelectedFormat] = useState(0);
   const [dateFilter, setDateFilter] = useState(null); // ISO date string ("YYYY-MM-DD") or null for "Any Date"
   const [timeFilter, setTimeFilter] = useState(""); // exact time_slot value chosen by the user, "" = Any Time
@@ -1164,18 +1184,44 @@ function FindMatchTab({ acceptedChallenge, onChallengeAccepted, token, user, cha
 
   const myPhone = normalizePhone(user?.phone);
 
-  // My own open challenge (posted, not yet accepted by anyone) counts as
-  // "active" too — matches the backend's one-active-challenge rule, so the
-  // Post button disables itself before someone fills out a second form.
-  const myOpenChallenge = myPhone
-    ? challenges.find(c => c.status === "open" && normalizePhone(c.contact_no) === myPhone)
-    : null;
-  const hasActive = !!acceptedChallenge || !!myOpenChallenge;
+  // Every phone number on my own team — me plus each teammate pulled from
+  // /users/teammates. A challenge posted or accepted by ANY of these numbers
+  // is treated as "my team's," matching the backend's team-wide rule: only
+  // one member of a team may have an active post/match at a time, and
+  // nobody on the same team can accept a teammate's own post.
+  const teamPhoneSet = new Set([myPhone, ...teammatePhones].filter(Boolean));
 
-  // Only ever show open challenges here, and never show the person their
-  // own post — they can't accept their own challenge.
+  // My team's own open challenge (posted by me OR any teammate, not yet
+  // accepted by anyone) counts as "active" too — matches the backend's
+  // one-active-challenge-per-team rule, so the Post button disables itself
+  // before someone on the same team fills out a second form.
+  const myOpenChallenge = teamPhoneSet.size
+    ? challenges.find(c => c.status === "open" && teamPhoneSet.has(normalizePhone(c.contact_no)))
+    : null;
+
+  // My team's accepted match, read straight from the shared challenges list.
+  // This is what makes an accept done by ANY teammate immediately count as
+  // "active" for every OTHER teammate too — checking both sides (the
+  // original poster's number and the accepter's number) since either one
+  // could belong to my team.
+  const myTeamAcceptedChallenge = teamPhoneSet.size
+    ? challenges.find(
+        c =>
+          c.status === "accepted" &&
+          (teamPhoneSet.has(normalizePhone(c.contact_no)) ||
+            teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no)))
+      )
+    : null;
+
+  const hasActive = !!acceptedChallenge || !!myTeamAcceptedChallenge || !!myOpenChallenge;
+
+  // Only ever show open challenges here, and never show a challenge posted
+  // by anyone on my own team — a teammate shouldn't be able to accept
+  // another teammate's post, and it should also disappear once cancelled
+  // (cancel flips status back to "open" server-side, and re-appears here
+  // for every OTHER team once that happens).
   const openChallenges = challenges.filter(
-    c => (!c.status || c.status === "open") && (!myPhone || normalizePhone(c.contact_no) !== myPhone)
+    c => (!c.status || c.status === "open") && !teamPhoneSet.has(normalizePhone(c.contact_no))
   );
   const normalized = openChallenges.map(normalize);
   const format = FORMATS[selectedFormat];
@@ -1225,10 +1271,12 @@ function FindMatchTab({ acceptedChallenge, onChallengeAccepted, token, user, cha
       );
     });
 
-  const postDisabledReason = acceptedChallenge
+  const postDisabledReason = acceptedChallenge || myTeamAcceptedChallenge
     ? "You've already got a confirmed match — cancel it in My Team to post a new challenge"
     : myOpenChallenge
-    ? "You already have an open challenge waiting — cancel it before posting another"
+    ? (normalizePhone(myOpenChallenge.contact_no) === myPhone
+        ? "You already have an open challenge waiting — cancel it before posting another"
+        : "Your team already has an open challenge posted — cancel it before posting another")
     : null;
 
   const activeFilterCount = [dateFilter, timeFilter || null].filter(Boolean).length;
@@ -2031,11 +2079,160 @@ function ReputationRow({ label, stars, status }) {
 }
 
 
-function MyTeamTab({ acceptedChallenge, registeredTournaments, bookings, onCancelChallenge, cancelling, onOpenChat }) {
-  const scheduleCount = (acceptedChallenge ? 1 : 0) + registeredTournaments.length;
+
+
+
+// ─── Squad section ──────────────────────────────────────────────────────────
+// Any user who registers (or later edits their profile) with the same
+// team_name + village_name + team_year as you is automatically your
+// teammate. This section shows the shared team name up top and every
+// member's name listed underneath — no phone numbers here, those only
+// unlock once a challenge is accepted (see the section below).
+function SquadSection() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [team, setTeam] = useState(null);
+  const [members, setMembers] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await apiRequest("/users/teammates");
+        if (cancelled) return;
+        setTeam(data.team);
+        setMembers(data.members || []);
+      } catch (err) {
+        if (!cancelled) setError(err.message || "Could not load your squad");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <section>
+      <div className="flex items-center gap-2 mb-3">
+        <Users className="w-4 h-4 text-green-400" />
+        <h3 className="text-base font-semibold text-white">Squad</h3>
+      </div>
+
+      {loading && (
+        <div className="rounded-2xl p-5 text-center text-xs" style={{ backgroundColor: "#131413", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
+          Loading squad...
+        </div>
+      )}
+
+      {!loading && error && (
+        <div className="rounded-2xl p-5 text-center text-xs" style={{ backgroundColor: "#131413", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171" }}>
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && !team && (
+        <div className="rounded-2xl p-8 text-center border border-dashed" style={{ borderColor: "#2a2a2a", backgroundColor: "#131413" }}>
+          <div className="text-4xl mb-3 opacity-60">🛡️</div>
+          <div className="text-sm font-semibold text-white">No squad yet</div>
+          <p className="text-xs mt-1.5 max-w-[28ch] mx-auto" style={{ color: "#6b7a6b" }}>
+            Add your team name, village and the year your team was formed in Edit Profile to be grouped with your teammates.
+          </p>
+        </div>
+      )}
+
+      {!loading && !error && team && (
+        <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: "#151715", border: "1px solid #2a2a2a" }}>
+          <div className="p-4 flex items-center gap-3" style={{ borderBottom: "1px solid #2a2a2a" }}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}>
+              <Shield className="w-4 h-4 text-green-400" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-bold text-white truncate">{team.team_name}</div>
+              <div className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "#6b7a6b" }}>
+                <MapPin className="w-3 h-3" style={{ color: "#4a5a4a" }} />
+                {team.village_name} · Est. {team.team_year}
+              </div>
+            </div>
+          </div>
+
+          <div className="divide-y" style={{ borderColor: "#2a2a2a" }}>
+            {members.map(m => (
+              <div key={m.id} className="px-4 py-2.5 flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
+                  {m.name?.[0]?.toUpperCase() || "?"}
+                </div>
+                <span className="text-xs text-white">{m.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function MyTeamTab({
+  acceptedChallenge,
+  registeredTournaments,
+  bookings,
+  onCancelChallenge,
+  cancelling,
+  onOpenChat,
+  challenges = [],
+  teammatePhones = [],
+  teammateIds = [],
+  user,
+}) {
+  const myPhone = normalizePhone(user?.phone);
+
+  // Every phone number on my own team — me plus each teammate pulled from
+  // /users/teammates. Same construction FindMatchTab uses, so both screens
+  // agree on who counts as "my team."
+  const teamPhoneSet = new Set([myPhone, ...teammatePhones].filter(Boolean));
+
+  // Every user id on my own team — me plus each teammate id. This is the
+  // reliable way to check "did anyone on my team accept/post this," since
+  // challenge rows carry creator_id/accepted_by_user_id straight from the
+  // DB, whereas phone matching can miss on formatting differences.
+  // IDs are coerced to Number so a string/number mismatch between the auth
+  // payload (e.g. JWT claims serialized as strings) and DB rows (numeric)
+  // can't silently break Set membership checks below.
+  const teamIdSet = new Set(
+    [user?.id, ...teammateIds]
+      .filter(id => id !== undefined && id !== null)
+      .map(id => Number(id))
+  );
+
+  // Resolve the team's accepted match straight from the shared challenges
+  // list first — this is what makes an accept done by ANY teammate show up
+  // here for EVERY teammate immediately, rather than only for whichever
+  // teammate's own session happens to carry the acceptedChallenge prop.
+  // Checks user ids first (reliable), falls back to phone number matching
+  // for older challenge rows or callers that don't pass teammateIds yet.
+  const teamAcceptedFromList = (teamIdSet.size || teamPhoneSet.size)
+    ? challenges.find(c => {
+        if (c.status !== "accepted") return false;
+        const idMatch =
+          teamIdSet.size &&
+          (teamIdSet.has(Number(c.creator_id)) || teamIdSet.has(Number(c.accepted_by_user_id)));
+        const phoneMatch =
+          teamPhoneSet.size &&
+          (teamPhoneSet.has(normalizePhone(c.contact_no)) ||
+            teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no)));
+        return idMatch || phoneMatch;
+      })
+    : null;
+
+  const displayedChallenge = teamAcceptedFromList || acceptedChallenge;
+
+  const scheduleCount = (displayedChallenge ? 1 : 0) + registeredTournaments.length;
 
   return <div className="space-y-6">
       {/* ...unchanged Team header + Stats + My Bookings above... */}
+
+      <SquadSection />
 
       <section>
         <div className="flex items-center justify-between mb-3">
@@ -2049,7 +2246,7 @@ function MyTeamTab({ acceptedChallenge, registeredTournaments, bookings, onCance
         </div>
 
         <div className="space-y-3">
-          {!acceptedChallenge && registeredTournaments.length === 0 && <div className="rounded-2xl p-8 text-center border border-dashed" style={{ borderColor: "#2a2a2a", backgroundColor: "#131413" }}>
+          {!displayedChallenge && registeredTournaments.length === 0 && <div className="rounded-2xl p-8 text-center border border-dashed" style={{ borderColor: "#2a2a2a", backgroundColor: "#131413" }}>
               <div className="text-4xl mb-3 opacity-60">🗓️</div>
               <div className="text-sm font-semibold text-white">Nothing on the calendar yet</div>
               <p className="text-xs mt-1.5 max-w-[26ch] mx-auto" style={{ color: "#6b7a6b" }}>
@@ -2057,7 +2254,7 @@ function MyTeamTab({ acceptedChallenge, registeredTournaments, bookings, onCance
               </p>
             </div>}
 
-          {acceptedChallenge && <div className="rounded-2xl overflow-hidden relative" style={{ backgroundColor: "#151715", border: "1px solid rgba(245,158,11,0.25)" }}>
+          {displayedChallenge && <div className="rounded-2xl overflow-hidden relative" style={{ backgroundColor: "#151715", border: "1px solid rgba(245,158,11,0.25)" }}>
               <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: "linear-gradient(180deg,#f59e0b,#b45309)" }} />
               <div className="p-4 pl-5">
                 <div className="flex items-start justify-between gap-3 mb-3">
@@ -2066,9 +2263,9 @@ function MyTeamTab({ acceptedChallenge, registeredTournaments, bookings, onCance
                       <Swords className="w-4 h-4 text-amber-400" />
                     </div>
                     <div className="min-w-0">
-                      <div className="text-sm font-semibold text-white truncate">vs {acceptedChallenge.team_name}</div>
+                      <div className="text-sm font-semibold text-white truncate">vs {displayedChallenge.team_name}</div>
                       <div className="text-xs mt-0.5" style={{ color: "#6b7a6b" }}>
-                        {acceptedChallenge.match_date} · {acceptedChallenge.time_slot}
+                        {displayedChallenge.match_date} · {displayedChallenge.time_slot}
                       </div>
                     </div>
                   </div>
@@ -2076,36 +2273,36 @@ function MyTeamTab({ acceptedChallenge, registeredTournaments, bookings, onCance
                 </div>
 
                 <div className="flex flex-wrap items-center gap-1.5 mb-3">
-                  <Tag color="blue">{acceptedChallenge.format}</Tag>
+                  <Tag color="blue">{displayedChallenge.format}</Tag>
                   <span className="text-xs flex items-center gap-1" style={{ color: "#6b7a6b" }}>
                     <MapPin className="w-3 h-3" style={{ color: "#4a5a4a" }} />
-                    {acceptedChallenge.ground_name || "Ground TBD"}
+                    {displayedChallenge.ground_name || "Ground TBD"}
                   </span>
                 </div>
 
                 {/* Phone numbers — only revealed now that both sides have agreed to play */}
                 <div className="grid grid-cols-2 gap-2 mb-3">
-                  <a href={`tel:${acceptedChallenge.contact_no}`} className="rounded-xl p-2.5 flex items-center gap-2 transition-colors hover:bg-white/5" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}>
+                  <a href={`tel:${displayedChallenge.contact_no}`} className="rounded-xl p-2.5 flex items-center gap-2 transition-colors hover:bg-white/5" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}>
                     <Phone className="w-3.5 h-3.5 text-green-400 shrink-0" />
                     <div className="min-w-0">
-                      <div className="text-xs truncate" style={{ color: "#6b7a6b" }}>{acceptedChallenge.team_name}</div>
-                      <div className="text-xs font-mono text-white">{acceptedChallenge.contact_no}</div>
+                      <div className="text-xs truncate" style={{ color: "#6b7a6b" }}>{displayedChallenge.team_name}</div>
+                      <div className="text-xs font-mono text-white">{displayedChallenge.contact_no}</div>
                     </div>
                   </a>
-                  <a href={`tel:${acceptedChallenge.accepted_by_contact_no}`} className="rounded-xl p-2.5 flex items-center gap-2 transition-colors hover:bg-white/5" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}>
+                  <a href={`tel:${displayedChallenge.accepted_by_contact_no}`} className="rounded-xl p-2.5 flex items-center gap-2 transition-colors hover:bg-white/5" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}>
                     <Phone className="w-3.5 h-3.5 text-green-400 shrink-0" />
                     <div className="min-w-0">
-                      <div className="text-xs truncate" style={{ color: "#6b7a6b" }}>{acceptedChallenge.accepted_by_team_name}</div>
-                      <div className="text-xs font-mono text-white">{acceptedChallenge.accepted_by_contact_no}</div>
+                      <div className="text-xs truncate" style={{ color: "#6b7a6b" }}>{displayedChallenge.accepted_by_team_name}</div>
+                      <div className="text-xs font-mono text-white">{displayedChallenge.accepted_by_contact_no}</div>
                     </div>
                   </a>
                 </div>
 
                 <div className="flex gap-2">
-                  <button onClick={() => onOpenChat(acceptedChallenge)} className="flex-1 py-2 rounded-xl bg-green-500 text-black text-xs font-bold hover:bg-green-400 transition-colors flex items-center justify-center gap-1.5">
+                  <button onClick={() => onOpenChat(displayedChallenge)} className="flex-1 py-2 rounded-xl bg-green-500 text-black text-xs font-bold hover:bg-green-400 transition-colors flex items-center justify-center gap-1.5">
                     💬 Chat
                   </button>
-                  <button disabled={cancelling} onClick={onCancelChallenge} className="flex-1 py-2 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1.5" style={cancelling ? { opacity: 0.6, cursor: "not-allowed" } : {}}>
+                  <button disabled={cancelling} onClick={() => onCancelChallenge(displayedChallenge.id)} className="flex-1 py-2 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1.5" style={cancelling ? { opacity: 0.6, cursor: "not-allowed" } : {}}>
                     <XCircle className="w-3.5 h-3.5" /> {cancelling ? "Cancelling..." : "Cancel Match"}
                   </button>
                 </div>
@@ -2127,14 +2324,14 @@ function MyTeamTab({ acceptedChallenge, registeredTournaments, bookings, onCance
         </div>
       </section>
 
-      {/* ...unchanged Reputation scores + Notifications + Squad below... */}
+      {/* ...unchanged Reputation scores + Notifications below... */}
     </div>;
 }
-
 // ─── App root ─────────────────────────────────────────────────────────────────
 export default function App() {
   useForceDark();
   const [activeTab, setActiveTab] = useState("Home");
+  const [teammates, setTeammates] = useState({ phones: [], ids: [] });
   const [acceptedChallenge, setAcceptedChallenge] = useState(null);
   const [registeredIds, setRegisteredIds] = useState([]);
   const [bookings, setBookings] = useState([]);
@@ -2160,6 +2357,21 @@ export default function App() {
 
   const registeredTournaments = tournaments.filter(t => registeredIds.includes(t.id));
 
+
+const loadTeammates = async (token) => {
+  try {
+    const res = await apiRequest("/users/teammates", { token });
+    const members = res.members || [];
+    setTeammates({
+      phones: members.map(m => m.phone).filter(Boolean),
+      ids: members.map(m => m.id).filter(Boolean)
+    });
+  } catch (err) {
+    // non-fatal — team-wide match visibility just won't work until this loads
+    console.warn("Could not load teammates:", err.message);
+  }
+};
+
 const loadAppData = async (token, user) => {
   try {
     const [groundsRes, umpiresRes, tournamentsRes, challengesRes] = await Promise.all([
@@ -2175,10 +2387,6 @@ const loadAppData = async (token, user) => {
     const allChallenges = challengesRes.challenges || [];
     setChallenges(allChallenges);
 
-    // "My accepted match" is whichever accepted challenge has the logged-in
-    // user's own phone number on either side (the one who posted it, or the
-    // one who accepted it) — matched by phone since that's the identifier
-    // actually typed into the challenge form, not the account's internal id.
     const myPhone = normalizePhone(user?.phone);
     const myActive = myPhone
       ? allChallenges.find(
@@ -2192,6 +2400,7 @@ const loadAppData = async (token, user) => {
 
     setBackendStatus("online");
     refreshBookings(token);
+    loadTeammates(token); // ← add this
   } catch (err) {
     console.warn("Backend unavailable, using demo data:", err.message);
     setBackendStatus("offline");
@@ -2245,11 +2454,12 @@ const handleAuthSuccess = (user, token) => {
   
 
   const handleLogout = () => {
-    setStoredToken(null);
-    setAuth({ token: null, user: null });
-    setBookings([]);
-    setActiveTab("Home");
-  };
+  setStoredToken(null);
+  setAuth({ token: null, user: null });
+  setBookings([]);
+  setTeammates({ phones: [], ids: [] }); // ← add this
+  setActiveTab("Home");
+};
 
   // Called after AcceptChallengeModal successfully hits POST /challenges/:id/accept
 const handleChallengeAccepted = (updatedChallenge) => {
@@ -2334,11 +2544,25 @@ const handleChallengeCreated = (newChallenge) => {
   onCancelChallenge={handleCancelAcceptedChallenge}
   cancelling={cancellingChallenge}
   onOpenChat={setChatChallenge}
+  challenges={challenges}
+  teammatePhones={teammates.phones}
+  teammateIds={teammates.ids}
+  user={auth.user}
 />
 };
 
   return <div style={{ minHeight: "100vh", backgroundColor: "#0d0f0d", fontFamily: "Inter, sans-serif" }}>
-      <Navbar active={activeTab} setActive={setActiveTab} user={auth.user} onLogout={handleLogout} />
+      <Navbar
+  active={activeTab}
+  setActive={setActiveTab}
+  user={auth.user}
+  onLogout={handleLogout}
+  token={auth.token}
+ onUserUpdated={updatedUser => {
+  setAuth(prev => ({ ...prev, user: updatedUser }));
+  if (auth.token) loadTeammates(auth.token);
+}}
+/>
       {backendStatus === "offline" && <div className="max-w-3xl mx-auto px-4 pt-3">
           <div className="rounded-xl px-3 py-2 text-xs text-amber-400 flex items-center gap-2" style={{ backgroundColor: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)" }}>
             <AlertCircle className="w-3.5 h-3.5 shrink-0" /> Backend not reachable at localhost:8000 — showing demo data. Bookings won't save until the server is running.

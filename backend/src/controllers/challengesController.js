@@ -1,20 +1,61 @@
 const pool = require("../config/db");
 const asyncHandler = require("../utils/asyncHandler");
 
-// A user has an "active" challenge if they're the creator of one that's
-// still open or accepted, or they're the team that accepted one that's
-// still accepted. While that's true, they can't post a new challenge or
-// accept someone else's.
-async function findActiveChallengeForUser(userId, excludeChallengeId = null) {
+// Every user id that belongs to the same team as `userId`, using the same
+// team_name + village_name + team_year triple that GET /users/teammates
+// groups people by. Normalized with LOWER(TRIM(...)) on the text columns
+// so minor differences in casing or stray whitespace between teammates'
+// signup data don't cause one real team to get split into two "teams".
+// If the user hasn't filled that in yet, "their team" is just themselves.
+async function getTeamMemberIds(userId) {
+  const userRes = await pool.query(
+    `SELECT team_name, village_name, team_year FROM users WHERE id = $1`,
+    [userId]
+  );
+  const u = userRes.rows[0];
+  if (!u || !u.team_name || !u.village_name || !u.team_year) {
+    return [userId];
+  }
+  const teamRes = await pool.query(
+    `SELECT id FROM users
+     WHERE LOWER(TRIM(team_name)) = LOWER(TRIM($1))
+       AND LOWER(TRIM(village_name)) = LOWER(TRIM($2))
+       AND team_year = $3`,
+    [u.team_name, u.village_name, u.team_year]
+  );
+  return teamRes.rows.map(r => r.id);
+}
+
+// Used when POSTING a new challenge — a team can't have two challenges
+// "live" (open, on_hold, or accepted) waiting on them at once. Unlike
+// accepting, this still blocks outright.
+async function findActiveChallengeForTeam(userIds, excludeChallengeId = null) {
   const result = await pool.query(
     `SELECT id FROM challenges
      WHERE (
-       (creator_id = $1 AND status IN ('open', 'accepted'))
-       OR (accepted_by_user_id = $1 AND status = 'accepted')
+       (creator_id = ANY($1::int[]) AND status IN ('open', 'on_hold', 'accepted'))
+       OR (accepted_by_user_id = ANY($1::int[]) AND status = 'accepted')
      )
      AND ($2::uuid IS NULL OR id != $2::uuid)
      LIMIT 1`,
-    [userId, excludeChallengeId]
+    [userIds, excludeChallengeId]
+  );
+  return result.rows[0] || null;
+}
+
+// Used when ACCEPTING — a team can't be locked into two accepted matches at
+// once, but an existing OPEN post of theirs no longer blocks them; it just
+// gets put on hold instead (see acceptChallenge below).
+async function findAcceptedMatchForTeam(userIds, excludeChallengeId = null) {
+  const result = await pool.query(
+    `SELECT id FROM challenges
+     WHERE (
+       (creator_id = ANY($1::int[]) AND status = 'accepted')
+       OR (accepted_by_user_id = ANY($1::int[]) AND status = 'accepted')
+     )
+     AND ($2::uuid IS NULL OR id != $2::uuid)
+     LIMIT 1`,
+    [userIds, excludeChallengeId]
   );
   return result.rows[0] || null;
 }
@@ -29,10 +70,6 @@ const listChallenges = asyncHandler(async (req, res) => {
     values.push(format);
     conditions.push(`c.format = $${values.length}`);
   }
-  // Only filter by status when explicitly requested — otherwise this
-  // silently defaulted to 'open' and hid accepted challenges from every
-  // unfiltered fetch (including the initial app load), so they'd vanish
-  // from the client's state on refresh.
   if (status) {
     values.push(status);
     conditions.push(`c.status = $${values.length}`);
@@ -60,16 +97,17 @@ const createChallenge = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "A valid contact number (10-15 digits) is required" });
   }
 
-  // One active challenge per user — can't post a new one while you already
-  // have an open challenge waiting, or a match you've already locked in.
-  const active = await findActiveChallengeForUser(req.user.id);
+  // One live challenge per TEAM — blocks posting if ANY teammate already
+  // has an open/on_hold post or a locked-in accepted match.
+  const teamMemberIds = await getTeamMemberIds(req.user.id);
+  const active = await findActiveChallengeForTeam(teamMemberIds);
   if (active) {
-    return res.status(409).json({ error: "You already have an active challenge. Cancel it before posting a new one." });
+    return res.status(409).json({ error: "Your team already has an active challenge. Cancel it before posting a new one." });
   }
 
   const result = await pool.query(
-    `INSERT INTO challenges (team_name, contact_no, format, match_date, time_slot, ground_id, urgent, note, creator_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+    `INSERT INTO challenges (team_name, contact_no, format, match_date, time_slot, ground_id, urgent, note, creator_id, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open') RETURNING *`,
     [team_name.trim(), contact_no.trim(), format, match_date, time_slot, ground_id || null, urgent || false, note || null, req.user.id]
   );
   res.status(201).json({ challenge: result.rows[0] });
@@ -84,46 +122,120 @@ const acceptChallenge = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "A valid contact number (10-15 digits) is required" });
   }
 
-  // Can't accept a challenge you posted yourself.
   const target = await pool.query("SELECT creator_id, status FROM challenges WHERE id = $1", [id]);
   const challenge = target.rows[0];
   if (!challenge) return res.status(404).json({ error: "Challenge not found" });
-  if (challenge.creator_id === req.user.id) {
-    return res.status(400).json({ error: "You can't accept your own challenge" });
+
+  const teamMemberIds = await getTeamMemberIds(req.user.id);
+
+  // Can't accept a challenge posted by anyone on your own team.
+  if (teamMemberIds.includes(challenge.creator_id)) {
+    return res.status(400).json({ error: "You can't accept your own team's challenge" });
   }
   if (challenge.status !== "open") {
     return res.status(409).json({ error: "Challenge is no longer open" });
   }
 
-  // One active challenge per user — can't accept a second match while
-  // you're already locked into one (as either the poster or the accepter).
-  const active = await findActiveChallengeForUser(req.user.id, id);
-  if (active) {
-    return res.status(409).json({ error: "You already have an active match. Cancel it before accepting another." });
+  // Only blocks on an ALREADY-ACCEPTED match for this team — a teammate's
+  // own open post no longer stops you from accepting someone else's. That
+  // post just gets put on hold below instead of blocking outright.
+  const activeMatch = await findAcceptedMatchForTeam(teamMemberIds, id);
+  if (activeMatch) {
+    return res.status(409).json({ error: "Your team already has an active match. Cancel it before accepting another." });
   }
 
-  const result = await pool.query(
-    `UPDATE challenges
-     SET status = 'accepted', accepted_by_team_name = $1, accepted_by_contact_no = $2, accepted_by_user_id = $3
-     WHERE id = $4 AND status = 'open' RETURNING *`,
-    [team_name.trim(), contact_no.trim(), req.user.id, id]
-  );
-  if (result.rows.length === 0) {
-    return res.status(409).json({ error: "Challenge is no longer open" });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const result = await client.query(
+      `UPDATE challenges
+       SET status = 'accepted', accepted_by_team_name = $1, accepted_by_contact_no = $2, accepted_by_user_id = $3
+       WHERE id = $4 AND status = 'open' RETURNING *`,
+      [team_name.trim(), contact_no.trim(), req.user.id, id]
+    );
+    if (result.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Challenge is no longer open" });
+    }
+
+    // Put this team's own open post (if any teammate has one waiting) on
+    // hold — it disappears from browsing until this accepted match is
+    // cancelled, since the team is now committed to this match instead.
+    await client.query(
+      `UPDATE challenges SET status = 'on_hold'
+       WHERE creator_id = ANY($1::int[]) AND status = 'open'`,
+      [teamMemberIds]
+    );
+
+    await client.query("COMMIT");
+    res.json({ challenge: result.rows[0] });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
   }
-  res.json({ challenge: result.rows[0] });
 });
 
 // POST /api/challenges/:id/cancel
+// Any member of either the posting team or the accepting team can cancel —
+// not just the exact account that clicked post/accept. Reverts to 'open',
+// and restores either team's on_hold post (if the accepting team had put
+// one on hold to accept this match) back to 'open' too.
 const cancelChallenge = asyncHandler(async (req, res) => {
-  const result = await pool.query(
-    `UPDATE challenges
-     SET status = 'open', accepted_by_team_name = NULL, accepted_by_contact_no = NULL, accepted_by_user_id = NULL
-     WHERE id = $1 RETURNING *`,
-    [req.params.id]
+  const { id } = req.params;
+
+  const existing = await pool.query(
+    `SELECT creator_id, accepted_by_user_id FROM challenges WHERE id = $1`,
+    [id]
   );
-  if (result.rows.length === 0) return res.status(404).json({ error: "Challenge not found" });
-  res.json({ challenge: result.rows[0] });
+  if (existing.rows.length === 0) return res.status(404).json({ error: "Challenge not found" });
+  const { creator_id, accepted_by_user_id } = existing.rows[0];
+
+  const teamMemberIds = await getTeamMemberIds(req.user.id);
+  const canCancel =
+    teamMemberIds.includes(creator_id) ||
+    (accepted_by_user_id && teamMemberIds.includes(accepted_by_user_id));
+
+  if (!canCancel) {
+    return res.status(403).json({ error: "Only a member of one of the two teams involved can cancel this match" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const result = await client.query(
+      `UPDATE challenges
+       SET status = 'open', accepted_by_team_name = NULL, accepted_by_contact_no = NULL, accepted_by_user_id = NULL
+       WHERE id = $1 RETURNING *`,
+      [id]
+    );
+
+    // Restore whichever side's on_hold post(s) belong to the two teams that
+    // were actually involved in this match — the creator's team and (if
+    // set) the accepter's team — back to 'open' now that the match is off.
+    const creatorTeamIds = await getTeamMemberIds(creator_id);
+    const accepterTeamIds = accepted_by_user_id ? await getTeamMemberIds(accepted_by_user_id) : [];
+    const involvedTeamIds = [...new Set([...creatorTeamIds, ...accepterTeamIds])];
+
+    if (involvedTeamIds.length) {
+      await client.query(
+        `UPDATE challenges SET status = 'open'
+         WHERE creator_id = ANY($1::int[]) AND status = 'on_hold'`,
+        [involvedTeamIds]
+      );
+    }
+
+    await client.query("COMMIT");
+    res.json({ challenge: result.rows[0] });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 });
 
 module.exports = { listChallenges, createChallenge, acceptChallenge, cancelChallenge };

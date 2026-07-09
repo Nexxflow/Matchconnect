@@ -1,47 +1,53 @@
-const pool = require("../config/db");
-const asyncHandler = require("../utils/asyncHandler");
+// const pool = require("../config/db");
+// const asyncHandler = require("../utils/asyncHandler");
 
-// POST /api/teams — create a team owned by logged-in user
-const createTeam = asyncHandler(async (req, res) => {
-  const { name, specialty, established_year } = req.body;
-  if (!name) return res.status(400).json({ error: "Team name is required" });
+// const PUBLIC_USER_COLUMNS =
+//   "id, name, email, phone, team_name, village_name, team_year, created_at";
 
-  const result = await pool.query(
-    `INSERT INTO teams (owner_id, name, specialty, established_year)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    [req.user.id, name, specialty || null, established_year || null]
-  );
-  res.status(201).json({ team: result.rows[0] });
-});
+// // GET /api/teams/mine
+// // A "team" isn't a row someone owns — it's the group of users who registered
+// // with the same team_name + village_name + team_year. This returns everyone
+// // who matches the logged-in user's own team details (their "squad").
+// const myTeam = asyncHandler(async (req, res) => {
+//   const me = await pool.query(
+//     "SELECT team_name, village_name, team_year FROM users WHERE id = $1",
+//     [req.user.id]
+//   );
 
-// GET /api/teams/mine — team(s) owned by logged-in user
-const myTeams = asyncHandler(async (req, res) => {
-  const result = await pool.query("SELECT * FROM teams WHERE owner_id = $1", [req.user.id]);
-  res.json({ teams: result.rows });
-});
+//   const profile = me.rows[0];
+//   if (!profile) return res.status(404).json({ error: "User not found" });
 
-// GET /api/teams/:id — team detail with squad
-const getTeam = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const team = await pool.query("SELECT * FROM teams WHERE id = $1", [id]);
-  if (team.rows.length === 0) return res.status(404).json({ error: "Team not found" });
+//   const { team_name, village_name, team_year } = profile;
 
-  const players = await pool.query("SELECT * FROM players WHERE team_id = $1", [id]);
-  res.json({ team: team.rows[0], players: players.rows });
-});
+//   // Can't group people until all three identifying fields are filled in.
+//   if (!team_name || !village_name || !team_year) {
+//     return res.json({
+//       team_name: team_name || null,
+//       village_name: village_name || null,
+//       team_year: team_year || null,
+//       members: [],
+//       message: "Add your team name, village and year formed in Edit Profile to see your teammates."
+//     });
+//   }
 
-// POST /api/teams/:id/players — add a player to squad
-const addPlayer = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { name, role, batting_avg, strike_rate, wickets } = req.body;
-  if (!name) return res.status(400).json({ error: "Player name is required" });
+//   // Case/whitespace-insensitive match, so "Royal Strikers" and " royal strikers"
+//   // are treated as the same team.
+//   const result = await pool.query(
+//     `SELECT ${PUBLIC_USER_COLUMNS}
+//      FROM users
+//      WHERE LOWER(TRIM(team_name)) = LOWER(TRIM($1))
+//        AND LOWER(TRIM(village_name)) = LOWER(TRIM($2))
+//        AND team_year = $3
+//      ORDER BY created_at ASC`,
+//     [team_name, village_name, team_year]
+//   );
 
-  const result = await pool.query(
-    `INSERT INTO players (team_id, name, role, batting_avg, strike_rate, wickets)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-    [id, name, role || null, batting_avg || null, strike_rate || null, wickets || null]
-  );
-  res.status(201).json({ player: result.rows[0] });
-});
+//   res.json({
+//     team_name,
+//     village_name,
+//     team_year,
+//     members: result.rows
+//   });
+// });
 
-module.exports = { createTeam, myTeams, getTeam, addPlayer };
+// module.exports = { myTeam };
