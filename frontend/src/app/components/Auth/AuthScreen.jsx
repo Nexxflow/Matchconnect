@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Eye, EyeOff, Mail, Lock, User, Phone, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User, Phone, MapPin, Shield, Calendar, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react";
 import { apiRequest } from "../../api";
 
 // ─── Shared field styles (matches the rest of the app's dark theme) ───────────
@@ -93,7 +93,6 @@ function SubmitButton({ children, loading, disabled }) {
 }
 
 // ─── Login ──────────────────────────────────────────────────────────────────
-// ─── Login ──────────────────────────────────────────────────────────────────
 function LoginForm({ onAuthSuccess, onSwitch, notice }) {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -147,13 +146,20 @@ function LoginForm({ onAuthSuccess, onSwitch, notice }) {
 }
 
 // ─── Register ───────────────────────────────────────────────────────────────
+// Now also captures the team details (team name, village, year founded) so
+// the account can be auto-grouped with teammates in the "My Team" tab.
 function RegisterForm({ onSwitch }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [teamName, setTeamName] = useState("");
+  const [villageName, setVillageName] = useState("");
+  const [teamYear, setTeamYear] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const currentYear = new Date().getFullYear();
 
   const handleSubmit = async e => {
     e.preventDefault();
@@ -165,12 +171,24 @@ function RegisterForm({ onSwitch }) {
       setError("Password must be at least 8 characters");
       return;
     }
+    if (teamYear && (Number(teamYear) < 1900 || Number(teamYear) > currentYear)) {
+      setError(`Team year must be between 1900 and ${currentYear}`);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       await apiRequest("/auth/signup", {
         method: "POST",
-        body: { name, email, phone, password }
+        body: {
+          name,
+          email,
+          phone,
+          password,
+          team_name: teamName || undefined,
+          village_name: villageName || undefined,
+          team_year: teamYear || undefined
+        }
       });
       // Registering no longer logs the user in — send them to login instead.
       onSwitch("login", "Account created! Please log in.");
@@ -188,6 +206,28 @@ function RegisterForm({ onSwitch }) {
       <Field icon={Mail} type="email" required placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} />
       <Field icon={Phone} type="tel" required placeholder="Phone number" value={phone} onChange={e => setPhone(e.target.value)} />
       <PasswordField value={password} onChange={e => setPassword(e.target.value)} placeholder="Password (min. 8 characters)" />
+
+      <div className="pt-1 pb-0.5 flex items-center gap-1.5">
+        <span className="h-px flex-1" style={{ backgroundColor: "#2a2a2a" }} />
+        <span className="text-[10px] uppercase tracking-wide" style={{ color: "#6b7a6b" }}>Team details</span>
+        <span className="h-px flex-1" style={{ backgroundColor: "#2a2a2a" }} />
+      </div>
+
+      <Field icon={Shield} placeholder="Team name" value={teamName} onChange={e => setTeamName(e.target.value)} />
+      <Field icon={MapPin} placeholder="Village / town name" value={villageName} onChange={e => setVillageName(e.target.value)} />
+      <Field
+        icon={Calendar}
+        type="number"
+        min="1900"
+        max={currentYear}
+        placeholder="Year team was formed"
+        value={teamYear}
+        onChange={e => setTeamYear(e.target.value)}
+      />
+      <p className="text-[11px] -mt-1" style={{ color: "#4a5a4a" }}>
+        Teammates who register with the same team name, village and year are grouped together automatically.
+      </p>
+
       <SubmitButton loading={loading}>Create Account</SubmitButton>
       <p className="text-center text-xs" style={{ color: "#6b7a6b" }}>
         Already have an account?{" "}

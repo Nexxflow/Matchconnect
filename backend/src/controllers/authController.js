@@ -7,6 +7,11 @@ const asyncHandler = require("../utils/asyncHandler");
 
 const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
 
+// Columns that are safe to return to the client. password_hash and reset
+// token fields never leave this file.
+const PUBLIC_USER_COLUMNS =
+  "id, name, email, phone, team_name, village_name, team_year, created_at";
+
 function signToken(user) {
   return jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || "7d"
@@ -57,12 +62,24 @@ async function sendResetEmail(toEmail, resetUrl) {
 }
 
 // POST /api/auth/signup
+// Body: { name, email, phone, password, team_name, village_name, team_year }
 const signup = asyncHandler(async (req, res) => {
-  const { name, email, phone, password } = req.body;
+  const { name, email, phone, password, team_name, village_name, team_year } = req.body;
 
-  // name, email, phone and password are all required now
+  // name, email, phone and password are all required. team_name, village_name
+  // and team_year are optional at signup time — the user can also add them
+  // later from Edit Profile — but if provided they're validated below.
   if (!name || !email || !phone || !password) {
     return res.status(400).json({ error: "name, email, phone and password are required" });
+  }
+
+  let parsedYear = null;
+  if (team_year !== undefined && team_year !== null && team_year !== "") {
+    parsedYear = parseInt(team_year, 10);
+    const currentYear = new Date().getFullYear();
+    if (Number.isNaN(parsedYear) || parsedYear < 1900 || parsedYear > currentYear) {
+      return res.status(400).json({ error: "Please enter a valid year the team was formed" });
+    }
   }
 
   // Check email and phone for existing use in a single query, then figure out
@@ -89,10 +106,18 @@ const signup = asyncHandler(async (req, res) => {
 
   const passwordHash = await bcrypt.hash(password, 10);
   const result = await pool.query(
-    `INSERT INTO users (name, email, phone, password_hash)
-     VALUES ($1, $2, $3, $4)
-     RETURNING id, name, email, phone, created_at`,
-    [name, email, phone, passwordHash]
+    `INSERT INTO users (name, email, phone, password_hash, team_name, village_name, team_year)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING ${PUBLIC_USER_COLUMNS}`,
+    [
+      name,
+      email,
+      phone,
+      passwordHash,
+      team_name || null,
+      village_name || null,
+      parsedYear
+    ]
   );
 
   const user = result.rows[0];
@@ -127,16 +152,75 @@ const login = asyncHandler(async (req, res) => {
 
   const token = signToken(user);
   delete user.password_hash;
+  delete user.reset_password_token;
+  delete user.reset_password_expires;
   res.json({ user, token });
 });
+
 // GET /api/auth/me
+// Returns the full profile (name, email, phone, team_name, village_name, team_year).
+// The UI decides what to show at a glance (name + phone) vs. in the edit form.
 const me = asyncHandler(async (req, res) => {
   const result = await pool.query(
-    "SELECT id, name, email, phone, created_at FROM users WHERE id = $1",
+    `SELECT ${PUBLIC_USER_COLUMNS} FROM users WHERE id = $1`,
     [req.user.id]
   );
   if (result.rows.length === 0) return res.status(404).json({ error: "User not found" });
   res.json({ user: result.rows[0] });
+});
+
+// PUT /api/auth/profile
+// Body: any subset of { name, email, phone, team_name, village_name, team_year }
+// Lets a logged-in user edit their own profile, including the team fields
+// used to group teammates together in "My Team". Password changes are not
+// handled here — that goes through the separate forgot/reset-password flow.
+const updateProfile = asyncHandler(async (req, res) => {
+  const { name, email, phone, team_name, village_name, team_year } = req.body;
+
+  if (!name || !email || !phone) {
+    return res.status(400).json({ error: "name, email and phone are required" });
+  }
+
+  let parsedYear = null;
+  if (team_year !== undefined && team_year !== null && team_year !== "") {
+    parsedYear = parseInt(team_year, 10);
+    const currentYear = new Date().getFullYear();
+    if (Number.isNaN(parsedYear) || parsedYear < 1900 || parsedYear > currentYear) {
+      return res.status(400).json({ error: "Please enter a valid year the team was formed" });
+    }
+  }
+
+  // Make sure the new email/phone isn't already used by a *different* account.
+  const clash = await pool.query(
+    "SELECT id FROM users WHERE (email = $1 OR phone = $2) AND id != $3",
+    [email, phone, req.user.id]
+  );
+  if (clash.rows.length > 0) {
+    return res.status(409).json({ error: "Email or phone number already in use by another account" });
+  }
+
+  const result = await pool.query(
+    `UPDATE users
+     SET name = $1,
+         email = $2,
+         phone = $3,
+         team_name = $4,
+         village_name = $5,
+         team_year = $6
+     WHERE id = $7
+     RETURNING ${PUBLIC_USER_COLUMNS}`,
+    [
+      name,
+      email,
+      phone,
+      team_name || null,
+      village_name || null,
+      parsedYear,
+      req.user.id
+    ]
+  );
+
+  res.json({ user: result.rows[0], message: "Profile updated" });
 });
 
 // POST /api/auth/forgot-password
@@ -200,4 +284,4 @@ const resetPassword = asyncHandler(async (req, res) => {
   res.json({ message: "Password has been reset. You can now log in." });
 });
 
-module.exports = { signup, login, me, forgotPassword, resetPassword };
+module.exports = { signup, login, me, updateProfile, forgotPassword, resetPassword };
