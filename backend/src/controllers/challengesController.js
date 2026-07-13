@@ -1,6 +1,6 @@
 const pool = require("../config/db");
 const asyncHandler = require("../utils/asyncHandler");
-
+const { sendNotification } = require("../services/notificationService");
 // Every user id that belongs to the same team as `userId`, using the same
 // team_name + village_name + team_year triple that GET /users/teammates
 // groups people by. Normalized with LOWER(TRIM(...)) on the text columns
@@ -89,87 +89,290 @@ const listChallenges = asyncHandler(async (req, res) => {
 
 // POST /api/challenges  Body: { team_name, contact_no, format, match_date, time_slot, ground_id, urgent, note }
 const createChallenge = asyncHandler(async (req, res) => {
-  const { team_name, contact_no, format, match_date, time_slot, ground_id, urgent, note } = req.body;
+  const {
+    team_name,
+    contact_no,
+    format,
+    match_date,
+    time_slot,
+    ground_id,
+    urgent,
+    note,
+  } = req.body;
+
   if (!team_name || !team_name.trim() || !format || !match_date || !time_slot) {
-    return res.status(400).json({ error: "team_name, format, match_date and time_slot are required" });
-  }
-  if (!contact_no || !/^[0-9]{10,15}$/.test(contact_no.trim())) {
-    return res.status(400).json({ error: "A valid contact number (10-15 digits) is required" });
+    return res.status(400).json({
+      error: "team_name, format, match_date and time_slot are required",
+    });
   }
 
-  // One live challenge per TEAM — blocks posting if ANY teammate already
-  // has an open/on_hold post or a locked-in accepted match.
+  if (!contact_no || !/^[0-9]{10,15}$/.test(contact_no.trim())) {
+    return res.status(400).json({
+      error: "A valid contact number (10-15 digits) is required",
+    });
+  }
+
   const teamMemberIds = await getTeamMemberIds(req.user.id);
+
   const active = await findActiveChallengeForTeam(teamMemberIds);
+
   if (active) {
-    return res.status(409).json({ error: "Your team already has an active challenge. Cancel it before posting a new one." });
+    return res.status(409).json({
+      error:
+        "Your team already has an active challenge. Cancel it before posting a new one.",
+    });
   }
 
   const result = await pool.query(
-    `INSERT INTO challenges (team_name, contact_no, format, match_date, time_slot, ground_id, urgent, note, creator_id, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open') RETURNING *`,
-    [team_name.trim(), contact_no.trim(), format, match_date, time_slot, ground_id || null, urgent || false, note || null, req.user.id]
+    `
+    INSERT INTO challenges
+    (
+      team_name,
+      contact_no,
+      format,
+      match_date,
+      time_slot,
+      ground_id,
+      urgent,
+      note,
+      creator_id,
+      status
+    )
+    VALUES
+    ($1,$2,$3,$4,$5,$6,$7,$8,$9,'open')
+    RETURNING *
+    `,
+    [
+      team_name.trim(),
+      contact_no.trim(),
+      format,
+      match_date,
+      time_slot,
+      ground_id || null,
+      urgent || false,
+      note || null,
+      req.user.id,
+    ]
   );
-  res.status(201).json({ challenge: result.rows[0] });
+
+  // ============================
+  // Notify all other users
+  // ============================
+
+  try {
+    const users = await pool.query(
+      `
+      SELECT
+        id,
+        name,
+        fcm_token
+      FROM users
+      WHERE id != $1
+      AND fcm_token IS NOT NULL
+      `,
+      [req.user.id]
+    );
+
+    for (const user of users.rows) {
+      try {
+        await sendNotification(
+          user.fcm_token,
+          "🏏 New Challenge",
+          `${team_name} has posted a new ${format} challenge.`,
+          {
+            type: "new_challenge",
+            challengeId: String(result.rows[0].id),
+            teamName: team_name,
+            format,
+          }
+        );
+      } catch (err) {
+        console.error(
+          `Failed to send notification to User ${user.id}`,
+          err.message
+        );
+      }
+    }
+  } catch (err) {
+    console.error("Notification Error:", err);
+  }
+
+  // ============================
+  // Confirm to the creator that their challenge was posted
+  // ============================
+
+  let creatorNotificationSent = false;
+
+  try {
+    const creatorRes = await pool.query(
+      `SELECT id, name, fcm_token FROM users WHERE id = $1`,
+      [req.user.id]
+    );
+    const creator = creatorRes.rows[0];
+
+    if (creator && creator.fcm_token) {
+      try {
+        await sendNotification(
+          creator.fcm_token,
+          "✅ Challenge Posted",
+          `Your challenge for ${team_name} (${format}) has been posted successfully.`,
+          {
+            type: "challenge_posted_confirmation",
+            challengeId: String(result.rows[0].id),
+            teamName: team_name,
+            format,
+          }
+        );
+
+        creatorNotificationSent = true;
+      } catch (err) {
+        console.error(
+          `Failed to send confirmation notification to creator User ${req.user.id}`,
+          err.message
+        );
+      }
+    }
+  } catch (err) {
+    console.error("Creator Confirmation Notification Error:", err);
+  }
+
+  return res.status(201).json({
+    success: true,
+    challenge: result.rows[0],
+    notificationSent: creatorNotificationSent,
+  });
 });
 
 // POST /api/challenges/:id/accept  Body: { team_name, contact_no }
 const acceptChallenge = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { team_name, contact_no } = req.body;
-  if (!team_name || !team_name.trim()) return res.status(400).json({ error: "team_name is required" });
-  if (!contact_no || !/^[0-9]{10,15}$/.test(contact_no.trim())) {
-    return res.status(400).json({ error: "A valid contact number (10-15 digits) is required" });
+
+  if (!team_name || !team_name.trim()) {
+    return res.status(400).json({ error: "team_name is required" });
   }
 
-  const target = await pool.query("SELECT creator_id, status FROM challenges WHERE id = $1", [id]);
+  if (!contact_no || !/^[0-9]{10,15}$/.test(contact_no.trim())) {
+    return res
+      .status(400)
+      .json({ error: "A valid contact number (10-15 digits) is required" });
+  }
+
+  const target = await pool.query(
+    "SELECT creator_id, status FROM challenges WHERE id = $1",
+    [id]
+  );
+
   const challenge = target.rows[0];
-  if (!challenge) return res.status(404).json({ error: "Challenge not found" });
+
+  if (!challenge) {
+    return res.status(404).json({ error: "Challenge not found" });
+  }
 
   const teamMemberIds = await getTeamMemberIds(req.user.id);
 
-  // Can't accept a challenge posted by anyone on your own team.
   if (teamMemberIds.includes(challenge.creator_id)) {
-    return res.status(400).json({ error: "You can't accept your own team's challenge" });
+    return res
+      .status(400)
+      .json({ error: "You can't accept your own team's challenge" });
   }
+
   if (challenge.status !== "open") {
     return res.status(409).json({ error: "Challenge is no longer open" });
   }
 
-  // Only blocks on an ALREADY-ACCEPTED match for this team — a teammate's
-  // own open post no longer stops you from accepting someone else's. That
-  // post just gets put on hold below instead of blocking outright.
   const activeMatch = await findAcceptedMatchForTeam(teamMemberIds, id);
+
   if (activeMatch) {
-    return res.status(409).json({ error: "Your team already has an active match. Cancel it before accepting another." });
+    return res.status(409).json({
+      error:
+        "Your team already has an active match. Cancel it before accepting another.",
+    });
   }
 
   const client = await pool.connect();
+
   try {
     await client.query("BEGIN");
 
     const result = await client.query(
-      `UPDATE challenges
-       SET status = 'accepted', accepted_by_team_name = $1, accepted_by_contact_no = $2, accepted_by_user_id = $3
-       WHERE id = $4 AND status = 'open' RETURNING *`,
+      `
+      UPDATE challenges
+      SET
+        status='accepted',
+        accepted_by_team_name=$1,
+        accepted_by_contact_no=$2,
+        accepted_by_user_id=$3
+      WHERE id=$4
+      AND status='open'
+      RETURNING *
+      `,
       [team_name.trim(), contact_no.trim(), req.user.id, id]
     );
+
     if (result.rows.length === 0) {
       await client.query("ROLLBACK");
-      return res.status(409).json({ error: "Challenge is no longer open" });
+      return res.status(409).json({
+        error: "Challenge is no longer open",
+      });
     }
 
-    // Put this team's own open post (if any teammate has one waiting) on
-    // hold — it disappears from browsing until this accepted match is
-    // cancelled, since the team is now committed to this match instead.
     await client.query(
-      `UPDATE challenges SET status = 'on_hold'
-       WHERE creator_id = ANY($1::int[]) AND status = 'open'`,
+      `
+      UPDATE challenges
+      SET status='on_hold'
+      WHERE creator_id = ANY($1::int[])
+      AND status='open'
+      `,
       [teamMemberIds]
     );
 
     await client.query("COMMIT");
-    res.json({ challenge: result.rows[0] });
+
+    // =====================================
+    // Send Firebase Notification
+    // =====================================
+
+    try {
+      const userResult = await pool.query(
+        `
+        SELECT
+          id,
+          name,
+          team_name,
+          fcm_token
+        FROM users
+        WHERE id=$1
+        `,
+        [challenge.creator_id]
+      );
+
+      if (userResult.rows.length > 0) {
+        const receiver = userResult.rows[0];
+
+        if (receiver.fcm_token) {
+          await sendNotification(
+            receiver.fcm_token,
+            "🏏 Challenge Accepted",
+            `${team_name} has accepted your challenge.`,
+            {
+              type: "challenge_accepted",
+              challengeId: String(id),
+              acceptedBy: team_name,
+              acceptedByUserId: String(req.user.id),
+            }
+          );
+        }
+      }
+    } catch (notificationError) {
+      console.error("Notification Error:", notificationError);
+    }
+
+    return res.json({
+      success: true,
+      message: "Challenge accepted successfully.",
+      challenge: result.rows[0],
+    });
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -177,7 +380,6 @@ const acceptChallenge = asyncHandler(async (req, res) => {
     client.release();
   }
 });
-
 // POST /api/challenges/:id/cancel
 // Any member of either the posting team or the accepting team can cancel —
 // not just the exact account that clicked post/accept. Reverts to 'open',

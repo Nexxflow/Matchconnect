@@ -8,6 +8,31 @@ import EditProfileModal from "./components/Auth/EditProfileModal.jsx";
 // import {   setStoredToken } from "./api";
 import { useRef } from "react";
 
+// ─── Push notifications (Firebase Cloud Messaging) ─────────────────────────
+// requestNotificationPermission(): asks the browser for permission and
+//   returns an FCM registration token (or null if denied/unsupported).
+// listenForMessages(): kept for reference — we use getFirebaseMessaging +
+//   onMessage directly below instead, so incoming pushes can be routed into
+//   the app's own notification state rather than a blocking alert().
+import {
+  requestNotificationPermission,
+  listenForMessages,
+} from "../services/firebaseNotification";
+
+import { getFirebaseMessaging } from "../firebase";
+
+import { onMessage } from "firebase/messaging";
+
+// Register the FCM background service worker once, as soon as this module
+// loads. This must live at the site root (public/firebase-messaging-sw.js)
+// — FCM will not find it under /src or any other path.
+if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+  navigator.serviceWorker
+    .register("/firebase-messaging-sw.js")
+    .then(reg => console.log("FCM service worker registered:", reg.scope))
+    .catch(err => console.error("FCM service worker registration failed:", err));
+}
+
 // ─── Backend → frontend shape transformers ─────────────────────────────────
 const AMENITY_ICON = {
   Water: <Droplets className="w-3 h-3" />, Showers: <Droplets className="w-3 h-3" />,
@@ -286,7 +311,7 @@ function BookingModal({ item, type, token, onClose, onConfirm }) {
 }
 
 // ─── Navbar ───────────────────────────────────────────────────────────────────
-function Navbar({ active, setActive, user, onLogout, token, onUserUpdated }) {
+function Navbar({ active, setActive, user, onLogout, token, onUserUpdated, pushCount = 0 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const tabs = ["Home", "Find Match", "Grounds", "Umpires", "Live Score", "Tournaments", "My Team"];
@@ -315,7 +340,7 @@ function Navbar({ active, setActive, user, onLogout, token, onUserUpdated }) {
         <div className="flex items-center gap-3 shrink-0">
           <button style={{ backgroundColor: "#1e211e" }} className="relative w-9 h-9 rounded-full flex items-center justify-center hover:opacity-80 transition-opacity">
             <Bell className="w-4 h-4 text-[#c8ccc8]" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" style={{ border: "2px solid #0d0f0d" }} />
+            {pushCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" style={{ border: "2px solid #0d0f0d" }} />}
           </button>
           <div className="relative">
             <button onClick={() => setMenuOpen(o => !o)} className="w-9 h-9 rounded-full bg-gradient-to-br from-green-500 to-green-700 flex items-center justify-center text-black font-bold text-sm cursor-pointer">
@@ -2452,6 +2477,12 @@ export default function App() {
   const [umpires, setUmpires] = useState([]);
   const [tournaments, setTournaments] = useState([FEATURED_TOURNAMENT, ...LEAGUES]);
 
+  // Push notifications: FCM messages received while the app is in the
+  // foreground get pushed into this list and surface as the red dot on the
+  // navbar's bell icon. Backgrounded/closed-tab pushes are handled by
+  // public/firebase-messaging-sw.js instead.
+  const [pushNotifications, setPushNotifications] = useState([]);
+
   // A reset-password email link points at /reset-password/<token> — catch that
   // before anything else so the person lands straight on the reset form, even
   // if they're already logged in on this browser (e.g. testing your own flow,
@@ -2520,6 +2551,61 @@ const loadAppData = async (token, user) => {
     }
   };
 
+  // Ask the browser for notification permission, grab the FCM registration
+  // token, and hand it to the backend so pushes can be targeted at this
+  // user/device. Safe to call repeatedly — if permission was already
+  // granted, requestNotificationPermission just resolves with the same
+  // token again instead of re-prompting.
+  const registerPushNotifications = async (token) => {
+  try {
+    console.log("Starting FCM registration...");
+
+    const fcmToken = await requestNotificationPermission();
+
+    console.log("Generated FCM Token:", fcmToken);
+
+    if (!fcmToken) {
+      console.log("No FCM token generated");
+      return;
+    }
+
+    const response = await apiRequest("/notifications/save-token", {
+      method: "POST",
+      token,
+      body: { token: fcmToken },
+    });
+
+    console.log("Save token response:", response);
+  } catch (err) {
+    console.error("FCM Registration Error:", err);
+  }
+};
+
+  // Listen for foreground FCM messages for the lifetime of the app (not
+  // tied to auth state, since Firebase itself gates delivery by token).
+  // Incoming pushes are appended to pushNotifications, which lights up the
+  // bell icon in the navbar.
+  useEffect(() => {
+    let unsubscribe;
+    (async () => {
+      const messaging = await getFirebaseMessaging();
+      if (!messaging) return; // unsupported browser (e.g. no service worker support)
+      unsubscribe = onMessage(messaging, payload => {
+        setPushNotifications(prev => [
+          {
+            id: Date.now(),
+            title: payload?.notification?.title || "MatchConnect",
+            body: payload?.notification?.body || ""
+          },
+          ...prev
+        ]);
+      });
+    })();
+    return () => {
+      if (typeof unsubscribe === "function") unsubscribe();
+    };
+  }, []);
+
   // Try to restore a session from a previously stored token on first load.
   // Skipped entirely when a reset-password link brought us here — we don't
   // want a valid session silently hiding the reset form.
@@ -2540,6 +2626,7 @@ const loadAppData = async (token, user) => {
       if (cancelled) return;
       setAuth({ token, user });
       loadAppData(token, user); // ← pass user through
+      registerPushNotifications(token); // ← ask for push permission + save FCM token
     } catch {
       setStoredToken(null);
     } finally {
@@ -2554,10 +2641,20 @@ const handleAuthSuccess = (user, token) => {
   setStoredToken(token);
   setAuth({ token, user });
   loadAppData(token, user); // ← pass user through
+  registerPushNotifications(token); // ← ask for push permission + save FCM token
 };
   
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+  // Best-effort: tell the backend to stop targeting this device with pushes.
+  // Non-fatal if it fails — we still want the local logout to proceed.
+  try {
+    if (auth.token) {
+      await apiRequest("/notifications/clear-token", { method: "POST", token: auth.token });
+    }
+  } catch (err) {
+    console.warn("Could not clear FCM token on logout:", err.message);
+  }
   setStoredToken(null);
   setAuth({ token: null, user: null });
   setBookings([]);
@@ -2667,6 +2764,7 @@ const handleChallengeDeleted = (id) => {
   user={auth.user}
   onLogout={handleLogout}
   token={auth.token}
+  pushCount={pushNotifications.length}
  onUserUpdated={updatedUser => {
   setAuth(prev => ({ ...prev, user: updatedUser }));
   if (auth.token) loadTeammates(auth.token);
