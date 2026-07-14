@@ -1,5 +1,6 @@
 // ─── API layer ──────────────────────────────────────────────────────────────
-export const API_BASE = "https://hdr2k2kf-8000.inc1.devtunnels.ms/api";
+// export const API_BASE = "https://hdr2k2kf-8000.inc1.devtunnels.ms/api";
+export const API_BASE = "http://localhost:8000/api";
 
 // ─── Auth token persistence ─────────────────────────────────────────────────
 const TOKEN_KEY = "mc_token";

@@ -1271,11 +1271,14 @@ function FindMatchTab({
   const [timeFilter, setTimeFilter] = useState(""); // exact time_slot value chosen by the user, "" = Any Time
   const [searchQuery, setSearchQuery] = useState("");
   const [acceptTarget, setAcceptTarget] = useState(null);
+  const [detailsTarget, setDetailsTarget] = useState(null); // challenge currently shown in the "View Details" modal
 
   const normalize = c => ({
     id: c.id,
     team: c.team_name,
     contact_no: c.contact_no,
+    postedBy: c.posted_by_name || c.creator_name || null, // name of the person who posted, when the backend provides it
+    postedAt: c.created_at || null,                        // when the challenge was posted
     format: c.format,
     date: formatDateIST(c.match_date),   // displayed in IST
     rawDate: c.match_date,               // raw value kept for filter comparisons
@@ -1287,6 +1290,51 @@ function FindMatchTab({
     wins: 0,
     losses: 0
   });
+
+  // Turns a timestamp into a short relative label ("2h ago", "5m ago",
+  // "Just now") for the "posted" indicator on each card. Falls back to a
+  // plain date if the challenge is older than a week.
+  const formatPostedAgo = timestamp => {
+    if (!timestamp) return null;
+    const posted = new Date(timestamp);
+    if (isNaN(posted.getTime())) return null;
+
+    const diffMs = Date.now() - posted.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+
+    if (diffMin < 1) return "Just now";
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ago`;
+    const diffDay = Math.floor(diffHr / 24);
+    if (diffDay < 7) return `${diffDay}d ago`;
+    return posted.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  };
+
+  // Full posted date + time (IST) for the details modal, e.g. "14 Jul, 4:32 PM"
+  const formatPostedFull = timestamp => {
+    if (!timestamp) return null;
+    const posted = new Date(timestamp);
+    if (isNaN(posted.getTime())) return null;
+    return posted.toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "numeric",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true
+    });
+  };
+
+  // Masks a phone number for display so the full number isn't shown in a
+  // public list — e.g. "9876543210" -> "98765 43210" is left as-is if you'd
+  // rather show it in full; this just formats it into a readable group.
+  const formatPhoneDisplay = phone => {
+    if (!phone) return null;
+    const digits = String(phone).replace(/\D/g, "");
+    if (digits.length !== 10) return phone;
+    return `${digits.slice(0, 5)} ${digits.slice(5)}`;
+  };
 
   const myPhone = normalizePhone(user?.phone);
 
@@ -1331,9 +1379,6 @@ function FindMatchTab({
   // Converts EITHER "4:00 PM" (12-hour, from the TimePicker filter) OR
   // "16:00" (24-hour, as stored by ChallengeForm's TimeField) into minutes
   // since midnight, so both formats can be compared on equal footing.
-  // Previously this only recognized the 12-hour AM/PM format, so a filter
-  // pick like "4:00 PM" could never match a stored "16:00" — the time
-  // filter silently did nothing.
   const toMinutes = timeStr => {
     if (!timeStr) return null;
     const s = String(timeStr).trim();
@@ -1474,37 +1519,177 @@ function FindMatchTab({
         <div className="space-y-3">
           {filtered.length === 0 && <div className="text-sm text-center py-8" style={{ color: "#4a5a4a" }}>No challenges match your filters right now.</div>}
           {filtered.map(t => {
-          const blocked = hasActive;
-          return <div key={t.id} className={cn(C, "rounded-2xl p-4 flex items-center gap-3")}>
+            const blocked = hasActive;
+            const postedAgo = formatPostedAgo(t.postedAt);
+            const phoneDisplay = formatPhoneDisplay(t.contact_no);
+            return <div key={t.id} className={cn(C, "rounded-2xl p-4 transition-colors")} style={{ borderColor: t.urgent ? "rgba(245,158,11,0.35)" : "#2a2a2a" }}>
+
+              {/* Header: team + posted info, posted-time pinned top-right */}
+              <div className="flex items-start gap-3">
                 <div className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0" style={{ background: "linear-gradient(135deg,#166534,#14532d)" }}>
                   {t.team.split(" ").map(w => w[0]).slice(0, 2).join("")}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-white">{t.team}</div>
-                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                    <div className="flex items-center gap-1">
-                      <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                      <span className="text-xs" style={{ color: "#6b7a6b" }}>{t.rating}</span>
-                    </div>
-                    <span className="text-xs" style={{ color: "#6b7a6b" }}>W{t.wins}/L{t.losses}</span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-1 flex-wrap">
-                    {t.urgent && <Tag color="amber">⚡ Urgent</Tag>}
-                    <Tag color="blue">{t.date} · {t.time}</Tag>
-                    {t.note && <Tag color="purple">{t.note}</Tag>}
-                  </div>
-                  <div className="text-xs mt-1" style={{ color: "#4a5a4a" }}>📍 {t.ground}</div>
+                  <div className="text-sm font-semibold text-white truncate">{t.team}</div>
+                  {/* <div className="text-xs mt-0.5 truncate" style={{ color: "#6b7a6b" }}>
+                    Posted by {t.postedBy || phoneDisplay || "team contact"}
+                  </div> */}
                 </div>
-                <div className="flex flex-col gap-1.5 shrink-0 w-28">
-                  <button disabled={blocked} onClick={() => setAcceptTarget(t)} className="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors" style={blocked ? { backgroundColor: "#1e211e", color: "#3a3a3a", cursor: "not-allowed" } : { backgroundColor: "#22c55e", color: "#000" }} onMouseEnter={e => !blocked && (e.currentTarget.style.backgroundColor = "#4ade80")} onMouseLeave={e => !blocked && (e.currentTarget.style.backgroundColor = "#22c55e")}>
-                    {blocked ? "Unavailable" : "Challenge"}
-                  </button>
-                  <GhostButton className="text-center">Profile</GhostButton>
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  {postedAgo && (
+                    <span className="text-[10px] font-medium" style={{ color: "#4a5a4a" }}>{postedAgo}</span>
+                  )}
+                  {t.urgent && <span className="text-xs font-bold px-2 py-1 rounded-full" style={{ backgroundColor: "rgba(245,158,11,0.15)", color: "#f59e0b" }}>⚡ Urgent</span>}
                 </div>
-              </div>;
-        })}
+              </div> 
+
+              {/* Match details */}
+              <div className="mt-3 rounded-2xl p-4 space-y-3" style={{ backgroundColor: "#111", border: "1px solid #1e1e1e" }}>
+  {/* Team name + posted by — shown first, as the primary identity */}
+  
+
+  {/* Match logistics */}
+  <div className="space-y-2">
+    <div className="flex items-center gap-2 text-xs" style={{ color: "#c8d0c8" }}>
+      <Calendar className="w-3.5 h-3.5 shrink-0" style={{ color: "#22c55e" }} />
+      <span>{t.date}</span>
+      <span style={{ color: "#3a3a3a" }}>•</span>
+      <span>{t.time}</span>
+    </div>
+    <div className="flex items-center gap-2 text-xs" style={{ color: "#c8d0c8" }}>
+      <MapPin className="w-3.5 h-3.5 shrink-0" style={{ color: "#22c55e" }} />
+      <span className="truncate">{t.ground}</span>
+    </div>
+    {/* {phoneDisplay && (
+      <div className="flex items-center gap-2 text-xs" style={{ color: "#c8d0c8" }}>
+        <Phone className="w-3.5 h-3.5 shrink-0" style={{ color: "#22c55e" }} />
+        <span>{phoneDisplay}</span>
+      </div>
+    )} */}
+  </div>
+</div>
+
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                <Tag color="blue">{format.title}</Tag>
+                {t.note && <Tag color="purple">{t.note}</Tag>}
+              </div>
+
+              <div className="flex gap-2 mt-3">
+                <button
+                  disabled={blocked}
+                  onClick={() => setAcceptTarget(t)}
+                  className="flex-1 py-2 rounded-xl text-xs font-bold transition-colors"
+                  style={blocked
+                    ? { backgroundColor: "#1e211e", color: "#3a3a3a", cursor: "not-allowed" }
+                    : { backgroundColor: "#22c55e", color: "#000" }}
+                  onMouseEnter={e => !blocked && (e.currentTarget.style.backgroundColor = "#4ade80")}
+                  onMouseLeave={e => !blocked && (e.currentTarget.style.backgroundColor = "#22c55e")}
+                >
+                  {blocked ? "Unavailable" : "Accept Challenge"}
+                </button>
+                <GhostButton className="flex-1" onClick={() => setDetailsTarget(t)}>View Details</GhostButton>
+              </div>
+            </div>;
+          })}
         </div>
       </section>
+
+      {/* View Details modal — centered, shows poster/contact info highlighted, keeps the "ago" badge top-right */}
+      {/* View Details modal — centered, unified details card */}
+{detailsTarget && (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    style={{ backgroundColor: "rgba(0,0,0,0.75)", backdropFilter: "blur(2px)" }}
+    onClick={() => setDetailsTarget(null)}
+  >
+    <div
+      className="w-full max-w-md rounded-3xl p-5 relative animate-in fade-in zoom-in-95 duration-150"
+      style={{ backgroundColor: "#141414", border: "1px solid #2a2a2a", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}
+      onClick={e => e.stopPropagation()}
+    >
+      {/* Top-right corner: relative "ago" badge + close button */}
+      <div className="absolute top-4 right-4 flex items-center gap-2">
+        {formatPostedAgo(detailsTarget.postedAt) && (
+          <span className="text-[10px] font-semibold px-2 py-1 rounded-full" style={{ backgroundColor: "#1e211e", color: "#8a978a", border: "1px solid #2a2a2a" }}>
+            {formatPostedAgo(detailsTarget.postedAt)}
+          </span>
+        )}
+        <button onClick={() => setDetailsTarget(null)} className="w-7 h-7 rounded-full flex items-center justify-center transition-colors" style={{ backgroundColor: "#1e211e" }}>
+          <X className="w-4 h-4" style={{ color: "#9ca39c" }} />
+        </button>
+      </div>
+
+      {/* Avatar */}
+      <div className="flex items-center gap-3 pr-20">
+        <div className="w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-lg shrink-0" style={{ background: "linear-gradient(135deg,#166534,#14532d)" }}>
+          {detailsTarget.team.split(" ").map(w => w[0]).slice(0, 2).join("")}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <Tag color="blue">{format.title}</Tag>
+          {detailsTarget.urgent && <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(245,158,11,0.15)", color: "#f59e0b" }}>⚡ Urgent</span>}
+        </div>
+      </div>
+
+      {/* Unified details card: team + posted by, then logistics */}
+      <div className="mt-4 rounded-2xl p-4 space-y-3" style={{ backgroundColor: "#0f0f0f", border: "1px solid #1e1e1e" }}>
+        {/* Team name + posted by — primary identity, shown first */}
+        <div className="pb-3 border-b" style={{ borderColor: "#1e1e1e" }}>
+          <div className="text-lg font-bold text-white truncate">{detailsTarget.team}</div>
+          <div className="text-xs mt-1" style={{ color: "#6b7a6b" }}>
+            Posted by{" "}
+            <span className="font-semibold" style={{ color: "#4ade80" }}>
+              {detailsTarget.postedBy || formatPhoneDisplay(detailsTarget.contact_no) || "team contact"}
+            </span>
+            {formatPostedFull(detailsTarget.postedAt) && (
+              <span style={{ color: "#4a5a4a" }}> · {formatPostedFull(detailsTarget.postedAt)}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Match logistics */}
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-2 text-sm" style={{ color: "#e2e8e2" }}>
+            <Calendar className="w-4 h-4 shrink-0" style={{ color: "#22c55e" }} />
+            <span>{detailsTarget.date}</span>
+            <span style={{ color: "#3a3a3a" }}>•</span>
+            <span>{detailsTarget.time}</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm" style={{ color: "#e2e8e2" }}>
+            <MapPin className="w-4 h-4 shrink-0" style={{ color: "#22c55e" }} />
+            <span>{detailsTarget.ground}</span>
+          </div>
+          {formatPhoneDisplay(detailsTarget.contact_no) && (
+            <div className="flex items-center gap-2 text-sm" style={{ color: "#e2e8e2" }}>
+              <Phone className="w-4 h-4 shrink-0" style={{ color: "#22c55e" }} />
+              <a href={`tel:${detailsTarget.contact_no}`} className="font-semibold" style={{ color: "#4ade80" }}>
+                {formatPhoneDisplay(detailsTarget.contact_no)}
+              </a>
+            </div>
+          )}
+          {detailsTarget.note && (
+            <div className="text-sm pt-2 border-t" style={{ color: "#9ca39c", borderColor: "#1e1e1e" }}>{detailsTarget.note}</div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex gap-2 mt-5">
+        <button
+          disabled={hasActive}
+          onClick={() => { setAcceptTarget(detailsTarget); setDetailsTarget(null); }}
+          className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-colors"
+          style={hasActive
+            ? { backgroundColor: "#1e211e", color: "#3a3a3a", cursor: "not-allowed" }
+            : { backgroundColor: "#22c55e", color: "#000" }}
+          onMouseEnter={e => !hasActive && (e.currentTarget.style.backgroundColor = "#4ade80")}
+          onMouseLeave={e => !hasActive && (e.currentTarget.style.backgroundColor = "#22c55e")}
+        >
+          {hasActive ? "Unavailable" : "Accept Challenge"}
+        </button>
+        <GhostButton className="flex-1" onClick={() => setDetailsTarget(null)}>Close</GhostButton>
+      </div>
+    </div>
+  </div>
+)}
 
        {acceptTarget && <AcceptChallengeModal
         challenge={acceptTarget}

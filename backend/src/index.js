@@ -161,6 +161,10 @@ app.use(errorHandler);
 // SMTP
 // ====================================================
 
+// ====================================================
+// SMTP
+// ====================================================
+
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT),
@@ -169,6 +173,16 @@ const transporter = nodemailer.createTransport({
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
+});
+
+transporter.verify((error) => {
+  if (error) {
+    console.error("❌ SMTP unreachable (email sending will fail until network/DNS is fixed):", error.message);
+    // Non-fatal — the server keeps running. Password-reset emails will
+    // silently fail (already caught in forgotPassword) until this resolves.
+  } else {
+    console.log("✅ SMTP Ready");
+  }
 });
 
 transporter.verify((error) => {
