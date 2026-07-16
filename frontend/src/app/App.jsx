@@ -671,14 +671,15 @@ function TimeField({ value, onChange }) {
 }
 
 // ─── Challenge form ─────────────────────────────────────────────────────────
-function ChallengeForm({ token, user, onCreated, disabledReason }) {
+function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [] }) {
   const emptyForm = {
     team_name: "",
     format: "T20",
     match_date: "",
     time_slot: "",
     hasGround: false,
-    ground_id: "",
+    ground_id: "",       // holds the registered ground's id when selected from the list
+    ground_custom: "",   // free-text fallback when "Other / not listed" is chosen
     note: ""
   };
   const [open, setOpen] = useState(false);
@@ -702,7 +703,10 @@ function ChallengeForm({ token, user, onCreated, disabledReason }) {
     if (!form.format) return setError("Match format is required.");
     if (!form.match_date) return setError("Match date is required.");
     if (!form.time_slot) return setError("Match time is required.");
-    if (form.hasGround && !form.ground_id.trim()) return setError("Enter the ground name, or mark ground as not booked yet.");
+    if (form.hasGround && form.ground_id === "other" && !form.ground_custom.trim()) {
+      return setError("Enter the ground name, or pick one from the list.");
+    }
+    if (form.hasGround && !form.ground_id) return setError("Select a ground, or mark ground as not booked yet.");
     if (!token) return setError("You need to be logged in to post a challenge.");
 
     setSubmitting(true);
@@ -716,7 +720,10 @@ function ChallengeForm({ token, user, onCreated, disabledReason }) {
           format: form.format,
           match_date: form.match_date,
           time_slot: form.time_slot,
-          ground_id: form.hasGround ? form.ground_id.trim() : null,
+          ground_id: form.hasGround
+            ? (form.ground_id === "other" ? null : form.ground_id)
+            : null,
+          ground_name: form.hasGround && form.ground_id === "other" ? form.ground_custom.trim() : null,
           note: form.note.trim() || null
         }
       });
@@ -730,8 +737,6 @@ function ChallengeForm({ token, user, onCreated, disabledReason }) {
     }
   };
 
-  // Already has an active challenge (posted or accepted) — match the
-  // backend's one-active-challenge rule before they even open the form.
   if (disabledReason) {
     return <div className="w-full py-3 rounded-2xl text-sm font-medium flex items-center justify-center gap-2" style={{ border: "1px dashed #2a2a2a", color: "#4a5a4a", backgroundColor: "#131413" }}>
         {disabledReason}
@@ -797,7 +802,34 @@ function ChallengeForm({ token, user, onCreated, disabledReason }) {
 
         {form.hasGround && <div className="col-span-2">
             <label className="text-xs mb-1 block" style={{ color: "#6b7a6b" }}>Ground</label>
-            <input value={form.ground_id} onChange={e => update("ground_id", e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm text-white focus:outline-none" style={{ backgroundColor: "#111", border: "1px solid #2a2a2a" }} placeholder="Green Park Cricket Ground" />
+            {grounds.length > 0 ? <>
+                <div className="relative">
+                  <select
+                    value={form.ground_id}
+                    onChange={e => update("ground_id", e.target.value)}
+                    className="w-full rounded-xl px-3 py-2 text-sm text-white appearance-none pr-7 focus:outline-none"
+                    style={{ backgroundColor: "#111", border: "1px solid #2a2a2a" }}
+                  >
+                    <option value="">Select a ground</option>
+                    {grounds.map(g => <option key={g.id ?? g.name} value={g.id ?? g.name}>{g.name}{g.area ? ` — ${g.area}` : ""}</option>)}
+                    <option value="other">Other / not listed</option>
+                  </select>
+                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: "#6b7a6b" }} />
+                </div>
+                {form.ground_id === "other" && <input
+                    value={form.ground_custom}
+                    onChange={e => update("ground_custom", e.target.value)}
+                    className="w-full mt-2 rounded-xl px-3 py-2 text-sm text-white focus:outline-none"
+                    style={{ backgroundColor: "#111", border: "1px solid #2a2a2a" }}
+                    placeholder="Ground name"
+                  />}
+              </> : <input
+                value={form.ground_custom}
+                onChange={e => { update("ground_custom", e.target.value); update("ground_id", "other"); }}
+                className="w-full rounded-xl px-3 py-2 text-sm text-white focus:outline-none"
+                style={{ backgroundColor: "#111", border: "1px solid #2a2a2a" }}
+                placeholder="Green Park Cricket Ground"
+              />}
           </div>}
 
         <div className="col-span-2">
@@ -1291,7 +1323,7 @@ function FindMatchTab({
   acceptedChallenge,
   onChallengeAccepted,
   token,
-  user,
+  user, 
   challenges = [],
   onChallengeCreated,
   onChallengeDeleted,
@@ -1907,16 +1939,14 @@ function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundCreated, onGroun
   const [cost, setCost] = useState("1200");
   const [split, setSplit] = useState("11");
   const [ratingFilter, setRatingFilter] = useState("Any Rating");
+  const [locationFilter, setLocationFilter] = useState("All Locations");
+  const [priceFilter, setPriceFilter] = useState("Any Price");
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedGround, setSelectedGround] = useState(null);
   const [showMap, setShowMap] = useState(false);
   const [editingGround, setEditingGround] = useState(null);
   const perHead = cost && split ? Math.ceil(Number(cost) / Number(split)) : 0;
   const teamIdSet = new Set([user?.id, ...teammateIds].filter(Boolean).map(id => String(id)));
-
-  const ratingThreshold = { "Any Rating": 0, "4.7+": 4.7, "4.5+": 4.5, "4.0+": 4.0 }[ratingFilter];
-  const filteredGrounds = [...grounds]
-    .filter(g => (Number(g.rating) || 0) >= ratingThreshold)
-    .sort((a, b) => (Number(b.rating) || 0) - (Number(a.rating) || 0));
 
   const displayPrice = g => {
     if (g.price !== undefined && g.price !== null && g.price !== "") {
@@ -1930,6 +1960,53 @@ function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundCreated, onGroun
   const isOwnedByMyTeam = g => g?.posted_by_user_id && teamIdSet.has(String(g.posted_by_user_id));
   const bookedTodaySlots = g => Array.isArray(g.booked_time_slots_today) ? g.booked_time_slots_today : [];
   const canBookGround = g => !isOwnedByMyTeam(g) && (Number(g.booking_count_today) || 0) < 2;
+
+  // Numeric price, regardless of whether the ground carries a raw
+  // price_per_hour (from the backend) or a pre-formatted "₹800/hr" string
+  // (from the GROUNDS demo fallback).
+  const getPriceNum = g => {
+    if (g.price_per_hour !== undefined && g.price_per_hour !== null && g.price_per_hour !== "") {
+      const n = Number(g.price_per_hour);
+      if (Number.isFinite(n)) return n;
+    }
+    const n = Number(String(g.price ?? "").replace(/[^\d.]/g, ""));
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  // Only areas that actually belong to a registered ground show up here —
+  // no more hardcoded Bandra/Andheri/Thane/Navi Mumbai list.
+  const uniqueLocations = Array.from(
+    new Set(grounds.map(g => displayLocation(g)).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+
+  const ratingThreshold = { "Any Rating": 0, "4.7+": 4.7, "4.5+": 4.5, "4.0+": 4.0 }[ratingFilter];
+
+  const filteredGrounds = [...grounds]
+    .filter(g => (Number(g.rating) || 0) >= ratingThreshold)
+    .filter(g => locationFilter === "All Locations" || displayLocation(g) === locationFilter)
+    .filter(g => {
+      const p = getPriceNum(g);
+      if (priceFilter === "Under ₹500/hr") return p > 0 && p < 500;
+      if (priceFilter === "₹500–₹1000/hr") return p >= 500 && p <= 1000;
+      if (priceFilter === "₹1000+/hr") return p > 1000;
+      return true;
+    })
+    .filter(g => {
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) return true;
+      return (
+        (g.name || "").toLowerCase().includes(q) ||
+        displayLocation(g).toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => (Number(b.rating) || 0) - (Number(a.rating) || 0));
+
+  const activeFilterCount = [
+    ratingFilter !== "Any Rating",
+    locationFilter !== "All Locations",
+    priceFilter !== "Any Price",
+    searchQuery.trim() !== ""
+  ].filter(Boolean).length;
 
   const asArray = v => {
     if (Array.isArray(v)) return v;
@@ -1945,26 +2022,57 @@ function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundCreated, onGroun
   };
 
   return <div className="space-y-8">
-      <div className="flex gap-3">
-        <div className="relative flex-1">
-          <select className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none transition-colors" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#c8ccc8" }}>
-            <option>All Locations</option>
-            {["Bandra", "Andheri", "Thane", "Navi Mumbai"].map(o => <option key={o}>{o}</option>)}
-          </select>
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: "#6b7a6b" }} />
+      <div className={cn(C, "rounded-2xl p-4")}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Filter className="w-3.5 h-3.5 text-green-400" />
+            <span className="text-sm font-semibold text-white">Filter Grounds</span>
+          </div>
+          {activeFilterCount > 0 && <button
+            type="button"
+            onClick={() => { setRatingFilter("Any Rating"); setLocationFilter("All Locations"); setPriceFilter("Any Price"); setSearchQuery(""); }}
+            className="text-[11px] font-semibold transition-colors"
+            style={{ color: "#6b7a6b" }}
+          >
+            Clear filters ({activeFilterCount})
+          </button>}
         </div>
-        <div className="relative flex-1">
-          <select className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none transition-colors" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#c8ccc8" }}>
-            <option>Any Price</option>
-            {["Under ₹500/hr", "₹500–₹1000/hr", "₹1000+/hr"].map(o => <option key={o}>{o}</option>)}
-          </select>
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: "#6b7a6b" }} />
+
+        <div className="relative mb-3">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: "#6b7a6b" }} />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search by ground name or area"
+            className="w-full rounded-xl pl-9 pr-8 py-2.5 text-sm focus:outline-none transition-colors"
+            style={{ backgroundColor: "#111", border: "1px solid #2a2a2a", color: "#fff" }}
+          />
+          {searchQuery && <button type="button" onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2">
+            <X className="w-3.5 h-3.5" style={{ color: "#6b7a6b" }} />
+          </button>}
         </div>
-        <div className="relative flex-1">
-          <select value={ratingFilter} onChange={e => setRatingFilter(e.target.value)} className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none transition-colors" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#c8ccc8" }}>
-            {["Any Rating", "4.7+", "4.5+", "4.0+"].map(o => <option key={o}>{o}</option>)}
-          </select>
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: "#6b7a6b" }} />
+
+        <div className="flex gap-3">
+          <div className="relative flex-1">
+            <select value={locationFilter} onChange={e => setLocationFilter(e.target.value)} className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none transition-colors" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#c8ccc8" }}>
+              <option>All Locations</option>
+              {uniqueLocations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: "#6b7a6b" }} />
+          </div>
+          <div className="relative flex-1">
+            <select value={priceFilter} onChange={e => setPriceFilter(e.target.value)} className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none transition-colors" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#c8ccc8" }}>
+              {["Any Price", "Under ₹500/hr", "₹500–₹1000/hr", "₹1000+/hr"].map(o => <option key={o}>{o}</option>)}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: "#6b7a6b" }} />
+          </div>
+          <div className="relative flex-1">
+            <select value={ratingFilter} onChange={e => setRatingFilter(e.target.value)} className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none transition-colors" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#c8ccc8" }}>
+              {["Any Rating", "4.7+", "4.5+", "4.0+"].map(o => <option key={o}>{o}</option>)}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: "#6b7a6b" }} />
+          </div>
         </div>
       </div>
 
@@ -2010,10 +2118,13 @@ function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundCreated, onGroun
       <section>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-base font-semibold text-white">Available Grounds</h3>
-          <span className="text-xs" style={{ color: "#6b7a6b" }}>{filteredGrounds.length} result{filteredGrounds.length !== 1 ? "s" : ""} {ratingFilter !== "Any Rating" && `· rated ${ratingFilter}`}</span>
+          <span className="text-xs" style={{ color: "#6b7a6b" }}>
+            {filteredGrounds.length} result{filteredGrounds.length !== 1 ? "s" : ""}
+            {activeFilterCount > 0 && ` · ${activeFilterCount} filter${activeFilterCount !== 1 ? "s" : ""} applied`}
+          </span>
         </div>
         <div className="space-y-3">
-          {filteredGrounds.length === 0 && <div className="text-sm text-center py-8" style={{ color: "#4a5a4a" }}>No grounds match that rating filter.</div>}
+          {filteredGrounds.length === 0 && <div className="text-sm text-center py-8" style={{ color: "#4a5a4a" }}>No grounds match your filters.</div>}
           {filteredGrounds.map(g => {
             const amenities = asArray(g.amenities);
             const tags = asArray(g.tags);
