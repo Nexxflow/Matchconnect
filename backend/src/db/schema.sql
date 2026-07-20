@@ -54,11 +54,22 @@ CREATE TABLE IF NOT EXISTS grounds (
   name VARCHAR(150) NOT NULL,
   area VARCHAR(150),
   price_per_hour NUMERIC(10,2) NOT NULL,
+  google_maps_url TEXT,
+  posted_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  availability_mode VARCHAR(20) DEFAULT 'always',
+  available_date DATE,
+  available_time VARCHAR(50),
   rating NUMERIC(2,1) DEFAULT 0,
   amenities JSONB DEFAULT '[]',
   tags JSONB DEFAULT '[]',
   created_at TIMESTAMPTZ DEFAULT now()
 );
+
+ALTER TABLE grounds ADD COLUMN IF NOT EXISTS google_maps_url TEXT;
+ALTER TABLE grounds ADD COLUMN IF NOT EXISTS posted_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE grounds ADD COLUMN IF NOT EXISTS availability_mode VARCHAR(20) DEFAULT 'always';
+ALTER TABLE grounds ADD COLUMN IF NOT EXISTS available_date DATE;
+ALTER TABLE grounds ADD COLUMN IF NOT EXISTS available_time VARCHAR(50);
 
 -- ─── Umpires / Scorers ──────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS umpires (

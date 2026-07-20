@@ -1,5 +1,10 @@
 const pool = require("../config/db");
 const asyncHandler = require("../utils/asyncHandler");
+// const asyncHandler = require("../utils/asyncHandler");
+const {
+  notifyChallengeAccepted,
+  notifyChallengeCancelled,
+} = require("../services/notificationService");
 
 // ============================================================
 // Helpers
@@ -26,6 +31,94 @@ async function createPlayers(client, teamId, names) {
   }
   return ids;
 }
+
+
+
+
+
+// ============================================================
+// POST /api/matches/:matchId/accept-challenge
+// Called by the challenged user. Flips status to 'challenge_accepted'
+// and notifies the user who originally posted the challenge.
+// ============================================================
+const acceptChallenge = asyncHandler(async (req, res) => {
+  const { matchId } = req.params;
+
+  const matchRes = await pool.query(
+    `SELECT m.*, t1.name AS team1_name, t2.name AS team2_name,
+            creator.fcm_token AS creator_token,
+            challenged_team.name AS challenged_team_name
+     FROM matches m
+     JOIN teams t1 ON t1.id = m.team1_id
+     JOIN teams t2 ON t2.id = m.team2_id
+     JOIN users creator ON creator.id = m.created_by
+     JOIN teams challenged_team
+       ON challenged_team.id = CASE
+            WHEN m.challenged_user_id = m.created_by THEN m.team1_id
+            ELSE m.team2_id
+          END
+     WHERE m.id = $1`,
+    [matchId]
+  );
+  if (matchRes.rows.length === 0) {
+    return res.status(404).json({ error: "Match not found" });
+  }
+  const match = matchRes.rows[0];
+
+  const updated = await pool.query(
+    `UPDATE matches SET status = 'challenge_accepted', updated_at = now()
+     WHERE id = $1 RETURNING *`,
+    [matchId]
+  );
+
+  await notifyChallengeAccepted(match.creator_token, match.challenged_team_name, {
+    match_id: String(matchId),
+  });
+
+  res.json({ ok: true, match: updated.rows[0] });
+});
+
+// ============================================================
+// POST /api/matches/:matchId/cancel-challenge
+// Called by the challenged user (or the creator) to withdraw/decline.
+// Notifies the original creator that the challenge was cancelled.
+// ============================================================
+const cancelChallenge = asyncHandler(async (req, res) => {
+  const { matchId } = req.params;
+
+  const matchRes = await pool.query(
+    `SELECT m.*, t1.name AS team1_name, t2.name AS team2_name,
+            creator.fcm_token AS creator_token,
+            challenged_team.name AS challenged_team_name
+     FROM matches m
+     JOIN teams t1 ON t1.id = m.team1_id
+     JOIN teams t2 ON t2.id = m.team2_id
+     JOIN users creator ON creator.id = m.created_by
+     JOIN teams challenged_team
+       ON challenged_team.id = CASE
+            WHEN m.challenged_user_id = m.created_by THEN m.team1_id
+            ELSE m.team2_id
+          END
+     WHERE m.id = $1`,
+    [matchId]
+  );
+  if (matchRes.rows.length === 0) {
+    return res.status(404).json({ error: "Match not found" });
+  }
+  const match = matchRes.rows[0];
+
+  const updated = await pool.query(
+    `UPDATE matches SET status = 'challenge_cancelled', updated_at = now()
+     WHERE id = $1 RETURNING *`,
+    [matchId]
+  );
+
+  await notifyChallengeCancelled(match.creator_token, match.challenged_team_name, {
+    match_id: String(matchId),
+  });
+
+  res.json({ ok: true, match: updated.rows[0] });
+});
 
 // ============================================================
 // GET /api/matches
@@ -973,7 +1066,6 @@ const setActivePlayers = asyncHandler(async (req, res) => {
 
 
 module.exports = {
-
   listMatches,
   createMatch,
   addSquads,
@@ -989,4 +1081,6 @@ module.exports = {
   getLiveScore,
   getCurrentLiveMatch,
   setActivePlayers,
+  acceptChallenge,
+  cancelChallenge,
 };
