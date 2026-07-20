@@ -138,7 +138,7 @@ const FORMATS = [
   { key: "T20", emoji: "⚡", title: "T20 Match", desc: "20 overs per side, fast-paced" },
   { key: "ODI", emoji: "🏏", title: "ODI Format", desc: "50 overs, balanced game" },
   { key: "Test", emoji: "🎯", title: "Test Match", desc: "Multi-day, traditional format" },
-  { key: "Box", emoji: "🔥", title: "Box Cricket", desc: "Short format, indoor/outdoor" }
+  { key: "Turf", emoji: "🔥", title: "Turf Nets", desc: "Short format, indoor/outdoor" }
 ];
 
 const ALL_CHALLENGES = [
