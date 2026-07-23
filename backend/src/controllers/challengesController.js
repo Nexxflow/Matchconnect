@@ -27,35 +27,39 @@ async function getTeamMemberIds(userId) {
 }
 
 // Used when POSTING a new challenge — a team can't have two challenges
-// "live" (open, on_hold, or accepted) waiting on them at once. Unlike
-// accepting, this still blocks outright.
-async function findActiveChallengeForTeam(userIds, excludeChallengeId = null) {
+// "live" (open, on_hold, or accepted) waiting on them AT THE SAME match_date.
+// Different dates are allowed, so a team can have a Saturday match and a
+// separate Sunday post open at the same time.
+async function findActiveChallengeForTeam(userIds, matchDate, excludeChallengeId = null) {
   const result = await pool.query(
     `SELECT id FROM challenges
      WHERE (
        (creator_id = ANY($1::int[]) AND status IN ('open', 'on_hold', 'accepted'))
        OR (accepted_by_user_id = ANY($1::int[]) AND status = 'accepted')
      )
-     AND ($2::uuid IS NULL OR id != $2::uuid)
+     AND match_date = $2::date
+     AND ($3::uuid IS NULL OR id != $3::uuid)
      LIMIT 1`,
-    [userIds, excludeChallengeId]
+    [userIds, matchDate, excludeChallengeId]
   );
   return result.rows[0] || null;
 }
 
-// Used when ACCEPTING — a team can't be locked into two accepted matches at
-// once, but an existing OPEN post of theirs no longer blocks them; it just
-// gets put on hold instead (see acceptChallenge below).
-async function findAcceptedMatchForTeam(userIds, excludeChallengeId = null) {
+// Used when ACCEPTING — a team can't be locked into two accepted matches on
+// the SAME date, but an existing OPEN post of theirs on a different date no
+// longer blocks them; an open post on the SAME date gets put on hold instead
+// (see acceptChallenge below).
+async function findAcceptedMatchForTeam(userIds, matchDate, excludeChallengeId = null) {
   const result = await pool.query(
     `SELECT id FROM challenges
      WHERE (
        (creator_id = ANY($1::int[]) AND status = 'accepted')
        OR (accepted_by_user_id = ANY($1::int[]) AND status = 'accepted')
      )
-     AND ($2::uuid IS NULL OR id != $2::uuid)
+     AND match_date = $2::date
+     AND ($3::uuid IS NULL OR id != $3::uuid)
      LIMIT 1`,
-    [userIds, excludeChallengeId]
+    [userIds, matchDate, excludeChallengeId]
   );
   return result.rows[0] || null;
 }
@@ -114,12 +118,12 @@ const createChallenge = asyncHandler(async (req, res) => {
 
   const teamMemberIds = await getTeamMemberIds(req.user.id);
 
-  const active = await findActiveChallengeForTeam(teamMemberIds);
+  const active = await findActiveChallengeForTeam(teamMemberIds, match_date);
 
   if (active) {
     return res.status(409).json({
       error:
-        "Your team already has an active challenge. Cancel it before posting a new one.",
+        "Your team already has an active challenge on that date. Cancel it or pick a different date.",
     });
   }
 
@@ -259,7 +263,7 @@ const acceptChallenge = asyncHandler(async (req, res) => {
   }
 
   const target = await pool.query(
-    "SELECT creator_id, status FROM challenges WHERE id = $1",
+    "SELECT creator_id, status, match_date FROM challenges WHERE id = $1",
     [id]
   );
 
@@ -281,12 +285,12 @@ const acceptChallenge = asyncHandler(async (req, res) => {
     return res.status(409).json({ error: "Challenge is no longer open" });
   }
 
-  const activeMatch = await findAcceptedMatchForTeam(teamMemberIds, id);
+  const activeMatch = await findAcceptedMatchForTeam(teamMemberIds, challenge.match_date, id);
 
   if (activeMatch) {
     return res.status(409).json({
       error:
-        "Your team already has an active match. Cancel it before accepting another.",
+        "Your team already has an active match on that date. Cancel it before accepting another.",
     });
   }
 
@@ -323,8 +327,9 @@ const acceptChallenge = asyncHandler(async (req, res) => {
       SET status='on_hold'
       WHERE creator_id = ANY($1::int[])
       AND status='open'
+      AND match_date = $2::date
       `,
-      [teamMemberIds]
+      [teamMemberIds, challenge.match_date]
     );
 
     await client.query("COMMIT");
@@ -389,11 +394,11 @@ const cancelChallenge = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const existing = await pool.query(
-    `SELECT creator_id, accepted_by_user_id FROM challenges WHERE id = $1`,
+    `SELECT creator_id, accepted_by_user_id, match_date FROM challenges WHERE id = $1`,
     [id]
   );
   if (existing.rows.length === 0) return res.status(404).json({ error: "Challenge not found" });
-  const { creator_id, accepted_by_user_id } = existing.rows[0];
+  const { creator_id, accepted_by_user_id, match_date } = existing.rows[0];
 
   const teamMemberIds = await getTeamMemberIds(req.user.id);
   const canCancel =
@@ -425,8 +430,8 @@ const cancelChallenge = asyncHandler(async (req, res) => {
     if (involvedTeamIds.length) {
       await client.query(
         `UPDATE challenges SET status = 'open'
-         WHERE creator_id = ANY($1::int[]) AND status = 'on_hold'`,
-        [involvedTeamIds]
+         WHERE creator_id = ANY($1::int[]) AND status = 'on_hold' AND match_date = $2::date`,
+        [involvedTeamIds, match_date]
       );
     }
 

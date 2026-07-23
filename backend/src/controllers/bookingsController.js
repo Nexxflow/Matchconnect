@@ -89,7 +89,7 @@ const createOrder = asyncHandler(async (req, res) => {
        WHERE ground_id = $1
          AND booking_date = $2
          AND payment_status IN ('pending', 'paid')
-         AND user_id = ANY($3::uuid[])`,
+         AND user_id = ANY($3::int[])`,
       [ref_id, booking_date, await getTeamMemberIds(req.user.id)]
     );
     if ((sameTeamBookings.rows[0]?.count || 0) > 0) {
@@ -217,7 +217,7 @@ const myBookings = asyncHandler(async (req, res) => {
      LEFT JOIN grounds g ON b.ground_id = g.id
      LEFT JOIN umpires u ON b.umpire_id = u.id
      LEFT JOIN users booked_by ON booked_by.id = b.user_id
-     WHERE b.user_id = ANY($1::uuid[])
+     WHERE b.user_id = ANY($1::int[])
      ORDER BY b.created_at DESC`,
     [teamIds]
   );

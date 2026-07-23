@@ -1,0 +1,111 @@
+🗄️  DB target: ep-broad-morning-ao3y9quz.c-2.ap-southeast-1.aws.neon.tech:5432 (ssl: true)
+=== All columns referencing users or named *_id ===
+(node:32319) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✅ PostgreSQL Connected: 2026-07-20T20:11:56.343Z
+┌─────────┬────────────────────────────┬───────────────────────┬───────────┐
+│ (index) │ table_name                 │ column_name           │ data_type │
+├─────────┼────────────────────────────┼───────────────────────┼───────────┤
+│ 0       │ 'balls'                    │ 'id'                  │ 'uuid'    │
+│ 1       │ 'batting_stats'            │ 'id'                  │ 'uuid'    │
+│ 2       │ 'bowling_stats'            │ 'id'                  │ 'uuid'    │
+│ 3       │ 'challenges'               │ 'accepted_by_user_id' │ 'integer' │
+│ 4       │ 'challenges'               │ 'id'                  │ 'uuid'    │
+│ 5       │ 'grounds'                  │ 'id'                  │ 'uuid'    │
+│ 6       │ 'grounds'                  │ 'posted_by_user_id'   │ 'integer' │
+│ 7       │ 'innings'                  │ 'id'                  │ 'uuid'    │
+│ 8       │ 'matches'                  │ 'id'                  │ 'uuid'    │
+│ 9       │ 'messages'                 │ 'id'                  │ 'uuid'    │
+│ 10      │ 'overs'                    │ 'id'                  │ 'uuid'    │
+│ 11      │ 'players'                  │ 'id'                  │ 'uuid'    │
+│ 12      │ 'teams'                    │ 'id'                  │ 'uuid'    │
+│ 13      │ 'teams'                    │ 'owner_id'            │ 'uuid'    │
+│ 14      │ 'tournament_registrations' │ 'id'                  │ 'uuid'    │
+│ 15      │ 'tournaments'              │ 'id'                  │ 'uuid'    │
+│ 16      │ 'umpires'                  │ 'id'                  │ 'uuid'    │
+│ 17      │ 'users'                    │ 'id'                  │ 'integer' │
+└─────────┴────────────────────────────┴───────────────────────┴───────────┘
+
+=== Existing tables ===
+┌─────────┬────────────────────────────┐
+│ (index) │ table_name                 │
+├─────────┼────────────────────────────┤
+│ 0       │ 'balls'                    │
+│ 1       │ 'batting_stats'            │
+│ 2       │ 'bowling_stats'            │
+│ 3       │ 'challenges'               │
+│ 4       │ 'grounds'                  │
+│ 5       │ 'innings'                  │
+│ 6       │ 'matches'                  │
+│ 7       │ 'messages'                 │
+│ 8       │ 'overs'                    │
+│ 9       │ 'players'                  │
+│ 10      │ 'teams'                    │
+│ 11      │ 'tournament_registrations' │
+│ 12      │ 'tournaments'              │
+│ 13      │ 'umpires'                  │
+│ 14      │ 'users'                    │
+└─────────┴────────────────────────────┘
+
+=== Row counts ===
+balls: 88
+batting_stats: 21
+bowling_stats: 16
+challenges: 9
+grounds: 3
+innings: 7
+matches: 4
+messages: 10
+overs: 15
+players: 57
+teams: 8
+tournament_registrations: 0
+tournaments: 0
+umpires: 8
+users: 19
+
+=== Foreign key constraints ===
+┌─────────┬────────────────────────────┬───────────────────────┬───────────────┬────────────────┐
+│ (index) │ table_name                 │ column_name           │ foreign_table │ foreign_column │
+├─────────┼────────────────────────────┼───────────────────────┼───────────────┼────────────────┤
+│ 0       │ 'balls'                    │ 'over_id'             │ 'overs'       │ 'id'           │
+│ 1       │ 'balls'                    │ 'batsman_id'          │ 'players'     │ 'id'           │
+│ 2       │ 'balls'                    │ 'bowler_id'           │ 'players'     │ 'id'           │
+│ 3       │ 'balls'                    │ 'fielder_id'          │ 'players'     │ 'id'           │
+│ 4       │ 'balls'                    │ 'dismissed_player_id' │ 'players'     │ 'id'           │
+│ 5       │ 'batting_stats'            │ 'match_id'            │ 'matches'     │ 'id'           │
+│ 6       │ 'batting_stats'            │ 'player_id'           │ 'players'     │ 'id'           │
+│ 7       │ 'batting_stats'            │ 'innings_id'          │ 'innings'     │ 'id'           │
+│ 8       │ 'batting_stats'            │ 'fielder_id'          │ 'players'     │ 'id'           │
+│ 9       │ 'batting_stats'            │ 'bowler_id'           │ 'players'     │ 'id'           │
+│ 10      │ 'batting_stats'            │ 'player_id'           │ 'players'     │ 'id'           │
+│ 11      │ 'bowling_stats'            │ 'player_id'           │ 'players'     │ 'id'           │
+│ 12      │ 'bowling_stats'            │ 'innings_id'          │ 'innings'     │ 'id'           │
+│ 13      │ 'challenges'               │ 'team_id'             │ 'teams'       │ 'id'           │
+│ 14      │ 'challenges'               │ 'ground_id'           │ 'grounds'     │ 'id'           │
+│ 15      │ 'challenges'               │ 'accepted_by_team_id' │ 'teams'       │ 'id'           │
+│ 16      │ 'challenges'               │ 'creator_id'          │ 'users'       │ 'id'           │
+│ 17      │ 'challenges'               │ 'accepted_by_user_id' │ 'users'       │ 'id'           │
+│ 18      │ 'innings'                  │ 'match_id'            │ 'matches'     │ 'id'           │
+│ 19      │ 'innings'                  │ 'bowling_team_id'     │ 'teams'       │ 'id'           │
+│ 20      │ 'innings'                  │ 'batting_team_id'     │ 'teams'       │ 'id'           │
+│ 21      │ 'matches'                  │ 'toss_winner_id'      │ 'teams'       │ 'id'           │
+│ 22      │ 'matches'                  │ 'team2_id'            │ 'teams'       │ 'id'           │
+│ 23      │ 'matches'                  │ 'tournament_id'       │ 'tournaments' │ 'id'           │
+│ 24      │ 'matches'                  │ 'team1_id'            │ 'teams'       │ 'id'           │
+│ 25      │ 'matches'                  │ 'batting_team_id'     │ 'teams'       │ 'id'           │
+│ 26      │ 'matches'                  │ 'bowling_team_id'     │ 'teams'       │ 'id'           │
+│ 27      │ 'messages'                 │ 'challenge_id'        │ 'challenges'  │ 'id'           │
+│ 28      │ 'overs'                    │ 'bowler_id'           │ 'players'     │ 'id'           │
+│ 29      │ 'overs'                    │ 'innings_id'          │ 'innings'     │ 'id'           │
+│ 30      │ 'players'                  │ 'team_id'             │ 'teams'       │ 'id'           │
+│ 31      │ 'tournament_registrations' │ 'tournament_id'       │ 'tournaments' │ 'id'           │
+│ 32      │ 'tournament_registrations' │ 'team_id'             │ 'teams'       │ 'id'           │
+└─────────┴────────────────────────────┴───────────────────────┴───────────────┴────────────────┘
