@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS challenges (
   team_name VARCHAR(120) NOT NULL,
   contact_no VARCHAR(20) NOT NULL,
   format VARCHAR(10) NOT NULL,
+  overs INT,
   match_date DATE NOT NULL,
   time_slot VARCHAR(20) NOT NULL,
   ground_id UUID REFERENCES grounds(id),

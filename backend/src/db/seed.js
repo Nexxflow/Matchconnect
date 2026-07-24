@@ -1,35 +1,23 @@
 const pool = require("../config/db");
-const bcrypt = require("bcryptjs");
 
 async function seed() {
-  console.log("Seeding demo user...");
-  const passwordHash = await bcrypt.hash("demo1234", 10);
-  await pool.query(
-    `
-    INSERT INTO users (name, email, phone, password_hash, team_name, village_name, team_year)
-    VALUES ('Demo User', 'demo@matchconnect.com', '9999999999', $1, 'Demo Strikers', 'Chennai', 2026)
-    ON CONFLICT (email) DO NOTHING;
-    `,
-    [passwordHash]
-  );
-
   console.log("Seeding grounds...");
   await pool.query(`
-    INSERT INTO grounds (name, area, price_per_hour, rating, amenities, tags) VALUES
-    ('Kotturpuram Stadium', 'Kotturpuram, Chennai', 800, 4.8, '["Water","Parking"]', '["Floodlights","Pitches: 3"]'),
-    ('Shivaji Park Ground', 'Dadar, Mumbai', 600, 4.5, '["Parking","Open Air"]', '["Natural Turf","Popular"]'),
-    ('Oval Maidan', 'Churchgate, Mumbai', 1200, 4.9, '["Showers","Parking"]', '["Floodlights","Heritage","Pitches: 5"]'),
-    ('Azad Maidan', 'Fort, Mumbai', 500, 4.2, '["Parking"]', '["Budget"]')
+    INSERT INTO grounds (name, area, price_per_hour, rating, amenities, tags, latitude, longitude) VALUES
+    ('Kotturpuram Stadium', 'Kotturpuram, Chennai', 800, 4.8, '["Water","Parking"]', '["Floodlights","Pitches: 3"]', 13.0244, 80.2422),
+    ('Shivaji Park Ground', 'Dadar, Mumbai', 600, 4.5, '["Parking","Open Air"]', '["Natural Turf","Popular"]', 19.0283, 72.8397),
+    ('Oval Maidan', 'Churchgate, Mumbai', 1200, 4.9, '["Showers","Parking"]', '["Floodlights","Heritage","Pitches: 5"]', 18.9320, 72.8261),
+    ('Azad Maidan', 'Fort, Mumbai', 500, 4.2, '["Parking"]', '["Budget"]', 18.9432, 72.8347)
     ON CONFLICT DO NOTHING;
   `);
 
   console.log("Seeding umpires...");
   await pool.query(`
-    INSERT INTO umpires (name, mobile, role, experience, fee_per_match, available) VALUES
-    ('Rahul Desai', '9820011223', 'Certified Umpire', 8, 800, true),
-    ('Priya Sharma', '9820011224', 'Scorer', 4, 400, true),
-    ('Vikram Nair', '9820011225', 'Umpire + Scorer', 12, 1100, false),
-    ('Ananya Iyer', '9820011226', 'Certified Umpire', 6, 700, true)
+    INSERT INTO umpires (name, role, experience_years, price, available) VALUES
+    ('Rahul Desai', 'Certified Umpire', 8, 800, true),
+    ('Priya Sharma', 'Scorer', 4, 400, true),
+    ('Vikram Nair', 'Umpire + Scorer', 12, 1100, false),
+    ('Ananya Iyer', 'Certified Umpire', 6, 700, true)
     ON CONFLICT DO NOTHING;
   `);
 
@@ -43,7 +31,7 @@ async function seed() {
     ON CONFLICT DO NOTHING;
   `);
 
-  console.log("✅ Seed complete. Demo login → demo@matchconnect.com / demo1234");
+  console.log("✅ Seed complete.");
   await pool.end();
 }
 

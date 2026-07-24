@@ -238,11 +238,11 @@ const addSquads = asyncHandler(async (req, res) => {
 
   const [p1, p2] = await Promise.all([
     pool.query(
-      `SELECT p.id, p.name FROM players p JOIN matches m ON m.team1_id = p.team_id WHERE m.id = $1 ORDER BY p.id`,
+      `SELECT p.id, p.name FROM players p JOIN matches m ON m.team1_id = p.team_id WHERE m.id = $1 ORDER BY p.created_at`,
       [matchId]
     ),
     pool.query(
-      `SELECT p.id, p.name FROM players p JOIN matches m ON m.team2_id = p.team_id WHERE m.id = $1 ORDER BY p.id`,
+      `SELECT p.id, p.name FROM players p JOIN matches m ON m.team2_id = p.team_id WHERE m.id = $1 ORDER BY p.created_at`,
       [matchId]
     ),
   ]);
@@ -308,8 +308,8 @@ const getSquads = asyncHandler(async (req, res) => {
   const match = matchRes.rows[0];
 
   const [p1, p2] = await Promise.all([
-    pool.query(`SELECT id, name FROM players WHERE team_id = $1 ORDER BY id`, [match.team1_id]),
-    pool.query(`SELECT id, name FROM players WHERE team_id = $1 ORDER BY id`, [match.team2_id]),
+    pool.query(`SELECT id, name FROM players WHERE team_id = $1 ORDER BY created_at`, [match.team1_id]),
+    pool.query(`SELECT id, name FROM players WHERE team_id = $1 ORDER BY created_at`, [match.team2_id]),
   ]);
 
   res.json({
@@ -632,6 +632,14 @@ const recordBall = asyncHandler(async (req, res) => {
 // POST /api/matches/:matchId/balls/undo
 // Deletes the most recent ball and recomputes everything from what's left,
 // which is safer than trying to reverse increments by hand.
+//
+// FIX (DJ — 24 Jul): previously this always reset is_on_strike / is_current
+// to false for every player after recompute, which wiped out who was
+// batting/bowling and made the frontend fall back to the "Fix Current
+// Players" recovery screen after every single undo. Now we replay the
+// remaining balls (same over-completion + strike-rotation rules used in
+// recordBall) to work out who SHOULD be on strike and who's bowling, and
+// persist that instead of blanking it.
 // ============================================================
 const undoBall = asyncHandler(async (req, res) => {
   const { matchId } = req.params;
@@ -649,7 +657,7 @@ const undoBall = asyncHandler(async (req, res) => {
 
     const lastBallRes = await client.query(
       `SELECT b.* FROM balls b JOIN overs o ON o.id = b.over_id
-       WHERE o.innings_id = $1 ORDER BY b.id DESC LIMIT 1`,
+       WHERE o.innings_id = $1 ORDER BY b.created_at DESC LIMIT 1`,
       [innings.id]
     );
     if (lastBallRes.rows.length === 0) throw new Error("No balls to undo");
@@ -673,10 +681,14 @@ const undoBall = asyncHandler(async (req, res) => {
       );
     }
 
-    // Recompute the whole innings from remaining balls (simplest correct approach)
+    // Recompute the whole innings from remaining balls (simplest correct approach).
+    // IMPORTANT: ordered by b.id (insertion order) rather than
+    // (over_number, ball_number) — wides/no-balls can share a ball_number
+    // with the legal delivery around them, which made ORDER BY ball_number
+    // an unstable/wrong sort for reconstructing what actually happened.
     const allBallsRes = await client.query(
       `SELECT b.*, o.over_number FROM balls b JOIN overs o ON o.id = b.over_id
-       WHERE o.innings_id = $1 ORDER BY o.over_number, b.ball_number`,
+       WHERE o.innings_id = $1 ORDER BY b.id`,
       [innings.id]
     );
     const balls = allBallsRes.rows;
@@ -684,6 +696,13 @@ const undoBall = asyncHandler(async (req, res) => {
     let totalRuns = 0, wickets = 0, legalCountInOver = 0, oversCompleted = 0;
     const battingTotals = {}; // player_id -> {runs, balls_faced, fours, sixes, is_out, dismissal}
     const bowlingTotals = {}; // player_id -> {balls, runs, wickets}
+
+    // Track who's on strike / who's bowling as we replay, the same way
+    // recordBall() does live: strike rotates on odd runs (incl. byes/legbyes)
+    // and at the end of every completed over; the bowler resets to "none"
+    // at the end of a completed over (a new bowler must be picked, same as live).
+    let onStrikeId = null;
+    let currentBowlerId = null;
 
     for (const b of balls) {
       const isLegal = b.extra_type !== "wide" && b.extra_type !== "noball";
@@ -705,29 +724,61 @@ const undoBall = asyncHandler(async (req, res) => {
       bowlingTotals[b.bowler_id] ??= { balls: 0, runs: 0, wickets: 0 };
       bowlingTotals[b.bowler_id].runs += Number(b.runs) + Number(b.extra_runs);
       if (b.is_wicket) bowlingTotals[b.bowler_id].wickets += 1;
+
+      // Whoever bowled this ball is provisionally "current" until an over
+      // completes, at which point we clear it (mirrors recordBall()).
+      currentBowlerId = b.bowler_id;
+      onStrikeId = b.batsman_id;
+
       if (isLegal) {
         bowlingTotals[b.bowler_id].balls += 1;
         legalCountInOver += 1;
-        if (legalCountInOver === 6) { oversCompleted += 1; legalCountInOver = 0; }
+      }
+
+      const runsThatRotate = ["bye", "legbye"].includes(b.extra_type) ? Number(b.extra_runs) : Number(b.runs);
+      let flip = !b.is_wicket && runsThatRotate % 2 === 1;
+
+      if (isLegal && legalCountInOver === 6) {
+        oversCompleted += 1;
+        legalCountInOver = 0;
+        flip = !flip;          // strike also rotates at the end of an over
+        currentBowlerId = null; // over just completed — a new bowler must be selected
+      }
+
+      if (flip) {
+        const notOut = Object.keys(battingTotals).filter((id) => !battingTotals[id].is_out);
+        const other = notOut.find((id) => id !== String(onStrikeId));
+        if (other) onStrikeId = other;
       }
     }
+
+    // If the batsman currently "on strike" per the replay has since been
+    // marked out (shouldn't normally happen, but guard anyway), fall back
+    // to any not-out batsman so we never persist a striker who's out.
+    if (onStrikeId != null && battingTotals[onStrikeId]?.is_out) {
+      const notOut = Object.keys(battingTotals).find((id) => !battingTotals[id].is_out);
+      onStrikeId = notOut ?? null;
+    }
+
     const oversCompletedDecimal = Number(`${oversCompleted}.${legalCountInOver}`);
 
     await client.query(`DELETE FROM batting_stats WHERE innings_id = $1`, [innings.id]);
     await client.query(`DELETE FROM bowling_stats WHERE innings_id = $1`, [innings.id]);
 
     for (const [playerId, t] of Object.entries(battingTotals)) {
+      const isOnStrike = !t.is_out && onStrikeId != null && String(playerId) === String(onStrikeId);
       await client.query(
         `INSERT INTO batting_stats (innings_id, player_id, runs, balls_faced, fours, sixes, is_out, dismissal, is_on_strike)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false)`,
-        [innings.id, playerId, t.runs, t.balls_faced, t.fours, t.sixes, t.is_out, t.dismissal]
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [innings.id, playerId, t.runs, t.balls_faced, t.fours, t.sixes, t.is_out, t.dismissal, isOnStrike]
       );
     }
     for (const [playerId, t] of Object.entries(bowlingTotals)) {
+      const isCurrent = currentBowlerId != null && String(playerId) === String(currentBowlerId);
       await client.query(
         `INSERT INTO bowling_stats (innings_id, player_id, overs_bowled, runs_conceded, wickets, is_current)
-         VALUES ($1,$2,$3,$4,$5,false)`,
-        [innings.id, playerId, Number(`${Math.floor(t.balls / 6)}.${t.balls % 6}`), t.runs, t.wickets]
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [innings.id, playerId, Number(`${Math.floor(t.balls / 6)}.${t.balls % 6}`), t.runs, t.wickets, isCurrent]
       );
     }
 
@@ -745,10 +796,11 @@ const undoBall = asyncHandler(async (req, res) => {
     client.release();
   }
 
-  // NOTE: after an undo, on-strike flags and "is_current" bowler are reset —
-  // your ScorerConsole should prompt the scorer to reselect the current
-  // bowler/striker if they were mid-over. This mirrors real scoring apps,
-  // where undo often needs a quick manual confirm of who's where.
+  // NOTE: after an undo, striker/non-striker/current-bowler are now carried
+  // forward correctly from the replay above. The one case where the frontend
+  // will still (correctly) ask to reselect is when the undone ball was the
+  // over's 6th legal delivery — in that case a bowler genuinely needs to be
+  // picked again, same as it would live.
   const live = await buildLiveState(matchId);
   res.json(live);
 });
@@ -850,12 +902,12 @@ const getScoreboard = asyncHandler(async (req, res) => {
     inningsRes.rows.map(async (inn) => {
       const battingRes = await pool.query(
         `SELECT bs.*, p.name FROM batting_stats bs JOIN players p ON p.id = bs.player_id
-         WHERE bs.innings_id = $1 ORDER BY bs.id`,
+         WHERE bs.innings_id = $1 ORDER BY bs.created_at`,
         [inn.id]
       );
       const bowlingRes = await pool.query(
         `SELECT bw.*, p.name FROM bowling_stats bw JOIN players p ON p.id = bw.player_id
-         WHERE bw.innings_id = $1 ORDER BY bw.id`,
+         WHERE bw.innings_id = $1 ORDER BY bw.created_at`,
         [inn.id]
       );
       return {
@@ -930,6 +982,12 @@ async function buildLiveState(matchId) {
     [activeInnings.id]
   );
 
+  // FIX (DJ — 24 Jul): "This Over" was rendering out of order. Root cause —
+  // wides/no-balls can share a ball_number with the legal delivery around
+  // them (they don't increment the legal count), so ORDER BY ball_number
+  // ASC hit ties and gave no guaranteed order across those. Ordering by
+  // b.id (insertion order = the true chronological order balls were
+  // recorded in) fixes this.
   const recentBallsRes = await pool.query(
     `SELECT b.* FROM balls b
      JOIN overs o ON o.id = b.over_id
@@ -967,7 +1025,7 @@ const getLiveScore = asyncHandler(async (req, res) => {
 const getFallOfWickets = async (client, inningsId) => {
   const { rows } = await client.query(
     `SELECT
-       ROW_NUMBER() OVER (ORDER BY b.id)          AS wicket_number,
+       ROW_NUMBER() OVER (ORDER BY b.created_at)   AS wicket_number,
        b.dismissed_player_id                       AS player_id,
        COALESCE(p.name, 'Unknown')                 AS player_name,
        running.score                                AS score,
@@ -980,11 +1038,11 @@ const getFallOfWickets = async (client, inningsId) => {
        FROM balls b2
        JOIN overs o2 ON o2.id = b2.over_id
        WHERE o2.innings_id = o.innings_id
-         AND b2.id <= b.id
+         AND b2.created_at <= b.created_at
      ) running ON true
      WHERE o.innings_id = $1
        AND b.is_wicket = true
-     ORDER BY b.id`,
+     ORDER BY b.created_at`,
     [inningsId]
   );
   return rows;
