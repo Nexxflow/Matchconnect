@@ -116,10 +116,41 @@ function LoginForm({ onAuthSuccess, onSwitch, notice }) {
     }
   };
 
+  const handleDemoLogin = async () => {
+    setIdentifier("demo@matchconnect.com");
+    setPassword("demo1234");
+    setLoading(true);
+    setError(null);
+    try {
+      const { user, token } = await apiRequest("/auth/login", {
+        method: "POST",
+        body: { identifier: "demo@matchconnect.com", password: "demo1234" }
+      });
+      onAuthSuccess(user, token);
+    } catch (err) {
+      setError(err.message || "Demo login failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       {!error && <NoticeBanner message={notice} />}
       <ErrorBanner message={error} />
+      <button
+        type="button"
+        onClick={handleDemoLogin}
+        disabled={loading}
+        className="w-full py-2 rounded-lg border border-green-400/40 text-green-400 text-sm font-medium hover:bg-green-400/10 transition disabled:opacity-50"
+      >
+        ⚡ Use Demo Account
+      </button>
+      <div className="flex items-center gap-2 my-1">
+        <div className="flex-1 h-px bg-white/10" />
+        <span className="text-[10px] uppercase tracking-wide" style={{ color: "#6b7a6b" }}>or</span>
+        <div className="flex-1 h-px bg-white/10" />
+      </div>
       <Field
         icon={User}
         type="text"

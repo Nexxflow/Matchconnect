@@ -716,9 +716,13 @@ function SquadForm({ matchId, onDone, onCancel }) {
 
   const t1Filled = team1Players.map((s) => s.trim()).filter(Boolean);
   const t2Filled = team2Players.map((s) => s.trim()).filter(Boolean);
-  const t1Valid = t1Filled.length >= SQUAD_MIN_PLAYERS;
-  const t2Valid = t2Filled.length >= SQUAD_MIN_PLAYERS;
-  const canSubmit = t1Valid && t2Valid && !submitting;
+  // Fully optional — 11 rows are shown as a full-side reference, but the
+  // person can move on with as many (or as few) named players as they've
+  // typed in so far. The backend doesn't require a minimum either.
+  const SQUAD_SUBMIT_MIN = 0;
+  const t1Valid = true;
+  const t2Valid = true;
+  const canSubmit = !submitting;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -752,7 +756,7 @@ function SquadForm({ matchId, onDone, onCancel }) {
         <SetupProgress step={2} />
       </div>
       <p className="text-xs" style={{ color: COLOR.inkFaint }}>
-        Enter each player by name. A squad needs at least {SQUAD_MIN_PLAYERS} players to field a team, up to {SQUAD_MAX_PLAYERS} total.
+        Enter each player by name — {SQUAD_MIN_PLAYERS} rows are shown for a full side, but naming them all is optional. Add as many as you have right now, up to {SQUAD_MAX_PLAYERS} total, and continue whenever you're ready.
       </p>
 
       <SquadPlayerList
@@ -796,7 +800,7 @@ function SquadForm({ matchId, onDone, onCancel }) {
         </button>
         {!canSubmit && !submitting && (
           <span className="text-[11px]" style={{ color: COLOR.amber }}>
-            Each team needs at least {SQUAD_MIN_PLAYERS} named players to continue.
+            Each team needs at least {SQUAD_SUBMIT_MIN} named players to continue.
           </span>
         )}
       </div>
@@ -813,7 +817,15 @@ function SquadPlayerList({ teamLabel, players, filledCount, isValid, onChange, o
   return (
     <div className="rounded-2xl p-4 space-y-3" style={card}>
       <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-bold uppercase tracking-widest" style={label11}>{teamLabel}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold uppercase tracking-widest" style={label11}>{teamLabel}</span>
+          <span
+            className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+            style={{ backgroundColor: "rgba(107,122,107,0.18)", color: COLOR.inkFaint }}
+          >
+            Optional
+          </span>
+        </div>
         <span
           className="text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0"
           style={{
@@ -823,7 +835,7 @@ function SquadPlayerList({ teamLabel, players, filledCount, isValid, onChange, o
             border: `1px solid ${isValid ? "rgba(61,220,132,0.35)" : "rgba(245,166,35,0.35)"}`,
           }}
         >
-          {filledCount}/{SQUAD_MIN_PLAYERS} min · {players.length}/{SQUAD_MAX_PLAYERS} max
+          {filledCount}/{SQUAD_MIN_PLAYERS} filled · {players.length}/{SQUAD_MAX_PLAYERS} max
         </span>
       </div>
 
@@ -1074,8 +1086,14 @@ function ScorerConsole({ matchId, onMatchComplete }) {
       setLive(json);
       setPrompts(json.prompts || null);
       loadScorecard();
+      return json;
     } catch (err) {
       setError(err.message);
+      // Re-throw so callers (like OpeningSelectors' handleSubmit) know the
+      // action actually failed instead of silently treating it as a
+      // success — this was causing "nothing happens on first click, works
+      // on second" since the first failed attempt never surfaced an error.
+      throw err;
     } finally {
       setBusy(false);
     }
@@ -1099,7 +1117,7 @@ function ScorerConsole({ matchId, onMatchComplete }) {
     runAction(`/api/matches/${matchId}/balls`, {
       runs, extra_type, extra_runs, is_wicket, wicket_type, dismissed_player_id, fielder_id,
       striker_id, non_striker_id, bowler_id,
-    });
+    }).catch(() => {}); // error already surfaced via the `error` state above
     setExtraPicker(null);
     setWicketPanelOpen(false);
   }
@@ -1118,6 +1136,27 @@ function ScorerConsole({ matchId, onMatchComplete }) {
     }
   }
 
+  async function addPlayer(teamKey, name) {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    // Reuse an existing player with this exact name instead of creating a
+    // duplicate — protects every screen (Opening Players, new batsman,
+    // new bowler) that calls this, not just one of them.
+    const existingTeam = teamKey === "team1_players" ? squads?.team1 : squads?.team2;
+    const existing = existingTeam?.players?.find(
+      (p) => p.name.trim().toLowerCase() === trimmed.toLowerCase()
+    );
+    if (existing) return existing.id;
+    const result = await api(`/api/matches/${matchId}/squads`, {
+      method: "POST",
+      body: JSON.stringify({ [teamKey]: [trimmed] }),
+    });
+    setSquads(result);
+    const teamObj = teamKey === "team1_players" ? result.team1 : result.team2;
+    // createPlayers appends, so the just-added player is the last one back.
+    return teamObj.players[teamObj.players.length - 1]?.id || null;
+  }
+
   if (error) return <div className="text-sm px-4 py-6" style={{ color: COLOR.red }}>Error: {error}</div>;
   if (!squads || !live) return <div className="text-sm px-4 py-6" style={{ color: COLOR.inkDim }}>Loading match…</div>;
 
@@ -1127,23 +1166,44 @@ function ScorerConsole({ matchId, onMatchComplete }) {
         squads={squads}
         match={live.match}
         onStart={(payload) => runAction(`/api/matches/${matchId}/start-innings`, payload)}
+        onAddPlayer={addPlayer}
         busy={busy}
       />
     );
   }
 
   if (prompts?.needs_new_batsman) {
-    const battingSquad = live.match.batting_team === live.match.team1_name ? squads.team1 : squads.team2;
+    const battingIsTeam1 = live.match.batting_team === live.match.team1_name;
+    const battingSquad = battingIsTeam1 ? squads.team1 : squads.team2;
+    const battingKey = battingIsTeam1 ? "team1_players" : "team2_players";
     const onCrease = new Set(live.batting.map((b) => b.player_id));
     const available = battingSquad.players.filter((p) => !onCrease.has(p.id));
-    return <PlayerPicker title="Who's the new batsman?" players={available} onPick={(id) => runAction(`/api/matches/${matchId}/new-batsman`, { player_id: id })} busy={busy} />;
+    return (
+      <PlayerPicker
+        title="Who's the new batsman?"
+        players={available}
+        onPick={(id) => runAction(`/api/matches/${matchId}/new-batsman`, { player_id: id }).catch(() => {})}
+        onAddNew={(name) => addPlayer(battingKey, name)}
+        busy={busy}
+      />
+    );
   }
 
   if (prompts?.needs_new_bowler) {
-    const bowlingSquad = live.match.bowling_team === live.match.team1_name ? squads.team1 : squads.team2;
+    const bowlingIsTeam1 = live.match.bowling_team === live.match.team1_name;
+    const bowlingSquad = bowlingIsTeam1 ? squads.team1 : squads.team2;
+    const bowlingKey = bowlingIsTeam1 ? "team1_players" : "team2_players";
     const lastBowlerId = live.bowling.find((b) => b.is_current)?.player_id;
     const available = bowlingSquad.players.filter((p) => p.id !== lastBowlerId);
-    return <PlayerPicker title="Who's bowling this over?" players={available} onPick={(id) => runAction(`/api/matches/${matchId}/select-bowler`, { bowler_id: id })} busy={busy} />;
+    return (
+      <PlayerPicker
+        title="Who's bowling this over?"
+        players={available}
+        onPick={(id) => runAction(`/api/matches/${matchId}/select-bowler`, { bowler_id: id }).catch(() => {})}
+        onAddNew={(name) => addPlayer(bowlingKey, name)}
+        busy={busy}
+      />
+    );
   }
 
   const hasStriker = live.batting.some((b) => b.is_on_strike);
@@ -1156,6 +1216,7 @@ function ScorerConsole({ matchId, onMatchComplete }) {
         match={live.match}
         recovery
         onStart={(payload) => runAction(`/api/matches/${matchId}/set-players`, payload)}
+        onAddPlayer={addPlayer}
         busy={busy}
       />
     );
@@ -1422,7 +1483,7 @@ function ScorerConsole({ matchId, onMatchComplete }) {
           </button>
           <button
             disabled={busy}
-            onClick={() => runAction(`/api/matches/${matchId}/balls/undo`)}
+            onClick={() => runAction(`/api/matches/${matchId}/balls/undo`).catch(() => {})}
             className={`py-2.5 rounded-xl text-sm font-bold disabled:opacity-40 lst-hover-lift ${BTN_TRANSITION}`}
             style={{ backgroundColor: COLOR.surfaceRaised, color: COLOR.ink, fontFamily: FONT_DISPLAY }}
           >
@@ -1612,20 +1673,84 @@ function WicketPanel({ batting, fieldingSquad, onCancel, onConfirm }) {
   );
 }
 
-function OpeningSelectors({ squads, match, onStart, busy, recovery = false }) {
-  const battingTeam = match?.batting_team === match?.team1_name ? squads.team1 : squads.team2;
-  const bowlingTeam = match?.batting_team === match?.team1_name ? squads.team2 : squads.team1;
+function OpeningSelectors({ squads, match, onStart, onAddPlayer, busy, recovery = false }) {
+  const battingIsTeam1 = match?.batting_team === match?.team1_name;
+  const battingTeam = battingIsTeam1 ? squads.team1 : squads.team2;
+  const bowlingTeam = battingIsTeam1 ? squads.team2 : squads.team1;
+  const battingKey = battingIsTeam1 ? "team1_players" : "team2_players";
+  const bowlingKey = battingIsTeam1 ? "team2_players" : "team1_players";
+
   const [striker, setStriker] = useState(null);
+  const [strikerName, setStrikerName] = useState("");
   const [nonStriker, setNonStriker] = useState(null);
+  const [nonStrikerName, setNonStrikerName] = useState("");
   const [bowler, setBowler] = useState(null);
+  const [bowlerName, setBowlerName] = useState("");
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState(null);
 
-  const canStart = striker && nonStriker && bowler && striker !== nonStriker;
+  // A role is "ready" once either an existing player chip was picked, or a
+  // fresh name has been typed for it — the actual player gets created (if
+  // needed) only when Start Innings is pressed, in one combined step.
+  const strikerReady = striker || strikerName.trim();
+  const nonStrikerReady = nonStriker || nonStrikerName.trim();
+  const bowlerReady = bowler || bowlerName.trim();
+  const canStart = strikerReady && nonStrikerReady && bowlerReady && (striker || strikerName.trim()) !== (nonStriker || nonStrikerName.trim());
 
-  function handleSubmit() {
-    if (recovery) {
-      onStart({ striker_id: striker, non_striker_id: nonStriker, bowler_id: bowler });
-    } else {
-      onStart({ innings_number: 1, batting_team: match.batting_team, striker_id: striker, non_striker_id: nonStriker, bowler_id: bowler });
+  // Submission only happens when the button is pressed — no auto-start.
+
+  async function resolveId(existingId, name, teamKey) {
+    if (existingId) {
+      console.log(`[OpeningSelectors] using existing selected id for ${teamKey}:`, existingId);
+      return existingId;
+    }
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    // Before creating a new player, check whether someone with this exact
+    // name already exists in that squad — typing a name that matches an
+    // existing player (instead of tapping their chip) should reuse them,
+    // not create a duplicate with separate stats.
+    const squadList = teamKey === battingKey ? battingTeam?.players : bowlingTeam?.players;
+    const existing = (squadList || []).find(
+      (p) => p.name.trim().toLowerCase() === trimmed.toLowerCase()
+    );
+    if (existing) {
+      console.log(`[OpeningSelectors] reused existing player "${trimmed}" (${teamKey}):`, existing.id);
+      return existing.id;
+    }
+    console.log(`[OpeningSelectors] creating new player "${trimmed}" for ${teamKey}...`);
+    const newId = await onAddPlayer(teamKey, trimmed);
+    console.log(`[OpeningSelectors] created "${trimmed}" ->`, newId);
+    return newId;
+  }
+
+  async function handleSubmit() {
+    console.log("[OpeningSelectors] handleSubmit fired", { striker, strikerName, nonStriker, nonStrikerName, bowler, bowlerName, recovery });
+    setStartError(null);
+    setStarting(true);
+    try {
+      const [strikerId, nonStrikerId, bowlerId] = await Promise.all([
+        resolveId(striker, strikerName, battingKey),
+        resolveId(nonStriker, nonStrikerName, battingKey),
+        resolveId(bowler, bowlerName, bowlingKey),
+      ]);
+      console.log("[OpeningSelectors] resolved ids:", { strikerId, nonStrikerId, bowlerId });
+      if (!strikerId || !nonStrikerId || !bowlerId) {
+        throw new Error("Couldn't set up all three players — try again.");
+      }
+      if (recovery) {
+        console.log("[OpeningSelectors] calling onStart (recovery/set-players)...");
+        await onStart({ striker_id: strikerId, non_striker_id: nonStrikerId, bowler_id: bowlerId });
+      } else {
+        console.log("[OpeningSelectors] calling onStart (start-innings)...");
+        await onStart({ innings_number: 1, batting_team: match.batting_team, striker_id: strikerId, non_striker_id: nonStrikerId, bowler_id: bowlerId });
+      }
+      console.log("[OpeningSelectors] onStart finished successfully.");
+    } catch (err) {
+      console.error("[OpeningSelectors] handleSubmit failed:", err);
+      setStartError(err.message || "Couldn't start the innings");
+    } finally {
+      setStarting(false);
     }
   }
 
@@ -1640,26 +1765,63 @@ function OpeningSelectors({ squads, match, onStart, busy, recovery = false }) {
         </p>
       </div>
 
-      <PlayerRow title={`${battingTeam?.name || "Batting"} — striker`} players={battingTeam?.players || []} selected={striker} onSelect={setStriker} />
-      <PlayerRow title={`${battingTeam?.name || "Batting"} — non-striker`} players={(battingTeam?.players || []).filter((p) => p.id !== striker)} selected={nonStriker} onSelect={setNonStriker} />
-      <PlayerRow title={`${bowlingTeam?.name || "Bowling"} — bowler`} players={bowlingTeam?.players || []} selected={bowler} onSelect={setBowler} />
+      <PlayerRow
+        title={`${battingTeam?.name || "Batting"} — striker`}
+        players={battingTeam?.players || []}
+        selected={striker}
+        onSelect={(id) => { setStriker(id); setStrikerName(""); }}
+        name={strikerName}
+        onNameChange={(v) => { setStrikerName(v); setStriker(null); }}
+      />
+      <PlayerRow
+        title={`${battingTeam?.name || "Batting"} — non-striker`}
+        players={(battingTeam?.players || []).filter((p) => p.id !== striker)}
+        selected={nonStriker}
+        onSelect={(id) => { setNonStriker(id); setNonStrikerName(""); }}
+        name={nonStrikerName}
+        onNameChange={(v) => { setNonStrikerName(v); setNonStriker(null); }}
+      />
+      <PlayerRow
+        title={`${bowlingTeam?.name || "Bowling"} — bowler`}
+        players={bowlingTeam?.players || []}
+        selected={bowler}
+        onSelect={(id) => { setBowler(id); setBowlerName(""); }}
+        name={bowlerName}
+        onNameChange={(v) => { setBowlerName(v); setBowler(null); }}
+      />
+
+      {startError && <div className="text-xs" style={{ color: COLOR.red }}>{startError}</div>}
 
       <button
-        disabled={!canStart || busy}
+        disabled={!canStart || busy || starting}
         onClick={handleSubmit}
         className={`w-full py-2.5 rounded-xl text-sm font-bold disabled:opacity-40 lst-hover-lift ${BTN_TRANSITION}`}
         style={primaryBtn}
       >
-        {recovery ? "Save & Continue Scoring" : "Start Innings"}
+        {starting ? "Starting…" : recovery ? "Save & Continue Scoring" : "Start Innings"}
       </button>
     </div>
   );
 }
 
-function PlayerRow({ title, players, selected, onSelect }) {
+function PlayerRow({ title, players, selected, onSelect, name, onNameChange }) {
   return (
     <div>
       <div className="text-xs font-bold uppercase tracking-widest mb-1.5" style={label11}>{title}</div>
+
+      <input
+        type="text"
+        value={name}
+        onChange={e => onNameChange(e.target.value)}
+        placeholder="Type this player's name..."
+        className="w-full px-3 py-2 mb-2 rounded-lg text-xs outline-none"
+        style={{
+          backgroundColor: COLOR.surfaceRaised,
+          color: COLOR.ink,
+          border: `1px solid ${name.trim() ? COLOR.accent : COLOR.border}`,
+        }}
+      />
+
       <div className="flex gap-2 flex-wrap">
         {players.map((p) => (
           <button
@@ -1671,16 +1833,62 @@ function PlayerRow({ title, players, selected, onSelect }) {
             {p.name}
           </button>
         ))}
-        {players.length === 0 && <span className="text-xs" style={{ color: COLOR.inkFaint }}>No players available</span>}
+        {players.length === 0 && !name.trim() && <span className="text-xs" style={{ color: COLOR.inkFaint }}>No players yet — type a name above</span>}
       </div>
     </div>
   );
 }
 
-function PlayerPicker({ title, players, onPick, busy }) {
+function PlayerPicker({ title, players, onPick, onAddNew, busy }) {
+  const [newName, setNewName] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState(null);
+
+  async function handleAddNew() {
+    const trimmed = newName.trim();
+    if (!trimmed || !onAddNew) return;
+    setAdding(true);
+    setAddError(null);
+    try {
+      const newId = await onAddNew(trimmed);
+      if (newId) onPick(newId);
+      setNewName("");
+    } catch (err) {
+      setAddError(err.message || "Couldn't add player");
+    } finally {
+      setAdding(false);
+    }
+  }
+
   return (
     <div className="space-y-3 lst-rise">
       <h3 className="text-lg font-bold" style={heading}>{title}</h3>
+
+      {onAddNew && (
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleAddNew(); } }}
+            placeholder="Type this player's name..."
+            disabled={adding || busy}
+            className="flex-1 px-3 py-2.5 rounded-xl text-sm outline-none disabled:opacity-50"
+            style={{ backgroundColor: COLOR.surfaceRaised, color: COLOR.ink, border: `1px solid ${COLOR.border}` }}
+          />
+          <button
+            type="button"
+            onClick={handleAddNew}
+            disabled={adding || busy || !newName.trim()}
+            className={`px-3 py-2.5 rounded-xl text-sm font-bold disabled:opacity-40 lst-hover-lift ${BTN_TRANSITION}`}
+            style={primaryBtn}
+          >
+            {adding ? "Adding…" : "Add & select"}
+          </button>
+        </div>
+      )}
+      {addError && <div className="text-xs" style={{ color: COLOR.red }}>{addError}</div>}
+
       <div className="flex gap-2 flex-wrap">
         {players.map((p) => (
           <button

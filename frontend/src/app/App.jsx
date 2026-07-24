@@ -1,8 +1,25 @@
 import { useState, useEffect } from "react";
 import { Bell, Search, MapPin, ChevronDown, Phone, Star, CheckCircle, Car, Droplets, Wind, Hash, Plus, Filter, Shield, Swords, Trophy, AlertCircle, CheckCheck, Clock, XCircle, Calendar, Users, X, CreditCard, CalendarCheck, LogOut, Pencil,ExternalLink, Map } from "lucide-react";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import AuthScreen from "./components/Auth/AuthScreen.jsx";
 import { apiRequest, getStoredToken, setStoredToken } from "./api";
 import LiveScoreTab from "./components/LiveScoreTab";
+
+// Leaflet's default marker images don't resolve correctly with Vite's
+// bundler, so we build a small custom pin icon from an inline SVG instead
+// of relying on the library's default PNG assets.
+const challengePinIcon = L.divIcon({
+  className: "",
+  html: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 0C7.03 0 3 4.03 3 9c0 6.75 9 15 9 15s9-8.25 9-15c0-4.97-4.03-9-9-9z" fill="#22c55e"/>
+    <circle cx="12" cy="9" r="3.5" fill="#0d0f0d"/>
+  </svg>`,
+  iconSize: [28, 28],
+  iconAnchor: [14, 28],
+  popupAnchor: [0, -28]
+});
 // import AuthScreen from "./components/Auth/AuthScreen.jsx";
 import EditProfileModal from "./components/Auth/EditProfileModal.jsx";
 // import {   setStoredToken } from "./api";
@@ -168,9 +185,14 @@ function GhostButton({ children, onClick, disabled, className = "" }) {
 const FORMATS = [
   { key: "T20", emoji: "⚡", title: "T20 Match", desc: "20 overs per side, fast-paced" },
   { key: "ODI", emoji: "🏏", title: "ODI Format", desc: "50 overs, balanced game" },
-  { key: "Test", emoji: "🎯", title: "Test Match", desc: "Multi-day, traditional format" },
-  { key: "Turf", emoji: "🔥", title: "Turf Nets", desc: "Short format, indoor/outdoor" }
+  { key: "Turf", emoji: "🔥", title: "Turf Nets", desc: "Short format, indoor/outdoor" },
+  { key: "Test", emoji: "🎯", title: "Test Match", desc: "Multi-day, traditional format" }
 ];
+
+// Sensible default overs per format — shown as a starting point in the
+// challenge form, but the user can type in a custom number (e.g. a 16-over
+// T20 instead of the usual 20). Test matches don't use a fixed overs count.
+const DEFAULT_OVERS = { T20: 20, ODI: 50, Turf: 10, Test: "" };
 
 const ALL_CHALLENGES = [
   { id: 1, team: "Royal Strikers CC", rating: 4.7, wins: 23, losses: 8, format: "T20", date: "Today", time: "4:00 PM", ground: "Shivaji Park Ground", urgent: true, note: "Free entry" },
@@ -416,7 +438,14 @@ function normalizePhone(p) {
   return String(p || "").replace(/\D/g, "");
 }
 // ─── HOME ─────────────────────────────────────────────────────────────────────
-function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = ALL_CHALLENGES, tournaments = [FEATURED_TOURNAMENT, ...LEAGUES] }) {
+function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = ALL_CHALLENGES, tournaments = [FEATURED_TOURNAMENT, ...LEAGUES], allChallenges = [], onCreateChallenge }) {
+  // Real counts derived from actual data — no more hardcoded/inflated numbers.
+  // "Matches Played" counts confirmed (accepted) challenges; "Active Teams"
+  // counts distinct team names that have ever posted or accepted a challenge.
+  const matchesPlayedCount = allChallenges.filter(c => c.status === "accepted").length;
+  const activeTeamsCount = new Set(
+    allChallenges.flatMap(c => [c.team_name, c.accepted_by_team_name].filter(Boolean))
+  ).size;
   return <div className="space-y-8">
       {/* Hero */}
       <div className="relative rounded-2xl overflow-hidden p-6 md:p-8 border border-green-800/40" style={{ background: "linear-gradient(135deg, #14532d 0%, #166534 40%, #0d2a16 100%)" }}>
@@ -435,6 +464,9 @@ function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = ALL_CHALLENGES,
             <button onClick={() => setActiveTab("Grounds")} className="px-5 py-2 rounded-full text-white/80 text-sm font-semibold hover:bg-white/5 transition-colors" style={{ border: "2px solid rgba(255,255,255,0.3)" }}>
               🏟 Book a Ground
             </button>
+            <button onClick={onCreateChallenge} className="px-5 py-2 rounded-full bg-green-500 text-black text-sm font-semibold hover:bg-green-400 transition-colors">
+              ⚡ Create Challenge
+            </button>
           </div>
         </div>
         <div className="absolute right-6 bottom-4 text-7xl opacity-20 select-none">🏏</div>
@@ -443,9 +475,9 @@ function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = ALL_CHALLENGES,
       {/* Stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-        { label: "Matches Played", value: "47", color: "#22c55e", icon: "🏏", sub: "+3 this week" },
-        { label: "Active Teams", value: "312", color: "#3b82f6", icon: "👥", sub: "In Mumbai" },
-        { label: "Active Grounds", value: String(grounds.length + 18), color: "#f97316", icon: "🏟", sub: "Bookable now" },
+        { label: "Matches Played", value: String(matchesPlayedCount), color: "#22c55e", icon: "🏏", sub: "Confirmed matches" },
+        { label: "Active Teams", value: String(activeTeamsCount), color: "#3b82f6", icon: "👥", sub: "On MatchConnect" },
+        { label: "Active Grounds", value: String(grounds.length), color: "#f97316", icon: "🏟", sub: "Bookable now" },
         { label: "Active Tournaments", value: String(tournaments.length), color: "#a855f7", icon: "🏆", sub: "Open or ongoing" }
       ].map(s => <div key={s.label} className={cn(C, "rounded-2xl p-4")}>
             <div className="text-2xl mb-2">{s.icon}</div>
@@ -455,14 +487,17 @@ function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = ALL_CHALLENGES,
           </div>)}
       </div>
 
-      {/* Urgent match requests */}
+      {/* Urgent match requests — shows real posted challenges (urgent ones first), not just dummy demo data */}
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-white">Urgent Match Requests</h2>
           <button onClick={() => setActiveTab("Find Match")} className="text-xs text-green-400 hover:text-green-300">View all →</button>
         </div>
         <div className="space-y-3">
-          {challenges.filter(c => c.urgent).map(req => <div key={req.id} className={cn(C, "rounded-2xl p-4")}>
+          {[...challenges]
+            .sort((a, b) => (b.urgent === a.urgent ? 0 : b.urgent ? 1 : -1))
+            .slice(0, 3)
+            .map(req => <div key={req.id} className={cn(C, "rounded-2xl p-4")}>
               <div className="flex items-start gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -471,10 +506,12 @@ function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = ALL_CHALLENGES,
                     </div>
                     <div>
                       <div className="text-sm font-semibold text-white">{req.team}</div>
-                      <div className="flex items-center gap-1">
-                        <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                        <span className="text-xs" style={{ color: "#6b7a6b" }}>{req.rating} · W{req.wins}/L{req.losses}</span>
-                      </div>
+                      {(req.rating > 0 || req.wins > 0 || req.losses > 0) && (
+                        <div className="flex items-center gap-1">
+                          <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                          <span className="text-xs" style={{ color: "#6b7a6b" }}>{req.rating} · W{req.wins}/L{req.losses}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -489,7 +526,7 @@ function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = ALL_CHALLENGES,
                 </div>
               </div>
               <div className="flex flex-wrap gap-1.5 mt-3">
-                <Tag color="amber">⚡ Urgent</Tag>
+                {req.urgent && <Tag color="amber">⚡ Urgent</Tag>}
                 <Tag color="blue">{req.format}</Tag>
                 <Tag color="green">{req.date} {req.time}</Tag>
               </div>
@@ -671,10 +708,11 @@ function TimeField({ value, onChange }) {
 }
 
 // ─── Challenge form ─────────────────────────────────────────────────────────
-function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [] }) {
+function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], autoOpen = false, onAutoOpenHandled }) {
   const emptyForm = {
     team_name: "",
     format: "T20",
+    overs: DEFAULT_OVERS.T20,
     match_date: "",
     time_slot: "",
     hasGround: false,
@@ -687,10 +725,25 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [] })
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
+  // When navigated here via the Home page's "⚡ Create Challenge" shortcut,
+  // pop the form open right away instead of showing the collapsed button.
+  useEffect(() => {
+    if (autoOpen && !disabledReason) {
+      setOpen(true);
+      onAutoOpenHandled?.();
+    }
+  }, [autoOpen, disabledReason]);
+
   const contact = user?.phone || "";
   const normalizedContact = normalizePhone(contact);
 
   const update = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
+
+  // Changing format resets overs to that format's typical default —
+  // the user can still type a custom number afterwards.
+  const handleFormatChange = newFormat => {
+    setForm(prev => ({ ...prev, format: newFormat, overs: DEFAULT_OVERS[newFormat] ?? "" }));
+  };
 
   const handleSubmit = async e => {
     e.preventDefault();
@@ -707,6 +760,9 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [] })
       return setError("Enter the ground name, or pick one from the list.");
     }
     if (form.hasGround && !form.ground_id) return setError("Select a ground, or mark ground as not booked yet.");
+    if (form.format !== "Test" && form.overs !== "" && (isNaN(Number(form.overs)) || Number(form.overs) < 1 || Number(form.overs) > 90)) {
+      return setError("Overs must be a whole number between 1 and 90.");
+    }
     if (!token) return setError("You need to be logged in to post a challenge.");
 
     setSubmitting(true);
@@ -718,6 +774,7 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [] })
           team_name: form.team_name.trim(),
           contact_no: normalizedContact,
           format: form.format,
+          overs: form.format !== "Test" && form.overs !== "" ? Number(form.overs) : null,
           match_date: form.match_date,
           time_slot: form.time_slot,
           ground_id: form.hasGround
@@ -772,11 +829,28 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [] })
         <div>
           <label className="text-xs mb-1 block" style={{ color: "#6b7a6b" }}>Format</label>
           <div className="relative">
-            <select value={form.format} onChange={e => update("format", e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm text-white appearance-none pr-7 focus:outline-none" style={{ backgroundColor: "#111", border: "1px solid #2a2a2a" }}>
+            <select value={form.format} onChange={e => handleFormatChange(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm text-white appearance-none pr-7 focus:outline-none" style={{ backgroundColor: "#111", border: "1px solid #2a2a2a" }}>
               {FORMATS.map(f => <option key={f.key} value={f.key}>{f.title}</option>)}
             </select>
             <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: "#6b7a6b" }} />
           </div>
+        </div>
+
+        <div>
+          <label className="text-xs mb-1 block" style={{ color: "#6b7a6b" }}>
+            Overs {form.format !== "Test" && <span style={{ color: "#4a5a4a" }}>(default {DEFAULT_OVERS[form.format]})</span>}
+          </label>
+          <input
+            type="number"
+            min="1"
+            max="90"
+            value={form.overs}
+            onChange={e => update("overs", e.target.value)}
+            placeholder={form.format === "Test" ? "Not applicable" : String(DEFAULT_OVERS[form.format])}
+            disabled={form.format === "Test"}
+            className="w-full rounded-xl px-3 py-2 text-sm text-white focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ backgroundColor: "#111", border: "1px solid #2a2a2a" }}
+          />
         </div>
 
         <div>
@@ -1319,6 +1393,188 @@ function formatDateIST(dateStr) {
   });
 }
 
+// Turns a raw challenge row from the backend into the display-friendly shape
+// used across the app (Find Match list, Home page, etc). Real challenges
+// don't carry a team rating/win-loss record — those default to 0 so the UI
+// can render the same card layout gracefully for both real and dummy data.
+function normalizeChallenge(c) {
+  return {
+    id: c.id,
+    team: c.team_name,
+    contact_no: c.contact_no,
+    postedBy: c.posted_by_name || c.creator_name || null,
+    postedAt: c.created_at || null,
+    format: c.format,
+    date: formatDateIST(c.match_date),
+    rawDate: c.match_date,
+    time: c.time_slot,
+    ground: c.ground_name || (c.ground_id ? "Ground booked" : "Not booked yet"),
+    groundLat: c.ground_lat != null ? Number(c.ground_lat) : null,
+    groundLng: c.ground_lng != null ? Number(c.ground_lng) : null,
+    note: c.note || "",
+    urgent: !!c.urgent,
+    rating: 0,
+    wins: 0,
+    losses: 0
+  };
+}
+
+// ─── Challenges Map ──────────────────────────────────────────────────────
+// Shows a pin for every challenge that has a booked ground (which carries
+// lat/lng). Challenges with no ground selected yet don't have a location,
+// so they're listed underneath instead of being silently hidden.
+function ChallengesMap({ challenges }) {
+  const withLocation = challenges.filter(c => c.groundLat != null && c.groundLng != null);
+  const withoutLocation = challenges.filter(c => c.groundLat == null || c.groundLng == null);
+
+  if (challenges.length === 0) return null;
+
+  // Center the map on the average of all pinned locations, falling back to
+  // Chennai if nothing has a location yet.
+  const center = withLocation.length
+    ? [
+        withLocation.reduce((s, c) => s + c.groundLat, 0) / withLocation.length,
+        withLocation.reduce((s, c) => s + c.groundLng, 0) / withLocation.length
+      ]
+    : [13.0827, 80.2707];
+
+  return (
+    <div className={cn(C, "rounded-2xl p-4")}>
+      <div className="flex items-center gap-2 mb-3">
+        <MapPin className="w-3.5 h-3.5 text-green-400" />
+        <span className="text-sm font-semibold text-white">Where teams are playing</span>
+      </div>
+
+      {withLocation.length > 0 ? (
+        <div className="rounded-xl overflow-hidden" style={{ height: 220 }}>
+          <MapContainer center={center} zoom={11} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {withLocation.map(c => (
+              <Marker key={c.id} position={[c.groundLat, c.groundLng]} icon={challengePinIcon}>
+                <Popup>
+                  <div className="text-xs">
+                    <div className="font-semibold">{c.team}</div>
+                    <div>{c.format} · {c.date} {c.time}</div>
+                    <div>📍 {c.ground}</div>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+          </MapContainer>
+        </div>
+      ) : (
+        <p className="text-xs" style={{ color: "#6b7a6b" }}>
+          No challenges with a booked ground yet — see the list below the map.
+        </p>
+      )}
+
+      {withoutLocation.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[11px] mb-1.5" style={{ color: "#6b7a6b" }}>
+            {withoutLocation.length} more challenge{withoutLocation.length > 1 ? "s" : ""} — no ground picked yet, so no pin on the map:
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {withoutLocation.map(c => (
+              <span key={c.id} className="px-2 py-1 rounded-lg text-[11px]" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#c8ccc8" }}>
+                {c.team} · {c.format}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Grounds Map ─────────────────────────────────────────────────────────
+// Shows a pin for every ground that has lat/lng on file, colored by whether
+// it can be booked right now (green) or is fully booked today (red).
+// Grounds missing coordinates are listed underneath instead of being hidden.
+function GroundsMap({ grounds, canBookGround, displayPrice, displayLocation }) {
+  const withLocation = grounds.filter(g => g.latitude != null && g.longitude != null);
+  const withoutLocation = grounds.filter(g => g.latitude == null || g.longitude == null);
+
+  if (grounds.length === 0) return null;
+
+  const center = withLocation.length
+    ? [
+        withLocation.reduce((s, g) => s + Number(g.latitude), 0) / withLocation.length,
+        withLocation.reduce((s, g) => s + Number(g.longitude), 0) / withLocation.length
+      ]
+    : [13.0827, 80.2707];
+
+  const availableIcon = L.divIcon({
+    className: "",
+    html: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 0C7.03 0 3 4.03 3 9c0 6.75 9 15 9 15s9-8.25 9-15c0-4.97-4.03-9-9-9z" fill="#22c55e"/>
+      <circle cx="12" cy="9" r="3.5" fill="#0d0f0d"/>
+    </svg>`,
+    iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -28]
+  });
+  const bookedIcon = L.divIcon({
+    className: "",
+    html: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 0C7.03 0 3 4.03 3 9c0 6.75 9 15 9 15s9-8.25 9-15c0-4.97-4.03-9-9-9z" fill="#ef4444"/>
+      <circle cx="12" cy="9" r="3.5" fill="#0d0f0d"/>
+    </svg>`,
+    iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -28]
+  });
+
+  return (
+    <div className={cn(C, "rounded-2xl p-4")}>
+      <div className="flex items-center gap-2 mb-3">
+        <MapPin className="w-3.5 h-3.5 text-green-400" />
+        <span className="text-sm font-semibold text-white">Grounds near you</span>
+      </div>
+
+      {withLocation.length > 0 ? (
+        <div className="rounded-xl overflow-hidden" style={{ height: 220 }}>
+          <MapContainer center={center} zoom={11} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {withLocation.map(g => {
+              const free = canBookGround(g);
+              return (
+                <Marker key={g.id || g.name} position={[Number(g.latitude), Number(g.longitude)]} icon={free ? availableIcon : bookedIcon}>
+                  <Popup>
+                    <div className="text-xs">
+                      <div className="font-semibold">{g.name}</div>
+                      <div>{displayPrice(g)} · {free ? "Available today" : "Booked today"}</div>
+                      <div>📍 {displayLocation(g)}</div>
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            })}
+          </MapContainer>
+        </div>
+      ) : (
+        <p className="text-xs" style={{ color: "#6b7a6b" }}>No grounds with a saved location yet — see the list below.</p>
+      )}
+
+      {withoutLocation.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[11px] mb-1.5" style={{ color: "#6b7a6b" }}>
+            {withoutLocation.length} more ground{withoutLocation.length > 1 ? "s" : ""} — no location on file, so no pin on the map:
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {withoutLocation.map(g => (
+              <span key={g.id || g.name} className="px-2 py-1 rounded-lg text-[11px]" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#c8ccc8" }}>
+                {g.name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FindMatchTab({
   acceptedChallenge,
   onChallengeAccepted,
@@ -1327,7 +1583,10 @@ function FindMatchTab({
   challenges = [],
   onChallengeCreated,
   onChallengeDeleted,
-  teammatePhones = []
+  teammatePhones = [],
+  autoOpenForm = false,
+  onAutoOpenHandled,
+  entryMode = "browse"
 }) {
   const [selectedFormat, setSelectedFormat] = useState(0);
   const [dateFilter, setDateFilter] = useState(null); // ISO date string ("YYYY-MM-DD") or null for "Any Date"
@@ -1336,23 +1595,7 @@ function FindMatchTab({
   const [acceptTarget, setAcceptTarget] = useState(null);
   const [detailsTarget, setDetailsTarget] = useState(null); // challenge currently shown in the "View Details" modal
 
-  const normalize = c => ({
-    id: c.id,
-    team: c.team_name,
-    contact_no: c.contact_no,
-    postedBy: c.posted_by_name || c.creator_name || null, // name of the person who posted, when the backend provides it
-    postedAt: c.created_at || null,                        // when the challenge was posted
-    format: c.format,
-    date: formatDateIST(c.match_date),   // displayed in IST
-    rawDate: c.match_date,               // raw value kept for filter comparisons
-    time: c.time_slot,                   // stored as "HH:MM" (24-hr) from ChallengeForm
-    ground: c.ground_name || (c.ground_id ? "Ground booked" : "Not booked yet"),
-    note: c.note || "",
-    urgent: !!c.urgent,
-    rating: 0,
-    wins: 0,
-    losses: 0
-  });
+  const normalize = normalizeChallenge;
 
   // Turns a timestamp into a short relative label ("2h ago", "5m ago",
   // "Just now") for the "posted" indicator on each card. Falls back to a
@@ -1489,13 +1732,38 @@ function FindMatchTab({
       );
     });
 
-  const postDisabledReason = acceptedChallenge || myTeamAcceptedChallenge
-    ? "You've already got a confirmed match — cancel it in My Team to post a new challenge"
-    : myOpenChallenge
-    ? (normalizePhone(myOpenChallenge.contact_no) === myPhone
-        ? "You already have an open challenge waiting — cancel it before posting another"
-        : "Your team already has an open challenge posted — cancel it before posting another")
-    : null;
+  // Posting is no longer pre-blocked just because *some* challenge exists —
+  // the backend now allows a team to have separate matches on different
+  // dates. If the date the user picks in the form does conflict with an
+  // existing active challenge on that same date, the backend rejects it and
+  // ChallengeForm shows that error inline. So there's nothing to block here.
+  const postDisabledReason = null;
+
+  // Date-aware "is my team already busy on this specific date" check, used
+  // to decide whether the Accept button on a given challenge card should be
+  // enabled. A confirmed/open/on_hold challenge on a DIFFERENT date no
+  // longer blocks accepting this one.
+  const isSameCalendarDay = (a, b) => {
+    if (!a || !b) return false;
+    const da = new Date(a);
+    const db = new Date(b);
+    if (isNaN(da.getTime()) || isNaN(db.getTime())) return false;
+    return (
+      da.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) ===
+      db.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })
+    );
+  };
+
+  const hasActiveOnDate = targetDate =>
+    teamPhoneSet.size > 0 &&
+    challenges.some(c => {
+      if (!["open", "on_hold", "accepted"].includes(c.status)) return false;
+      const involved =
+        teamPhoneSet.has(normalizePhone(c.contact_no)) ||
+        teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no));
+      if (!involved) return false;
+      return isSameCalendarDay(c.match_date, targetDate);
+    });
 
   const activeFilterCount = [dateFilter, timeFilter || null].filter(Boolean).length;
 
@@ -1509,59 +1777,90 @@ function FindMatchTab({
         <p className="text-sm mt-1" style={{ color: "#6b7a6b" }}>Select your preferred format and get matched instantly</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        {FORMATS.map((f, i) => <button key={f.key} onClick={() => setSelectedFormat(i)} className="p-4 rounded-2xl text-left transition-all" style={{
-        backgroundColor: i === selectedFormat ? "rgba(34,197,94,0.1)" : "#1a1a1a",
-        border: i === selectedFormat ? "1px solid #22c55e" : "1px solid #2a2a2a",
-        boxShadow: i === selectedFormat ? "0 0 0 1px rgba(34,197,94,0.2)" : "none"
-      }}>
-            <div className="text-3xl mb-2">{f.emoji}</div>
-            <div className="font-semibold text-sm" style={{ color: i === selectedFormat ? "#22c55e" : "#fff" }}>{f.title}</div>
-            <div className="text-xs mt-0.5" style={{ color: "#6b7a6b" }}>{f.desc}</div>
-            {i === selectedFormat && <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs text-green-400" style={{ backgroundColor: "rgba(34,197,94,0.15)" }}>
-                <CheckCircle className="w-3 h-3" /> Selected
-              </div>}
-          </button>)}
-      </div>
-
-      <div className={cn(C, "rounded-2xl p-4")}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Filter className="w-3.5 h-3.5 text-green-400" />
-            <span className="text-sm font-semibold text-white">Filter {format.title} challenges</span>
-          </div>
-          {activeFilterCount > 0 && <button
-            type="button"
-            onClick={() => { setDateFilter(null); setTimeFilter(""); }}
-            className="text-[11px] font-semibold transition-colors"
-            style={{ color: "#6b7a6b" }}
-          >
-            Clear filters ({activeFilterCount})
-          </button>}
-        </div>
-
-        <div className="relative mb-3">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: "#6b7a6b" }} />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search by team or ground"
-            className="w-full rounded-xl pl-9 pr-8 py-2.5 text-xs focus:outline-none transition-colors"
-            style={{ backgroundColor: "#111", border: "1px solid #2a2a2a", color: "#fff" }}
+      {(() => {
+        const challengeFormBlock = (
+          <ChallengeForm
+            key="challenge-form"
+            token={token}
+            user={user}
+            onCreated={onChallengeCreated}
+            disabledReason={postDisabledReason}
+            autoOpen={autoOpenForm}
+            onAutoOpenHandled={onAutoOpenHandled}
           />
-          {searchQuery && <button type="button" onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2">
-            <X className="w-3.5 h-3.5" style={{ color: "#6b7a6b" }} />
-          </button>}
-        </div>
+        );
 
-        <div className="grid grid-cols-2 gap-3">
-          <DateCalendarPicker value={dateFilter} onChange={setDateFilter} />
-          <TimePicker value={timeFilter} onChange={setTimeFilter} />
-        </div>
-      </div>
+        const formatCardsBlock = (
+          <div key="format-cards" className="grid grid-cols-2 gap-3">
+            {FORMATS.map((f, i) => <button key={f.key} onClick={() => setSelectedFormat(i)} className="p-4 rounded-2xl text-left transition-all" style={{
+            backgroundColor: i === selectedFormat ? "rgba(34,197,94,0.1)" : "#1a1a1a",
+            border: i === selectedFormat ? "1px solid #22c55e" : "1px solid #2a2a2a",
+            boxShadow: i === selectedFormat ? "0 0 0 1px rgba(34,197,94,0.2)" : "none"
+          }}>
+                <div className="text-3xl mb-2">{f.emoji}</div>
+                <div className="font-semibold text-sm" style={{ color: i === selectedFormat ? "#22c55e" : "#fff" }}>{f.title}</div>
+                <div className="text-xs mt-0.5" style={{ color: "#6b7a6b" }}>{f.desc}</div>
+                {i === selectedFormat && <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs text-green-400" style={{ backgroundColor: "rgba(34,197,94,0.15)" }}>
+                    <CheckCircle className="w-3 h-3" /> Selected
+                  </div>}
+              </button>)}
+          </div>
+        );
 
-      <ChallengeForm token={token} user={user} onCreated={onChallengeCreated} disabledReason={postDisabledReason} />
+        const mapBlock = <ChallengesMap key="map" challenges={filtered} />;
+
+        const filterBlock = (
+          <div key="filter" className={cn(C, "rounded-2xl p-4")}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Filter className="w-3.5 h-3.5 text-green-400" />
+                <span className="text-sm font-semibold text-white">Filter {format.title} challenges</span>
+              </div>
+              {activeFilterCount > 0 && <button
+                type="button"
+                onClick={() => { setDateFilter(null); setTimeFilter(""); }}
+                className="text-[11px] font-semibold transition-colors"
+                style={{ color: "#6b7a6b" }}
+              >
+                Clear filters ({activeFilterCount})
+              </button>}
+            </div>
+
+            <div className="relative mb-3">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: "#6b7a6b" }} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search by team or ground"
+                className="w-full rounded-xl pl-9 pr-8 py-2.5 text-xs focus:outline-none transition-colors"
+                style={{ backgroundColor: "#111", border: "1px solid #2a2a2a", color: "#fff" }}
+              />
+              {searchQuery && <button type="button" onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2">
+                <X className="w-3.5 h-3.5" style={{ color: "#6b7a6b" }} />
+              </button>}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <DateCalendarPicker value={dateFilter} onChange={setDateFilter} />
+              <TimePicker value={timeFilter} onChange={setTimeFilter} />
+            </div>
+          </div>
+        );
+
+        // Format cards always stay fixed at the top. Only the order of the
+        // remaining sections below it changes based on entry point:
+        // "create" (Home page's Create Challenge shortcut) → form first.
+        // "browse" (clicking the Find Match nav tab) → filters first.
+        return (
+          <>
+            {formatCardsBlock}
+            {entryMode === "create"
+              ? <>{challengeFormBlock}{mapBlock}{filterBlock}</>
+              : <>{filterBlock}{mapBlock}{challengeFormBlock}</>}
+          </>
+        );
+      })()}
 
       {myOwnOpenChallenge && (
         <MyPostedChallengeCard
@@ -1577,12 +1876,11 @@ function FindMatchTab({
       <section>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-base font-semibold text-white">Challenge Requests</h3>
-          {hasActive && <span className="text-xs text-amber-400">You've got an active challenge — cancel it in My Team to accept another</span>}
         </div>
         <div className="space-y-3">
           {filtered.length === 0 && <div className="text-sm text-center py-8" style={{ color: "#4a5a4a" }}>No challenges match your filters right now.</div>}
           {filtered.map(t => {
-            const blocked = hasActive;
+            const blocked = hasActiveOnDate(t.rawDate);
             const postedAgo = formatPostedAgo(t.postedAt);
             const phoneDisplay = formatPhoneDisplay(t.contact_no);
             return <div key={t.id} className={cn(C, "rounded-2xl p-4 transition-colors")} style={{ borderColor: t.urgent ? "rgba(245,158,11,0.35)" : "#2a2a2a" }}>
@@ -1737,16 +2035,16 @@ function FindMatchTab({
 
       <div className="flex gap-2 mt-5">
         <button
-          disabled={hasActive}
+          disabled={hasActiveOnDate(detailsTarget.rawDate)}
           onClick={() => { setAcceptTarget(detailsTarget); setDetailsTarget(null); }}
           className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-colors"
-          style={hasActive
+          style={hasActiveOnDate(detailsTarget.rawDate)
             ? { backgroundColor: "#1e211e", color: "#3a3a3a", cursor: "not-allowed" }
             : { backgroundColor: "#22c55e", color: "#000" }}
-          onMouseEnter={e => !hasActive && (e.currentTarget.style.backgroundColor = "#4ade80")}
-          onMouseLeave={e => !hasActive && (e.currentTarget.style.backgroundColor = "#22c55e")}
+          onMouseEnter={e => !hasActiveOnDate(detailsTarget.rawDate) && (e.currentTarget.style.backgroundColor = "#4ade80")}
+          onMouseLeave={e => !hasActiveOnDate(detailsTarget.rawDate) && (e.currentTarget.style.backgroundColor = "#22c55e")}
         >
-          {hasActive ? "Unavailable" : "Accept Challenge"}
+          {hasActiveOnDate(detailsTarget.rawDate) ? "Unavailable" : "Accept Challenge"}
         </button>
         <GhostButton className="flex-1" onClick={() => setDetailsTarget(null)}>Close</GhostButton>
       </div>
@@ -2075,6 +2373,13 @@ function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundCreated, onGroun
           </div>
         </div>
       </div>
+
+      <GroundsMap
+        grounds={filteredGrounds}
+        canBookGround={canBookGround}
+        displayPrice={displayPrice}
+        displayLocation={displayLocation}
+      />
 
       <div className="rounded-2xl p-5" style={{ background: "linear-gradient(135deg,#1a1a1a,#1a2a1a)", border: "1px solid rgba(22,101,52,0.4)", boxShadow: "0 8px 32px rgba(22,101,52,0.08)" }}>
         <div className="flex items-center gap-2 mb-4">
@@ -2565,6 +2870,39 @@ function UmpiresTab({ umpires, onBook, token, onCreated }) {
           )}
         </>
       )}
+
+      {/* ─── New Rules (dummy/static for now — wire up to a real backend later) ─── */}
+      <div className="pt-2">
+        <h3 className="text-lg font-bold text-white mb-3">📋 New Rules</h3>
+        <div className="rounded-2xl overflow-hidden border border-[#2a2a2a] divide-y divide-[#2a2a2a]">
+          {[
+            {
+              title: "New DRS review limit for T20 leagues",
+              desc: "Teams now get 2 unsuccessful reviews per innings instead of 1, effective this season.",
+              date: "Jul 2026"
+            },
+            {
+              title: "Front-foot no-ball tech mandatory",
+              desc: "Local tournaments must use the automated no-ball detection line where available.",
+              date: "Jun 2026"
+            },
+            {
+              title: "Concussion substitute rule updated",
+              desc: "A like-for-like concussion substitute can now be used without match referee pre-approval.",
+              date: "Jun 2026"
+            }
+          ].map((r, i) => (
+            <div key={i} className="px-4 py-3 bg-[#161616]">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-white">{r.title}</span>
+                <span className="text-[10px] text-gray-500 shrink-0">{r.date}</span>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">{r.desc}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-[11px] text-gray-600 mt-2">Sample updates — real rule feed coming soon.</p>
+      </div>
     </div>
   );
 }
@@ -2812,6 +3150,7 @@ function MyTeamTab({
   teammateIds = [],
   user,
 }) {
+  const [activeSection, setActiveSection] = useState("bookings");
   const myPhone = normalizePhone(user?.phone);
 
   // Every phone number on my own team — me plus each teammate pulled from
@@ -2832,14 +3171,16 @@ function MyTeamTab({
       .map(id => Number(id))
   );
 
-  // Resolve the team's accepted match straight from the shared challenges
-  // list first — this is what makes an accept done by ANY teammate show up
-  // here for EVERY teammate immediately, rather than only for whichever
-  // teammate's own session happens to carry the acceptedChallenge prop.
+  // Resolve ALL of the team's accepted matches straight from the shared
+  // challenges list first — this is what makes an accept done by ANY
+  // teammate show up here for EVERY teammate immediately, rather than only
+  // for whichever teammate's own session happens to carry the
+  // acceptedChallenge prop. A team can now have several confirmed matches
+  // at once (on different dates), so this returns ALL of them, not just one.
   // Checks user ids first (reliable), falls back to phone number matching
   // for older challenge rows or callers that don't pass teammateIds yet.
-  const teamAcceptedFromList = (teamIdSet.size || teamPhoneSet.size)
-    ? challenges.find(c => {
+  const teamAcceptedMatches = (teamIdSet.size || teamPhoneSet.size)
+    ? challenges.filter(c => {
         if (c.status !== "accepted") return false;
         const idMatch =
           teamIdSet.size &&
@@ -2850,17 +3191,79 @@ function MyTeamTab({
             teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no)));
         return idMatch || phoneMatch;
       })
-    : null;
+    : [];
 
-  const displayedChallenge = teamAcceptedFromList || acceptedChallenge;
+  // If the shared list hasn't loaded yet for some reason, fall back to the
+  // single acceptedChallenge prop so at least that one still shows.
+  const displayedChallenges = teamAcceptedMatches.length
+    ? teamAcceptedMatches
+    : (acceptedChallenge ? [acceptedChallenge] : []);
 
-  const scheduleCount = (displayedChallenge ? 1 : 0) + registeredTournaments.length;
+  const scheduleCount = displayedChallenges.length + registeredTournaments.length;
 
   return <div className="space-y-6">
-      {/* ...unchanged Team header + Stats + My Bookings above... */}
+      <div className="flex gap-2">
+        {[
+          { key: "bookings", label: "My Bookings", icon: CalendarCheck },
+          { key: "squad", label: "Squad", icon: Users },
+          { key: "schedule", label: "Schedule", icon: Calendar }
+        ].map(t => {
+          const Icon = t.icon;
+          const isActive = activeSection === t.key;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setActiveSection(t.key)}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-full text-xs font-semibold transition-all"
+              style={isActive
+                ? { backgroundColor: "#22c55e", color: "#000", boxShadow: "0 2px 10px rgba(34,197,94,0.35)" }
+                : { backgroundColor: "#151715", color: "#c8ccc8", border: "1px solid #2a2a2a" }}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
 
-      <SquadSection />
+      {activeSection === "bookings" && bookings.length > 0 && (
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <CalendarCheck className="w-4 h-4 text-green-400" />
+            <h3 className="text-base font-semibold text-white">My Bookings</h3>
+          </div>
+          <div className="space-y-2">
+            {bookings.map(b => (
+              <div key={b.id} className={cn(C, "rounded-xl p-3 flex items-center justify-between gap-3")}>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}>
+                    {b.type === "ground" ? <MapPin className="w-4 h-4 text-green-400" /> : <Shield className="w-4 h-4 text-green-400" />}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-white truncate">{b.name}</div>
+                    <div className="text-xs" style={{ color: "#6b7a6b" }}>{b.date} · {b.time}</div>
+                  </div>
+                </div>
+                <div className="text-sm font-mono text-green-400 shrink-0">₹{b.amount}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
+      {activeSection === "bookings" && bookings.length === 0 && (
+        <div className="rounded-2xl p-8 text-center border border-dashed" style={{ borderColor: "#2a2a2a", backgroundColor: "#131413" }}>
+          <div className="text-4xl mb-3 opacity-60">🎟️</div>
+          <div className="text-sm font-semibold text-white">No bookings yet</div>
+          <p className="text-xs mt-1.5 max-w-[26ch] mx-auto" style={{ color: "#6b7a6b" }}>
+            Book a ground or an umpire and it'll show up here.
+          </p>
+        </div>
+      )}
+
+      {activeSection === "squad" && <SquadSection />}
+
+      {activeSection === "schedule" && (
       <section>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
@@ -2873,7 +3276,7 @@ function MyTeamTab({
         </div>
 
         <div className="space-y-3">
-          {!displayedChallenge && registeredTournaments.length === 0 && <div className="rounded-2xl p-8 text-center border border-dashed" style={{ borderColor: "#2a2a2a", backgroundColor: "#131413" }}>
+          {displayedChallenges.length === 0 && registeredTournaments.length === 0 && <div className="rounded-2xl p-8 text-center border border-dashed" style={{ borderColor: "#2a2a2a", backgroundColor: "#131413" }}>
               <div className="text-4xl mb-3 opacity-60">🗓️</div>
               <div className="text-sm font-semibold text-white">Nothing on the calendar yet</div>
               <p className="text-xs mt-1.5 max-w-[26ch] mx-auto" style={{ color: "#6b7a6b" }}>
@@ -2881,7 +3284,7 @@ function MyTeamTab({
               </p>
             </div>}
 
-          {displayedChallenge && <div className="rounded-2xl overflow-hidden relative" style={{ backgroundColor: "#151715", border: "1px solid rgba(245,158,11,0.25)" }}>
+          {displayedChallenges.map(displayedChallenge => <div key={displayedChallenge.id} className="rounded-2xl overflow-hidden relative" style={{ backgroundColor: "#151715", border: "1px solid rgba(245,158,11,0.25)" }}>
               <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: "linear-gradient(180deg,#f59e0b,#b45309)" }} />
               <div className="p-4 pl-5">
                 <div className="flex items-start justify-between gap-3 mb-3">
@@ -2934,7 +3337,7 @@ function MyTeamTab({
                   </button>
                 </div>
               </div>
-            </div>}
+            </div>)}
 
           {registeredTournaments.map(t => <div key={t.id} className={cn(C, "rounded-2xl p-4 flex items-center gap-3")}>
               <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}>
@@ -2950,6 +3353,7 @@ function MyTeamTab({
             </div>)}
         </div>
       </section>
+      )}
 
       {/* ...unchanged Reputation scores + Notifications below... */}
     </div>;
@@ -2962,6 +3366,26 @@ function MyTeamTab({
 export default function App() {
   useForceDark();
   const [activeTab, setActiveTab] = useState("Home");
+  const [autoOpenChallengeForm, setAutoOpenChallengeForm] = useState(false);
+  // Tracks HOW the person arrived at the Find Match tab, so it can show a
+  // different layout for each entry point: "create" (via the Home page's
+  // "⚡ Create Challenge" shortcut) puts the post-a-challenge form on top;
+  // "browse" (clicking the Find Match nav tab directly) puts the filter/
+  // search section on top instead, since that's what a browsing user wants.
+  const [findMatchEntryMode, setFindMatchEntryMode] = useState("browse");
+  // Called from the Home hero's "Create Challenge" shortcut — jumps to Find
+  // Match AND opens the post form immediately, instead of just switching tabs.
+  const goCreateChallenge = () => {
+    setActiveTab("Find Match");
+    setAutoOpenChallengeForm(true);
+    setFindMatchEntryMode("create");
+  };
+  // Used by the nav bar so any direct tab click (including re-clicking
+  // "Find Match") resets the layout back to browse mode.
+  const handleNavTabClick = tab => {
+    setFindMatchEntryMode("browse");
+    setActiveTab(tab);
+  };
   const [teammates, setTeammates] = useState({ phones: [], ids: [] });
   const [acceptedChallenge, setAcceptedChallenge] = useState(null);
   const [registeredIds, setRegisteredIds] = useState([]);
@@ -3235,7 +3659,14 @@ const handleChallengeDeleted = (id) => {
   }
 
   const content = {
-  "Home": <HomeTab setActiveTab={setActiveTab} grounds={grounds} tournaments={tournaments} />,
+  "Home": <HomeTab
+  setActiveTab={setActiveTab}
+  grounds={grounds}
+  tournaments={tournaments}
+  challenges={challenges.filter(c => c.status === "open").map(normalizeChallenge)}
+  allChallenges={challenges}
+  onCreateChallenge={goCreateChallenge}
+/>,
   "Find Match": <FindMatchTab
   acceptedChallenge={acceptedChallenge}
   onChallengeAccepted={handleChallengeAccepted}
@@ -3244,6 +3675,9 @@ const handleChallengeDeleted = (id) => {
   challenges={challenges}
   onChallengeCreated={handleChallengeCreated}
   onChallengeDeleted={handleChallengeDeleted}
+  autoOpenForm={autoOpenChallengeForm}
+  onAutoOpenHandled={() => setAutoOpenChallengeForm(false)}
+  entryMode={findMatchEntryMode}
 />,
   "Grounds": <GroundsTab
   grounds={grounds}
@@ -3280,7 +3714,7 @@ const handleChallengeDeleted = (id) => {
   return <div style={{ minHeight: "100vh", backgroundColor: "#0d0f0d", fontFamily: "Inter, sans-serif" }}>
       <Navbar
   active={activeTab}
-  setActive={setActiveTab}
+  setActive={handleNavTabClick}
   user={auth.user}
   onLogout={handleLogout}
   token={auth.token}
