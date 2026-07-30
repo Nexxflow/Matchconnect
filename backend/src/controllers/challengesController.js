@@ -13,6 +13,7 @@ const {
 // (e.g. 'pending_challenge', 'challenge_accepted', 'challenge_cancelled').
 // ============================================================
 const listChallenges = asyncHandler(async (req, res) => {
+  console.log("req.user in listChallenges:", req.user);
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ error: "Not authenticated" });
 
@@ -27,7 +28,7 @@ const listChallenges = asyncHandler(async (req, res) => {
     [userId]
   );
 
-  res.json(rows);
+  res.json({ challenges: rows });
 });
 
 // ============================================================

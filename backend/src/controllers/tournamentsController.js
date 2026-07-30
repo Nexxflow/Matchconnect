@@ -1,37 +1,37 @@
 const pool = require("../config/db");
 const asyncHandler = require("../utils/asyncHandler");
 
+// Live data only, ordered ascending by start_date (undated tournaments last),
+// then by created_at as a tiebreaker.
 const listTournaments = asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT
        t.*,
+       ct.name AS creator_team_name,
        COALESCE(reg.team_count, 0)::int   AS team_count,
-       GREATEST(t.max_teams - COALESCE(reg.team_count, 0), 0)::int AS spots_left,
-       COALESCE(m.match_count, 0)::int    AS matches,
-       COALESCE(m.done_count, 0)::int     AS matches_done
+       GREATEST(t.max_teams - COALESCE(reg.team_count, 0), 0)::int AS spots_left
      FROM tournaments t
+     LEFT JOIN teams ct ON ct.id = t.creator_team_id
      LEFT JOIN (
        SELECT tournament_id, COUNT(*) AS team_count
        FROM tournament_registrations
        WHERE status = 'confirmed'
        GROUP BY tournament_id
      ) reg ON reg.tournament_id = t.id
-     LEFT JOIN (
-       SELECT tournament_id,
-              COUNT(*) AS match_count,
-              COUNT(*) FILTER (WHERE status = 'completed') AS done_count
-       FROM matches
-       WHERE tournament_id IS NOT NULL
-       GROUP BY tournament_id
-     ) m ON m.tournament_id = t.id
-     ORDER BY t.is_featured DESC, t.start_date ASC NULLS LAST, t.created_at DESC`
+     ORDER BY t.start_date ASC NULLS LAST, t.created_at ASC`
   );
-  res.json(rows);
+  res.json({ tournaments: rows });
 });
 
 const getTournament = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const tRes = await pool.query(`SELECT * FROM tournaments WHERE id = $1`, [id]);
+  const tRes = await pool.query(
+    `SELECT t.*, ct.name AS creator_team_name
+     FROM tournaments t
+     LEFT JOIN teams ct ON ct.id = t.creator_team_id
+     WHERE t.id = $1`,
+    [id]
+  );
   if (tRes.rows.length === 0) return res.status(404).json({ error: "Tournament not found" });
   const tournament = tRes.rows[0];
 
@@ -55,12 +55,145 @@ const getTournament = asyncHandler(async (req, res) => {
   );
 
   res.json({
-    ...tournament,
-    team_count: teamsRes.rows.length,
-    spots_left: Math.max(tournament.max_teams - teamsRes.rows.length, 0),
-    teams: teamsRes.rows,
-    matches: matchesRes.rows,
+    tournament: {
+      ...tournament,
+      team_count: teamsRes.rows.length,
+      spots_left: Math.max(tournament.max_teams - teamsRes.rows.length, 0),
+      teams: teamsRes.rows,
+      matches: matchesRes.rows,
+    },
   });
+});
+
+// ---------------------------------------------------------------------------
+// Create a tournament. One active tournament (registering/ongoing) per team,
+// enforced server-side with FOR UPDATE row locking so two concurrent
+// requests for the same team can't both slip through.
+// ---------------------------------------------------------------------------
+const createTournament = asyncHandler(async (req, res) => {
+  const {
+    name,
+    format = null,
+    venue = null,
+    start_date = null,
+    include_own_team = true,
+    max_teams,
+    phone = null,
+    co_phone = null,
+    entry_fee = 0,
+    description = null,
+    prizes = [],
+  } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: "Tournament name is required" });
+  }
+  if (!Number.isInteger(max_teams) || max_teams < 2) {
+    return res.status(400).json({ error: "Number of teams must be an integer of at least 2" });
+  }
+  if (!req.user?.id) {
+    return res.status(401).json({ error: "You must be logged in to create a tournament" });
+  }
+  if (!Array.isArray(prizes) || prizes.length < 1 || prizes.length > 3) {
+    return res.status(400).json({ error: "Provide between 1 and 3 prizes" });
+  }
+  for (const p of prizes) {
+    if (![1, 2, 3].includes(p.position)) {
+      return res.status(400).json({ error: "Each prize needs a position of 1, 2, or 3" });
+    }
+    if (typeof p.money !== "number" || p.money < 0) {
+      return res.status(400).json({ error: "Each prize needs a money amount >= 0" });
+    }
+    if (typeof p.trophy !== "boolean") {
+      return res.status(400).json({ error: "Each prize needs trophy: true/false" });
+    }
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const teamRes = await client.query(`SELECT id, name FROM teams WHERE owner_id = $1 FOR UPDATE`, [req.user.id]);
+    const myTeam = teamRes.rows[0] || null;
+
+    if (include_own_team && !myTeam) {
+      throw Object.assign(
+        new Error("You don't have a team registered yet, so you can't include your own team. Register a team first, or turn off 'include my team'."),
+        { status: 400 }
+      );
+    }
+
+    if (myTeam) {
+      const activeRes = await client.query(
+        `SELECT id, name, status FROM tournaments
+         WHERE creator_team_id = $1 AND status IN ('registering', 'ongoing')`,
+        [myTeam.id]
+      );
+      if (activeRes.rows.length > 0) {
+        const active = activeRes.rows[0];
+        throw Object.assign(
+          new Error(
+            `Your team is already organizing "${active.name}" (${active.status}). Complete or cancel it before creating another tournament.`
+          ),
+          { status: 409 }
+        );
+      }
+    }
+
+    const insertRes = await client.query(
+      `INSERT INTO tournaments
+         (name, format, venue, start_date, status, max_teams,
+          created_by, creator_team_id, creator_included,
+          phone, co_phone, entry_fee, description, prizes)
+       VALUES
+         ($1, $2, $3, $4, 'registering', $5,
+          $6, $7, $8,
+          $9, $10, $11, $12, $13::jsonb)
+       RETURNING *`,
+      [
+        name.trim(),
+        format,
+        venue,
+        start_date,
+        max_teams,
+        req.user.id,
+        myTeam ? myTeam.id : null,
+        include_own_team,
+        phone,
+        co_phone,
+        entry_fee,
+        description,
+        JSON.stringify(prizes),
+      ]
+    );
+    const tournament = insertRes.rows[0];
+
+    if (include_own_team) {
+      await client.query(
+        `INSERT INTO tournament_registrations (tournament_id, team_id, registered_by, status)
+         VALUES ($1, $2, $3, 'confirmed')`,
+        [tournament.id, myTeam.id, req.user.id]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    const team_count = include_own_team ? 1 : 0;
+    res.status(201).json({
+      tournament: {
+        ...tournament,
+        creator_team_name: myTeam?.name || null,
+        team_count,
+        spots_left: Math.max(tournament.max_teams - team_count, 0),
+      },
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    throw err;
+  } finally {
+    client.release();
+  }
 });
 
 const registerTeam = asyncHandler(async (req, res) => {
@@ -90,21 +223,43 @@ const registerTeam = asyncHandler(async (req, res) => {
     }
 
     const existing = await client.query(
-      `SELECT id FROM tournament_registrations WHERE tournament_id = $1 AND team_id = $2`,
+      `SELECT id FROM tournament_registrations
+       WHERE tournament_id = $1 AND team_id = $2 AND status != 'withdrawn'`,
       [id, team_id]
     );
     if (existing.rows.length > 0) {
       throw Object.assign(new Error("This team is already registered"), { status: 409 });
     }
 
-    const inserted = await client.query(
+    await client.query(
       `INSERT INTO tournament_registrations (tournament_id, team_id, registered_by, status)
-       VALUES ($1, $2, $3, 'confirmed') RETURNING *`,
+       VALUES ($1, $2, $3, 'confirmed')`,
       [id, team_id, req.user?.id || null]
     );
 
+    const updatedCountRes = await client.query(
+      `SELECT COUNT(*)::int AS n FROM tournament_registrations
+       WHERE tournament_id = $1 AND status = 'confirmed'`,
+      [id]
+    );
+    const team_count = updatedCountRes.rows[0].n;
+
+    const fullRes = await client.query(
+      `SELECT t.*, ct.name AS creator_team_name
+       FROM tournaments t LEFT JOIN teams ct ON ct.id = t.creator_team_id
+       WHERE t.id = $1`,
+      [id]
+    );
+
     await client.query("COMMIT");
-    res.status(201).json({ ok: true, registration: inserted.rows[0] });
+
+    res.status(201).json({
+      tournament: {
+        ...fullRes.rows[0],
+        team_count,
+        spots_left: Math.max(fullRes.rows[0].max_teams - team_count, 0),
+      },
+    });
   } catch (err) {
     await client.query("ROLLBACK");
     if (err.status) return res.status(err.status).json({ error: err.message });
@@ -115,21 +270,22 @@ const registerTeam = asyncHandler(async (req, res) => {
 });
 
 const myTournaments = asyncHandler(async (req, res) => {
-  const { teamId } = req.params;
+  const { team_id } = req.params;
   const { rows } = await pool.query(
     `SELECT t.*, r.status AS registration_status, r.registered_at
      FROM tournament_registrations r
      JOIN tournaments t ON t.id = r.tournament_id
      WHERE r.team_id = $1 AND r.status != 'withdrawn'
-     ORDER BY t.start_date ASC NULLS LAST`,
-    [teamId]
+     ORDER BY t.start_date ASC NULLS LAST, t.created_at ASC`,
+    [team_id]
   );
-  res.json(rows);
+  res.json({ tournaments: rows });
 });
 
 module.exports = {
   listTournaments,
   getTournament,
+  createTournament,
   registerTeam,
   myTournaments,
 };
