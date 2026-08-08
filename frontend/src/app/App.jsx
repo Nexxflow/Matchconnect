@@ -3389,9 +3389,9 @@ function MyTeamTab({
   registeredTournaments,
   bookings,
   onCancelChallenge,
-  onDeleteChallenge,   // NEW: needed to withdraw a still-open posted challenge
+  onDeleteChallenge,
   cancelling,
-  deleting,            // NEW: loading state for delete action
+  deleting,
   onOpenChat,
   challenges = [],
   teammatePhones = [],
@@ -3412,32 +3412,40 @@ function MyTeamTab({
   const hasTeamIdentity = teamIdSet.size > 0 || teamPhoneSet.size > 0;
 
   const isTeamCreator = c => {
-    const idMatch = teamIdSet.size && teamIdSet.has(Number(c.creator_id));
-    const phoneMatch = teamPhoneSet.size && teamPhoneSet.has(normalizePhone(c.contact_no));
-    return Boolean(idMatch || phoneMatch);
+    if (teamIdSet.size && c.creator_id !== undefined && c.creator_id !== null) {
+      return teamIdSet.has(Number(c.creator_id));
+    }
+    if (teamPhoneSet.size && c.contact_no) {
+      return teamPhoneSet.has(normalizePhone(c.contact_no));
+    }
+    return false;
   };
 
   const isTeamAcceptor = c => {
-    const idMatch = teamIdSet.size && teamIdSet.has(Number(c.accepted_by_user_id));
-    const phoneMatch = teamPhoneSet.size && teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no));
-    return Boolean(idMatch || phoneMatch);
+    if (teamIdSet.size && c.accepted_by_user_id !== undefined && c.accepted_by_user_id !== null) {
+      return teamIdSet.has(Number(c.accepted_by_user_id));
+    }
+    if (teamPhoneSet.size && c.accepted_by_contact_no) {
+      return teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no));
+    }
+    return false;
   };
 
-  // Challenges your team posted that are still open / on hold — waiting on an opponent
+  // ── Category 1: Posted Challenges ──────────────────────────────────────
   const postedChallenges = hasTeamIdentity
-    ? challenges.filter(c => (c.status === "open" || c.status === "on_hold") && isTeamCreator(c))
+    ? challenges.filter(c => isTeamCreator(c) && (c.status === "open" || c.status === "on_hold"))
     : [];
 
-  // Confirmed matches — your team either posted it or accepted it, and both sides agreed
-  const teamAcceptedMatches = hasTeamIdentity
+  // ── Category 2: Accepted Challenges ────────────────────────────────────
+  const acceptedChallenges = hasTeamIdentity
     ? challenges.filter(c => c.status === "accepted" && (isTeamCreator(c) || isTeamAcceptor(c)))
     : [];
 
-  const confirmedMatches = teamAcceptedMatches.length
-    ? teamAcceptedMatches
+  const acceptedChallengesFinal = acceptedChallenges.length
+    ? acceptedChallenges
     : (acceptedChallenge ? [acceptedChallenge] : []);
 
-  const scheduleCount = postedChallenges.length + confirmedMatches.length + registeredTournaments.length;
+  const scheduleCount = postedChallenges.length + acceptedChallengesFinal.length + registeredTournaments.length;
 
   return <div className="space-y-6">
       <div className="flex gap-2">
@@ -3515,7 +3523,7 @@ function MyTeamTab({
             )}
           </div>
 
-          {postedChallenges.length === 0 && confirmedMatches.length === 0 && registeredTournaments.length === 0 && (
+          {postedChallenges.length === 0 && acceptedChallengesFinal.length === 0 && registeredTournaments.length === 0 && (
             <div className="rounded-2xl p-8 text-center border border-dashed" style={{ borderColor: "#2a2a2a", backgroundColor: "#131413" }}>
               <div className="text-4xl mb-3 opacity-60">🗓️</div>
               <div className="text-sm font-semibold text-white">Nothing on the calendar yet</div>
@@ -3525,40 +3533,39 @@ function MyTeamTab({
             </div>
           )}
 
-          {/* ---------- Posted Challenges — waiting for an opponent ---------- */}
-          {postedChallenges.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
+          {/* ═════════ Two-card layout: Posted Challenges & Accepted Challenges ═════════ */}
+          <div className="space-y-4">
+            {/* Card 1: Posted Challenges */}
+            <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: "#151715", border: "1px solid rgba(56,189,248,0.22)" }}>
+              <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid #1e1e1e" }}>
                 <Megaphone className="w-3.5 h-3.5 text-sky-400" />
-                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: "#8fa08f" }}>
-  Posted Challenges
-</h4>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
-                  {postedChallenges.length}
-                </span>
+                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: "#8fa08f" }}>Posted Challenges</h4>
+                {postedChallenges.length > 0 && (
+                  <span className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
+                    {postedChallenges.length}
+                  </span>
+                )}
               </div>
 
-              <div className="space-y-3">
-                {postedChallenges.map(pc => (
-                  <div key={pc.id} className="rounded-2xl overflow-hidden relative" style={{ backgroundColor: "#151715", border: "1px solid rgba(56,189,248,0.22)" }}>
-                    <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: "linear-gradient(180deg,#38bdf8,#0369a1)" }} />
-                    <div className="p-4 pl-5">
-                      <div className="flex items-start justify-between gap-3 mb-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "rgba(56,189,248,0.12)", border: "1px solid rgba(56,189,248,0.25)" }}>
-                            <Megaphone className="w-4 h-4 text-sky-400" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-sm font-semibold text-white truncate">{pc.team_name}</div>
-                            <div className="text-xs mt-0.5" style={{ color: "#6b7a6b" }}>
-                              {pc.match_date} · {pc.time_slot}
-                            </div>
+              {postedChallenges.length === 0 ? (
+                <div className="px-4 py-6 text-center">
+                  <p className="text-xs" style={{ color: "#6b7a6b" }}>No posted challenges yet</p>
+                </div>
+              ) : (
+                <div className="divide-y" style={{ borderColor: "#1e1e1e" }}>
+                  {postedChallenges.map(pc => (
+                    <div key={pc.id} className="p-4">
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-white truncate">{pc.team_name}</div>
+                          <div className="text-xs mt-0.5" style={{ color: "#6b7a6b" }}>
+                            {pc.match_date} · {pc.time_slot}
                           </div>
                         </div>
                         <Tag color="sky">{pc.status === "on_hold" ? "On Hold" : "Awaiting Opponent"}</Tag>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                      <div className="flex flex-wrap items-center gap-1.5 mb-2">
                         <Tag color="blue">{pc.format}</Tag>
                         <span className="text-xs flex items-center gap-1" style={{ color: "#6b7a6b" }}>
                           <MapPin className="w-3 h-3" style={{ color: "#4a5a4a" }} />
@@ -3567,110 +3574,116 @@ function MyTeamTab({
                       </div>
 
                       {pc.note && (
-                        <p className="text-xs mb-3 line-clamp-2" style={{ color: "#8fa08f" }}>{pc.note}</p>
+                        <p className="text-xs mb-2 line-clamp-2" style={{ color: "#8fa08f" }}>{pc.note}</p>
                       )}
 
-                      {/* <button
+                      <button
                         disabled={deleting}
                         onClick={() => onDeleteChallenge?.(pc.id)}
                         className="w-full py-2 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1.5"
                         style={deleting ? { opacity: 0.6, cursor: "not-allowed" } : {}}
                       >
                         <XCircle className="w-3.5 h-3.5" /> {deleting ? "Withdrawing..." : "Withdraw Challenge"}
-                      </button> */}
+                      </button>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
 
-          {/* ---------- Confirmed Matches — both sides agreed ---------- */}
-          {confirmedMatches.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
+            {/* Card 2: Accepted Challenges */}
+            <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: "#151715", border: "1px solid rgba(245,158,11,0.25)" }}>
+              <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid #1e1e1e" }}>
                 <Swords className="w-3.5 h-3.5 text-amber-400" />
-                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: "#8fa08f" }}>
-                  Confirmed Matches
-                </h4>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
-                  {confirmedMatches.length}
-                </span>
+                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: "#8fa08f" }}>Accepted Challenges</h4>
+                {acceptedChallengesFinal.length > 0 && (
+                  <span className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
+                    {acceptedChallengesFinal.length}
+                  </span>
+                )}
               </div>
 
-              <div className="space-y-3">
-                {confirmedMatches.map(displayedChallenge => (
-                  <div key={displayedChallenge.id} className="rounded-2xl overflow-hidden relative" style={{ backgroundColor: "#151715", border: "1px solid rgba(245,158,11,0.25)" }}>
-                    <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: "linear-gradient(180deg,#f59e0b,#b45309)" }} />
-                    <div className="p-4 pl-5">
-                      <div className="flex items-start justify-between gap-3 mb-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.25)" }}>
-                            <Swords className="w-4 h-4 text-amber-400" />
-                          </div>
+              {acceptedChallengesFinal.length === 0 ? (
+                <div className="px-4 py-6 text-center">
+                  <p className="text-xs" style={{ color: "#6b7a6b" }}>No accepted challenges yet</p>
+                </div>
+              ) : (
+                <div className="divide-y" style={{ borderColor: "#1e1e1e" }}>
+                  {acceptedChallengesFinal.map(ac => {
+                    const iAmCreator = isTeamCreator(ac);
+                    const opponentName = iAmCreator ? ac.accepted_by_team_name : ac.team_name;
+                    return (
+                      <div key={ac.id} className="p-4">
+                        <div className="flex items-start justify-between gap-3 mb-2">
                           <div className="min-w-0">
-                            <div className="text-sm font-semibold text-white truncate">vs {displayedChallenge.team_name}</div>
+                            <div className="text-sm font-semibold text-white truncate">vs {opponentName}</div>
                             <div className="text-xs mt-0.5" style={{ color: "#6b7a6b" }}>
-                              {displayedChallenge.match_date} · {displayedChallenge.time_slot}
+                              {ac.match_date} · {ac.time_slot}
                             </div>
                           </div>
+                          <Tag color="amber">Confirmed</Tag>
                         </div>
-                        <Tag color="amber">Confirmed</Tag>
-                      </div>
 
-                      <div className="flex flex-wrap items-center gap-1.5 mb-3">
-                        <Tag color="blue">{displayedChallenge.format}</Tag>
-                        <span className="text-xs flex items-center gap-1" style={{ color: "#6b7a6b" }}>
-                          <MapPin className="w-3 h-3" style={{ color: "#4a5a4a" }} />
-                          {displayedChallenge.ground_name || "Ground TBD"}
-                        </span>
-                      </div>
+                        <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                          <Tag color="blue">{ac.format}</Tag>
+                          <span className="text-xs flex items-center gap-1" style={{ color: "#6b7a6b" }}>
+                            <MapPin className="w-3 h-3" style={{ color: "#4a5a4a" }} />
+                            {ac.ground_name || "Ground TBD"}
+                          </span>
+                        </div>
 
-                      {/* Phone numbers — only revealed now that both sides have agreed to play */}
-                      <div className="grid grid-cols-2 gap-2 mb-3">
-                        <a href={`tel:${displayedChallenge.contact_no}`} className="rounded-xl p-2.5 flex items-center gap-2 transition-colors hover:bg-white/5" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}>
-                          <Phone className="w-3.5 h-3.5 text-green-400 shrink-0" />
-                          <div className="min-w-0">
-                            <div className="text-xs truncate" style={{ color: "#6b7a6b" }}>{displayedChallenge.team_name}</div>
-                            <div className="text-xs font-mono text-white">{displayedChallenge.contact_no}</div>
-                          </div>
-                        </a>
-                        <a href={`tel:${displayedChallenge.accepted_by_contact_no}`} className="rounded-xl p-2.5 flex items-center gap-2 transition-colors hover:bg-white/5" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}>
-                          <Phone className="w-3.5 h-3.5 text-green-400 shrink-0" />
-                          <div className="min-w-0">
-                            <div className="text-xs truncate" style={{ color: "#6b7a6b" }}>{displayedChallenge.accepted_by_team_name}</div>
-                            <div className="text-xs font-mono text-white">{displayedChallenge.accepted_by_contact_no}</div>
-                          </div>
-                        </a>
-                      </div>
+                        <div className="grid grid-cols-2 gap-2 mb-2">
+                          <a href={`tel:${ac.contact_no}`} className="rounded-xl p-2.5 flex items-center gap-2 transition-colors hover:bg-white/5" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}>
+                            <Phone className="w-3.5 h-3.5 text-green-400 shrink-0" />
+                            <div className="min-w-0">
+                              <div className="text-xs truncate" style={{ color: "#6b7a6b" }}>{ac.team_name}</div>
+                              <div className="text-xs font-mono text-white">{ac.contact_no}</div>
+                            </div>
+                          </a>
+                          <a href={`tel:${ac.accepted_by_contact_no}`} className="rounded-xl p-2.5 flex items-center gap-2 transition-colors hover:bg-white/5" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}>
+                            <Phone className="w-3.5 h-3.5 text-green-400 shrink-0" />
+                            <div className="min-w-0">
+                              <div className="text-xs truncate" style={{ color: "#6b7a6b" }}>{ac.accepted_by_team_name}</div>
+                              <div className="text-xs font-mono text-white">{ac.accepted_by_contact_no}</div>
+                            </div>
+                          </a>
+                        </div>
 
-                      <div className="flex gap-2">
-                        <button onClick={() => onOpenChat(displayedChallenge)} className="flex-1 py-2 rounded-xl bg-green-500 text-black text-xs font-bold hover:bg-green-400 transition-colors flex items-center justify-center gap-1.5">
-                          💬 Chat
-                        </button>
-                        <button disabled={cancelling} onClick={() => onCancelChallenge(displayedChallenge.id)} className="flex-1 py-2 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1.5" style={cancelling ? { opacity: 0.6, cursor: "not-allowed" } : {}}>
-                          <XCircle className="w-3.5 h-3.5" /> {cancelling ? "Cancelling..." : "Cancel Match"}
-                        </button>
+                        <div className="flex gap-2">
+                          <button onClick={() => onOpenChat(ac)} className="flex-1 py-2 rounded-xl bg-green-500 text-black text-xs font-bold hover:bg-green-400 transition-colors flex items-center justify-center gap-1.5">
+                            💬 Chat
+                          </button>
+                          <button disabled={cancelling} onClick={() => onCancelChallenge(ac.id)} className="flex-1 py-2 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1.5" style={cancelling ? { opacity: 0.6, cursor: "not-allowed" } : {}}>
+                            <XCircle className="w-3.5 h-3.5" /> {cancelling ? "Cancelling..." : "Cancel Match"}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
-          {/* ---------- Tournaments ---------- */}
-          {registeredTournaments.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <Trophy className="w-3.5 h-3.5 text-green-400" />
-                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: "#8fa08f" }}>
-                  Tournaments
-                </h4>
+          {/* ═════════ Tournaments (unchanged) ═════════ */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Trophy className="w-3.5 h-3.5 text-green-400" />
+              <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: "#8fa08f" }}>
+                Tournaments
+              </h4>
+              {registeredTournaments.length > 0 && (
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
                   {registeredTournaments.length}
                 </span>
+              )}
+            </div>
+
+            {registeredTournaments.length === 0 ? (
+              <div className="rounded-xl p-4 text-center border border-dashed" style={{ borderColor: "#2a2a2a", backgroundColor: "#131413" }}>
+                <p className="text-xs" style={{ color: "#6b7a6b" }}>No tournament registrations yet</p>
               </div>
+            ) : (
               <div className="space-y-2">
                 {registeredTournaments.map(t => (
                   <div key={t.id} className={cn(C, "rounded-2xl p-4 flex items-center gap-3")}>
@@ -3687,12 +3700,10 @@ function MyTeamTab({
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </section>
       )}
-
-      {/* ...unchanged Reputation scores + Notifications below... */}
     </div>;
 }
 
@@ -4041,17 +4052,19 @@ export default function App() {
       onCreateChallenge={goCreateChallenge}
     />,
     "Find Match": <FindMatchTab
-      acceptedChallenge={acceptedChallenge}
-      onChallengeAccepted={handleChallengeAccepted}
-      token={auth.token}
-      user={auth.user}
-      challenges={challenges}
-      onChallengeCreated={handleChallengeCreated}
-      onChallengeDeleted={handleChallengeDeleted}
-      autoOpenForm={autoOpenChallengeForm}
-      onAutoOpenHandled={() => setAutoOpenChallengeForm(false)}
-      entryMode={findMatchEntryMode}
-    />,
+  acceptedChallenge={acceptedChallenge}
+  onChallengeAccepted={handleChallengeAccepted}
+  token={auth.token}
+  user={auth.user}
+  challenges={challenges}
+  onChallengeCreated={handleChallengeCreated}
+  onChallengeDeleted={handleChallengeDeleted}
+  teammatePhones={teammates.phones}  
+  teammateIds={teammates.ids}         
+  autoOpenForm={autoOpenChallengeForm}
+  onAutoOpenHandled={() => setAutoOpenChallengeForm(false)}
+  entryMode={findMatchEntryMode}
+/>,
     "Grounds": <GroundsTab
       grounds={grounds}
       token={auth.token}
