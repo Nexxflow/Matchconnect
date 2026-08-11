@@ -3,28 +3,9 @@ const asyncHandler = require("../utils/asyncHandler");
 
 const listTournaments = asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT
-       t.*,
-       COALESCE(reg.team_count, 0)::int   AS team_count,
-       GREATEST(t.max_teams - COALESCE(reg.team_count, 0), 0)::int AS spots_left,
-       COALESCE(m.match_count, 0)::int    AS matches,
-       COALESCE(m.done_count, 0)::int     AS matches_done
-     FROM tournaments t
-     LEFT JOIN (
-       SELECT tournament_id, COUNT(*) AS team_count
-       FROM tournament_registrations
-       WHERE status = 'confirmed'
-       GROUP BY tournament_id
-     ) reg ON reg.tournament_id = t.id
-     LEFT JOIN (
-       SELECT tournament_id,
-              COUNT(*) AS match_count,
-              COUNT(*) FILTER (WHERE status = 'completed') AS done_count
-       FROM matches
-       WHERE tournament_id IS NOT NULL
-       GROUP BY tournament_id
-     ) m ON m.tournament_id = t.id
-     ORDER BY t.is_featured DESC, t.start_date ASC NULLS LAST, t.created_at DESC`
+    `SELECT *
+     FROM tournaments
+     ORDER BY featured DESC, start_date ASC NULLS LAST, created_at DESC`
   );
   res.json(rows);
 });
@@ -54,13 +35,7 @@ const getTournament = asyncHandler(async (req, res) => {
     [id]
   );
 
-  res.json({
-    ...tournament,
-    team_count: teamsRes.rows.length,
-    spots_left: Math.max(tournament.max_teams - teamsRes.rows.length, 0),
-    teams: teamsRes.rows,
-    matches: matchesRes.rows,
-  });
+  res.json({ ...tournament, teams: teamsRes.rows, matches: matchesRes.rows });
 });
 
 const registerTeam = asyncHandler(async (req, res) => {
@@ -76,17 +51,8 @@ const registerTeam = asyncHandler(async (req, res) => {
     if (tRes.rows.length === 0) throw Object.assign(new Error("Tournament not found"), { status: 404 });
     const tournament = tRes.rows[0];
 
-    if (tournament.status !== "registering") {
+    if (tournament.status && tournament.status.toLowerCase() !== "registering") {
       throw Object.assign(new Error("Registration is closed for this tournament"), { status: 400 });
-    }
-
-    const countRes = await client.query(
-      `SELECT COUNT(*)::int AS n FROM tournament_registrations
-       WHERE tournament_id = $1 AND status = 'confirmed'`,
-      [id]
-    );
-    if (countRes.rows[0].n >= tournament.max_teams) {
-      throw Object.assign(new Error("Tournament is full"), { status: 400 });
     }
 
     const existing = await client.query(
@@ -102,6 +68,8 @@ const registerTeam = asyncHandler(async (req, res) => {
        VALUES ($1, $2, $3, 'confirmed') RETURNING *`,
       [id, team_id, req.user?.id || null]
     );
+
+    await client.query(`UPDATE tournaments SET teams_count = teams_count + 1 WHERE id = $1`, [id]);
 
     await client.query("COMMIT");
     res.status(201).json({ ok: true, registration: inserted.rows[0] });
@@ -127,9 +95,31 @@ const myTournaments = asyncHandler(async (req, res) => {
   res.json(rows);
 });
 
+const createTournament = asyncHandler(async (req, res) => {
+  const {
+    name, format = "T20", venue = null,
+    prize = null, start_date = null, featured = false,
+  } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: "name is required" });
+  }
+
+  const { rows } = await pool.query(
+    `INSERT INTO tournaments
+       (name, format, venue, prize, start_date, featured, status, teams_count, matches_count, completed_count)
+     VALUES ($1,$2,$3,$4,$5,$6,'Registering',0,0,0)
+     RETURNING *`,
+    [name.trim(), format, venue, prize, start_date, featured]
+  );
+
+  res.status(201).json(rows[0]);
+});
+
 module.exports = {
   listTournaments,
   getTournament,
   registerTeam,
   myTournaments,
+  createTournament,
 };
