@@ -7,50 +7,69 @@ const {
 
 // ============================================================
 // GET /api/challenges
-// Lists challenges relevant to the logged-in user: ones they sent
-// (created_by = me) and ones sent to them (challenged_user_id = me),
-// most recent first. Status stays whatever the match row already uses
-// (e.g. 'pending_challenge', 'challenge_accepted', 'challenge_cancelled').
+// Public list of all challenges (open/accepted/cancelled/on_hold),
+// most recently updated first. Joins ground lat/lng so the map can
+// pin challenges that have a registered ground attached.
 // ============================================================
 const listChallenges = asyncHandler(async (req, res) => {
-  const userId = req.user?.id;
-  if (!userId) return res.status(401).json({ error: "Not authenticated" });
-
   const { rows } = await pool.query(
-    `SELECT m.*, t1.name AS team1_name, t2.name AS team2_name
-     FROM matches m
-     JOIN teams t1 ON t1.id = m.team1_id
-     JOIN teams t2 ON t2.id = m.team2_id
-     WHERE (m.created_by = $1 OR m.challenged_user_id = $1)
-       AND m.status IN ('pending_challenge', 'challenge_accepted', 'challenge_cancelled')
-     ORDER BY m.updated_at DESC NULLS LAST, m.created_at DESC`,
-    [userId]
+    `SELECT c.*, u.name AS creator_name,
+            g.latitude AS ground_lat, g.longitude AS ground_lng
+     FROM challenges c
+     LEFT JOIN users u ON u.id = c.creator_id
+     LEFT JOIN grounds g ON g.id = c.ground_id
+     ORDER BY c.created_at DESC`
   );
-
-  res.json(rows);
+  res.json({ challenges: rows });
 });
 
 // ============================================================
 // POST /api/challenges
-// Body: { team1_id, team2_id, challenged_user_id, venue, overs_limit }
-// Creates a new challenge (a matches row in 'pending_challenge' status)
-// from the logged-in user to another user's team.
+// Body: { team_name, contact_no, format, overs, match_date, time_slot,
+//         ground_id, ground_name, note }
+// Creates an open challenge post from the logged-in user.
 // ============================================================
 const createChallenge = asyncHandler(async (req, res) => {
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ error: "Not authenticated" });
 
-  const { team1_id, team2_id, challenged_user_id, venue = null, overs_limit = 20 } = req.body;
+  const {
+    team_name,
+    contact_no,
+    format,
+    overs = null,
+    match_date,
+    time_slot,
+    ground_id = null,
+    ground_name = null,
+    note = null,
+  } = req.body;
 
-  if (!team1_id || !team2_id || !challenged_user_id) {
-    return res.status(400).json({ error: "team1_id, team2_id and challenged_user_id are required" });
+  if (!team_name || !contact_no || !format || !match_date || !time_slot) {
+    return res.status(400).json({
+      error: "team_name, contact_no, format, match_date and time_slot are required",
+    });
+  }
+
+  // A team (by phone) can't have two active challenges on the same date
+  const conflict = await pool.query(
+    `SELECT id FROM challenges
+     WHERE (contact_no = $1 OR accepted_by_contact_no = $1)
+       AND match_date = $2
+       AND status IN ('open', 'on_hold', 'accepted')`,
+    [contact_no, match_date]
+  );
+  if (conflict.rows.length > 0) {
+    return res.status(400).json({ error: "Your team already has an active challenge on this date" });
   }
 
   const { rows } = await pool.query(
-    `INSERT INTO matches (team1_id, team2_id, venue, overs_limit, status, created_by, challenged_user_id)
-     VALUES ($1,$2,$3,$4,'pending_challenge',$5,$6)
+    `INSERT INTO challenges
+       (team_name, contact_no, format, overs, match_date, time_slot,
+        ground_id, ground_name, note, status, creator_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'open',$10)
      RETURNING *`,
-    [team1_id, team2_id, venue, overs_limit, userId, challenged_user_id]
+    [team_name, contact_no, format, overs, match_date, time_slot, ground_id, ground_name, note, userId]
   );
 
   res.status(201).json({ ok: true, challenge: rows[0] });
@@ -58,111 +77,113 @@ const createChallenge = asyncHandler(async (req, res) => {
 
 // ============================================================
 // DELETE /api/challenges/:id
-// Only the person who sent the challenge can delete/withdraw it, and
-// only while it's still pending (not yet accepted).
+// Only the creator can delete, and only while still open.
 // ============================================================
 const deleteChallenge = asyncHandler(async (req, res) => {
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ error: "Not authenticated" });
   const { id } = req.params;
 
-  const matchRes = await pool.query(`SELECT * FROM matches WHERE id = $1`, [id]);
-  if (matchRes.rows.length === 0) return res.status(404).json({ error: "Challenge not found" });
-  const match = matchRes.rows[0];
+  const cRes = await pool.query(`SELECT * FROM challenges WHERE id = $1`, [id]);
+  if (cRes.rows.length === 0) return res.status(404).json({ error: "Challenge not found" });
+  const challenge = cRes.rows[0];
 
-  if (match.created_by !== userId) {
+  if (challenge.creator_id !== userId) {
     return res.status(403).json({ error: "Only the challenge creator can delete it" });
   }
-  if (match.status !== "pending_challenge") {
-    return res.status(400).json({ error: "Only a still-pending challenge can be deleted" });
+  if (challenge.status !== "open") {
+    return res.status(400).json({ error: "Only a still-open challenge can be deleted" });
   }
 
-  await pool.query(`DELETE FROM matches WHERE id = $1`, [id]);
+  await pool.query(`DELETE FROM challenges WHERE id = $1`, [id]);
   res.json({ ok: true });
 });
 
 // ============================================================
-// POST /api/matches/:matchId/accept-challenge
-// Called by the challenged user. Flips status to 'challenge_accepted'
-// and notifies the user who originally posted the challenge.
+// POST /api/challenges/:id/accept
+// Body: { team_name, contact_no }
+// Called by the accepting user. Notifies the original poster.
 // ============================================================
 const acceptChallenge = asyncHandler(async (req, res) => {
-  const { matchId } = req.params;
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: "Not authenticated" });
+  const { id } = req.params;
+  const { team_name, contact_no } = req.body;
 
-  const matchRes = await pool.query(
-    `SELECT m.*, t1.name AS team1_name, t2.name AS team2_name,
-            creator.fcm_token AS creator_token,
-            challenged_team.name AS challenged_team_name
-     FROM matches m
-     JOIN teams t1 ON t1.id = m.team1_id
-     JOIN teams t2 ON t2.id = m.team2_id
-     JOIN users creator ON creator.id = m.created_by
-     JOIN teams challenged_team
-       ON challenged_team.id = CASE
-            WHEN m.challenged_user_id = m.created_by THEN m.team1_id
-            ELSE m.team2_id
-          END
-     WHERE m.id = $1`,
-    [matchId]
-  );
-  if (matchRes.rows.length === 0) {
-    return res.status(404).json({ error: "Match not found" });
+  if (!team_name || !contact_no) {
+    return res.status(400).json({ error: "team_name and contact_no are required" });
   }
-  const match = matchRes.rows[0];
+
+  const cRes = await pool.query(`SELECT * FROM challenges WHERE id = $1`, [id]);
+  if (cRes.rows.length === 0) return res.status(404).json({ error: "Challenge not found" });
+  const challenge = cRes.rows[0];
+
+  if (challenge.status !== "open") {
+    return res.status(400).json({ error: "This challenge is no longer open" });
+  }
+
+  // A team cannot accept its own posted challenge. Checking creator_id is
+  // the authoritative guard here (the frontend's phone-based list filter
+  // is just a UI convenience and shouldn't be the only thing preventing this).
+  if (challenge.creator_id === userId) {
+    return res.status(400).json({ error: "You can't accept your own challenge" });
+  }
 
   const updated = await pool.query(
-    `UPDATE matches SET status = 'challenge_accepted', updated_at = now()
-     WHERE id = $1 RETURNING *`,
-    [matchId]
+    `UPDATE challenges
+     SET status = 'accepted',
+         accepted_by_team_name = $1,
+         accepted_by_contact_no = $2,
+         accepted_by_user_id = $3,
+         updated_at = now()
+     WHERE id = $4
+     RETURNING *`,
+    [team_name, contact_no, userId, id]
   );
 
-  await notifyChallengeAccepted(match.creator_token, match.challenged_team_name, {
-    match_id: String(matchId),
-  });
+  const creatorRes = await pool.query(`SELECT fcm_token FROM users WHERE id = $1`, [challenge.creator_id]);
+  const creatorToken = creatorRes.rows[0]?.fcm_token;
+  if (creatorToken) {
+    await notifyChallengeAccepted(creatorToken, team_name, { challenge_id: String(id) });
+  }
 
-  res.json({ ok: true, match: updated.rows[0] });
+  res.json({ ok: true, challenge: updated.rows[0] });
 });
 
 // ============================================================
-// POST /api/matches/:matchId/cancel-challenge
-// Called by the challenged user (or the creator) to withdraw/decline.
-// Notifies the original creator that the challenge was cancelled.
+// POST /api/challenges/:id/cancel
+// Called from "My Team" once a match is accepted. Reopens the
+// challenge (clears the accepted_by_* fields) so it can be
+// re-accepted, and notifies the original poster.
 // ============================================================
 const cancelChallenge = asyncHandler(async (req, res) => {
-  const { matchId } = req.params;
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: "Not authenticated" });
+  const { id } = req.params;
 
-  const matchRes = await pool.query(
-    `SELECT m.*, t1.name AS team1_name, t2.name AS team2_name,
-            creator.fcm_token AS creator_token,
-            challenged_team.name AS challenged_team_name
-     FROM matches m
-     JOIN teams t1 ON t1.id = m.team1_id
-     JOIN teams t2 ON t2.id = m.team2_id
-     JOIN users creator ON creator.id = m.created_by
-     JOIN teams challenged_team
-       ON challenged_team.id = CASE
-            WHEN m.challenged_user_id = m.created_by THEN m.team1_id
-            ELSE m.team2_id
-          END
-     WHERE m.id = $1`,
-    [matchId]
-  );
-  if (matchRes.rows.length === 0) {
-    return res.status(404).json({ error: "Match not found" });
-  }
-  const match = matchRes.rows[0];
+  const cRes = await pool.query(`SELECT * FROM challenges WHERE id = $1`, [id]);
+  if (cRes.rows.length === 0) return res.status(404).json({ error: "Challenge not found" });
+  const challenge = cRes.rows[0];
 
   const updated = await pool.query(
-    `UPDATE matches SET status = 'challenge_cancelled', updated_at = now()
-     WHERE id = $1 RETURNING *`,
-    [matchId]
+    `UPDATE challenges
+     SET status = 'open',
+         accepted_by_team_name = NULL,
+         accepted_by_contact_no = NULL,
+         accepted_by_user_id = NULL,
+         updated_at = now()
+     WHERE id = $1
+     RETURNING *`,
+    [id]
   );
 
-  await notifyChallengeCancelled(match.creator_token, match.challenged_team_name, {
-    match_id: String(matchId),
-  });
+  const creatorRes = await pool.query(`SELECT fcm_token FROM users WHERE id = $1`, [challenge.creator_id]);
+  const creatorToken = creatorRes.rows[0]?.fcm_token;
+  if (creatorToken) {
+    await notifyChallengeCancelled(creatorToken, challenge.accepted_by_team_name, { challenge_id: String(id) });
+  }
 
-  res.json({ ok: true, match: updated.rows[0] });
+  res.json({ ok: true, challenge: updated.rows[0] });
 });
 
 module.exports = {

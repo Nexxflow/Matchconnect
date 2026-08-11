@@ -21,7 +21,12 @@ function Field({ icon: Icon, ...props }) {
 // Full profile editor — mirrors every field collected at signup (name,
 // email, phone, team name, village, year founded). Password changes are
 // handled separately (e.g. via "Forgot password"), not from this form.
-export default function EditProfileModal({ user, onClose, onSaved }) {
+//
+// NOTE: `token` must be passed in from the parent (e.g. auth.token from
+// App.jsx / wherever this modal is opened). Without it, apiRequest sends
+// the PUT with no Authorization header and the backend's authRequired
+// middleware rejects it with 401 "Missing or invalid Authorization header".
+export default function EditProfileModal({ user, token, onClose, onSaved }) {
   const [name, setName] = useState(user.name || "");
   const [email, setEmail] = useState(user.email || "");
   const [phone, setPhone] = useState(user.phone || "");
@@ -39,11 +44,16 @@ export default function EditProfileModal({ user, onClose, onSaved }) {
       setError(`Team year must be between 1900 and ${currentYear}`);
       return;
     }
+    if (!token) {
+      setError("You're not logged in. Please log in again and retry.");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const { user: updated } = await apiRequest("/auth/profile", {
         method: "PUT",
+        token,
         body: {
           name,
           email,

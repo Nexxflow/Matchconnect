@@ -1,8 +1,10 @@
-// const express = require("express");
-// const router = express.Router();
-// const { myTeam } = require("../controllers/teamsController");
-// const { authRequired } = require("../middleware/auth");
+const express = require("express");
+const router = express.Router();
+const { getMyTeam } = require("../controllers/teamsController");
+const { authRequired } = require("../middleware/auth");
 
-// router.get("/mine", authRequired, myTeam);
+router.get("/mine", authRequired, getMyTeam);
 
-// module.exports = router;
+// ...mount your existing team routes here too if this file doesn't already exist elsewhere
+
+module.exports = router;

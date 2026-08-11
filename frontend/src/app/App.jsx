@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
-import { Bell, Search, MapPin, ChevronDown, Phone, Star, CheckCircle, Car, Droplets, Wind, Hash, Plus, Filter, Shield, Swords, Trophy, AlertCircle, CheckCheck, Clock, XCircle, Calendar, Users, X, CreditCard, CalendarCheck, LogOut, Pencil,ExternalLink, Map } from "lucide-react";
+import { Bell, Search, MapPin, CalendarDays, ChevronDown, Phone, Star, CheckCircle, Car, Droplets, Wind, Hash, Plus, Filter, Shield, Swords, Trophy, AlertCircle, CheckCheck, Clock, XCircle, Calendar, Users, X, CreditCard, CalendarCheck, LogOut, Pencil, ExternalLink, Map, Award, DollarSign } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import AuthScreen from "./components/Auth/AuthScreen.jsx";
 import { apiRequest, getStoredToken, setStoredToken } from "./api";
 import LiveScoreTab from "./components/LiveScoreTab";
+import { Megaphone } from "lucide-react";
+import CreateTournamentForm from "./components/CreateTournamentForm"; 
 
 // Leaflet's default marker images don't resolve correctly with Vite's
 // bundler, so we build a small custom pin icon from an inline SVG instead
@@ -117,22 +119,7 @@ function transformUmpire(u, i) {
   return { ...u, exp: `${u.experience} yrs`, price: `₹${Number(u.fee_per_match)}/match`, avail: u.available, grad: UMPIRE_GRADIENTS[i % UMPIRE_GRADIENTS.length] };
 }
 
-const STATUS_COLOR = { Registering: "blue", Ongoing: "green", Finals: "amber", Completed: "blue" };
-function transformTournament(t) {
-  const startDate = t.start_date ? new Date(t.start_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "TBA";
-  return { ...t, statusColor: STATUS_COLOR[t.status] || "blue", teams: t.teams_count, matches: t.matches_count, completed: t.completed_count, startDate };
-}
-
-function transformBooking(b) {
-  return {
-    id: b.id,
-    type: b.booking_type,
-    name: b.booking_type === "ground" ? b.ground_name : b.umpire_name,
-    date: b.booking_date ? new Date(b.booking_date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "",
-    time: b.time_slot,
-    amount: Number(b.total_amount)
-  };
-}
+// const STATUS_COLOR = { Registering: "blue", Ongoing: "green", Finals: "amber", Completed: "blue" };
 
 // ─── Force dark body regardless of CSS cascade ────────────────────────────────
 function useForceDark() {
@@ -209,14 +196,6 @@ const GROUNDS = [
   { name: "Oval Maidan", area: "Churchgate, Mumbai", amenities: [{ icon: <Droplets className="w-3 h-3" />, label: "Showers" }, { icon: <Car className="w-3 h-3" />, label: "Parking" }], tags: [{ label: "Floodlights", color: "blue" }, { label: "Heritage", color: "amber" }, { label: "Pitches: 5", color: "green" }], price: "₹1,200/hr", rating: 4.9 },
   { name: "Azad Maidan", area: "Fort, Mumbai", amenities: [{ icon: <Car className="w-3 h-3" />, label: "Parking" }], tags: [{ label: "Budget", color: "green" }], price: "₹500/hr", rating: 4.2 }
 ];
-
-const LEAGUES = [
-  { id: "l1", name: "Bandra T20 Cup", status: "Ongoing", statusColor: "green", teams: 16, matches: 24, completed: 18, prize: "₹15,000", startDate: "Jul 8, 2026", format: "T20", venue: "Bandra Recreation Ground" },
-  { id: "l2", name: "Corporate Cricket Bash", status: "Registering", statusColor: "blue", teams: 8, matches: 14, completed: 0, prize: "Trophy", startDate: "Jul 25, 2026", format: "T20", venue: "Cross Maidan" },
-  { id: "l3", name: "Monsoon Mavericks", status: "Finals", statusColor: "amber", teams: 12, matches: 22, completed: 20, prize: "₹25,000", startDate: "Already underway", format: "ODI", venue: "Oval Maidan" }
-];
-
-const FEATURED_TOURNAMENT = { id: "featured", name: "Mumbai Premier Cricket League", status: "Registering", statusColor: "blue", teams: 24, matches: 48, completed: 0, prize: "₹50,000", startDate: "Aug 15, 2026", format: "T20", venue: "Multiple venues" };
 
 const TIME_SLOTS = ["6:00 AM", "8:00 AM", "10:00 AM", "2:00 PM", "4:00 PM", "6:00 PM"];
 
@@ -438,8 +417,8 @@ function normalizePhone(p) {
   return String(p || "").replace(/\D/g, "");
 }
 // ─── HOME ─────────────────────────────────────────────────────────────────────
-function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = ALL_CHALLENGES, tournaments = [FEATURED_TOURNAMENT, ...LEAGUES], allChallenges = [], onCreateChallenge }) {
-  // Real counts derived from actual data — no more hardcoded/inflated numbers.
+function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = ALL_CHALLENGES, tournaments = [], allChallenges = [], onCreateChallenge }) {
+// Real counts derived from actual data — no more hardcoded/inflated numbers.
   // "Matches Played" counts confirmed (accepted) challenges; "Active Teams"
   // counts distinct team names that have ever posted or accepted a challenge.
   const matchesPlayedCount = allChallenges.filter(c => c.status === "accepted").length;
@@ -2909,130 +2888,419 @@ function UmpiresTab({ umpires, onBook, token, onCreated }) {
 
 // ─── LIVE SCORE ───────────────────────────────────────────────────────────────
 
+/* Assumes `cn`, `C` (card class string), `Tag`, and `GhostButton` are already
+   available in this file's scope, exactly as in the original — only the
+   tournament-card / details / tab pieces below have changed. */
+// import { useState, useEffect } from "react";
 
-// ─── TOURNAMENTS ──────────────────────────────────────────────────────────────
-function TournamentsTab({ registeredIds, onRegister, tournaments }) {
-  const [expandedId, setExpandedId] = useState(null);
-  const [completedSteps] = useState([0, 1]);
-  const steps = ["Set tournament name & format", "Configure teams & brackets", "Set schedule & venue", "Add prize details (optional)", "Publish & invite teams"];
+/* Assumes `cn`, `C` (card class string), `Tag`, and `GhostButton` are already
+   available in this file's scope, exactly as in the original — only the
+   tournament-card / details / tab pieces below have changed. */
 
-  const allTournaments = tournaments && tournaments.length ? tournaments : [FEATURED_TOURNAMENT, ...LEAGUES];
-  const FEATURED_TOURNAMENT_LOCAL = allTournaments.find(t => t.featured) || allTournaments[0];
-  const LEAGUES_LOCAL = allTournaments.filter(t => t.id !== FEATURED_TOURNAMENT_LOCAL.id);
-  const registered = allTournaments.filter(t => registeredIds.includes(t.id));
+const STATUS_META = {
+  registering: { label: "Registering", color: "green" },
+  ongoing: { label: "Ongoing", color: "amber" },
+  completed: { label: "Completed", color: "blue" },
+  cancelled: { label: "Cancelled", color: "red" },
+};
+function statusMeta(status) {
+  return STATUS_META[status] || { label: status || "Unknown", color: "blue" };
+}
+function formatMoney(n) {
+  if (n === null || n === undefined || n === "") return "-";
+  return `₹${Number(n).toLocaleString("en-IN")}`;
+}
 
-  const toggleExpand = id => setExpandedId(prev => prev === id ? null : id);
+function TeamsRemainingBadge({ spotsLeft, maxTeams }) {
+  return (
+    <Tag color={spotsLeft === 0 ? "red" : "amber"}>
+      {spotsLeft === 0 ? "Full" : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`} · {maxTeams ?? 0} teams
+    </Tag>
+  );
+}
 
-  return <div className="space-y-8">
-      {/* Featured banner */}
-      <div className="relative rounded-2xl overflow-hidden p-6" style={{ background: "linear-gradient(135deg,#166534,rgba(22,101,52,0.5) 50%,#0d0f0d)", border: "1px solid rgba(22,101,52,0.3)" }}>
-        <Tag color="amber">🏆 Featured</Tag>
-        <h2 className="text-xl font-bold text-white mt-3">{FEATURED_TOURNAMENT_LOCAL.name}</h2>
-        <p className="text-sm mt-1" style={{ color: "rgba(187,247,208,0.7)" }}>Season 3 · {FEATURED_TOURNAMENT_LOCAL.teams} teams · {FEATURED_TOURNAMENT_LOCAL.prize} prize pool</p>
-        <div className="flex items-center gap-3 text-xs mt-2 mb-4" style={{ color: "#c8ccc8" }}>
-          <span>📅 Starts {FEATURED_TOURNAMENT_LOCAL.startDate}</span>
-          <span>·</span>
-          <span>📍 {FEATURED_TOURNAMENT_LOCAL.venue}</span>
+function PrizesSummary({ prizes }) {
+  if (!Array.isArray(prizes) || prizes.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {prizes.map((p) => (
+        <div
+          key={p.position}
+          className="flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1.5"
+          style={{ backgroundColor: "#111", border: "1px solid #2a2a2a", color: "#c8ccc8" }}
+        >
+          <Award className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span className="font-medium text-white">#{p.position}</span>
+          <span>{formatMoney(p.money)}</span>
+          {p.trophy && <span className="text-amber-400">+ trophy</span>}
         </div>
-        <div className="flex flex-wrap gap-2 mb-5">
-          <Tag color="green">{FEATURED_TOURNAMENT_LOCAL.format} Format</Tag>
-          <Tag color="blue">Open Registration</Tag>
-          <Tag color="amber">12 spots left</Tag>
+      ))}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Centered details modal (replaces the old inline expand panel)          */
+/* ---------------------------------------------------------------------- */
+
+function DetailRow({ icon: Icon, label, value }) {
+  return (
+    <div className="flex items-start gap-2.5">
+      <Icon className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: "#6b7a6b" }} />
+      <div className="min-w-0">
+        <div className="text-[10px] uppercase tracking-wide" style={{ color: "#4a5a4a" }}>
+          {label}
         </div>
-        <div className="flex flex-wrap gap-3">
-          {registeredIds.includes(FEATURED_TOURNAMENT_LOCAL.id) ? <span className="px-8 py-3 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 font-bold text-sm flex items-center gap-2">
-              <CheckCircle className="w-4 h-4" /> Registered
-            </span> : <button onClick={() => onRegister(FEATURED_TOURNAMENT_LOCAL.id)} className="px-8 py-3 rounded-xl bg-green-500 text-black font-bold text-sm hover:bg-green-400 transition-colors">
-              Register Your Team →
-            </button>}
-          <GhostButton onClick={() => toggleExpand(FEATURED_TOURNAMENT_LOCAL.id)} className="px-6">
-            {expandedId === FEATURED_TOURNAMENT_LOCAL.id ? "Hide Details" : "View Tournament"}
+        <div className="text-sm text-white truncate">{value}</div>
+      </div>
+    </div>
+  );
+}
+
+function TournamentDetailsModal({ t, onClose, isMine, roleLabel, registered, onRegister }) {
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
+
+  const maxTeams = t.max_teams ?? 0;
+  const teamCount = t.team_count ?? 0;
+  const spotsLeft = t.spots_left ?? Math.max(maxTeams - teamCount, 0);
+  const full = spotsLeft === 0;
+  const canRegister = t.status === "registering" && !full && !registered && !isMine;
+  const meta = statusMeta(t.status);
+
+  const dotColor = {
+    green: "#22c55e",
+    amber: "#f59e0b",
+    blue: "#3b82f6",
+    red: "#ef4444",
+  }[meta.color];
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-[fadeIn_.15s_ease-out]"
+      style={{ backgroundColor: "rgba(0,0,0,0.65)", backdropFilter: "blur(2px)" }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl"
+        style={{
+          backgroundColor: "#0d0f0d",
+          border: "1px solid #2a2a2a",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div
+          className="sticky top-0 z-10 px-6 pt-5 pb-4 flex items-start justify-between gap-3"
+          style={{ backgroundColor: "#0d0f0d", borderBottom: "1px solid #1c1f1c" }}
+        >
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1.5">
+              <span
+                className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                style={{ backgroundColor: `${dotColor}1a`, color: dotColor }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: dotColor }} />
+                {meta.label}
+              </span>
+              {t.format && <Tag color="blue">{t.format} Format</Tag>}
+              {isMine && <Tag color="green">{roleLabel}</Tag>}
+            </div>
+            <h2 className="text-xl font-bold text-white leading-snug truncate">{t.name}</h2>
+            <div className="text-xs mt-1 flex items-center gap-1" style={{ color: "#6b7a6b" }}>
+              <Trophy className="w-3 h-3" /> {t.creator_team_name || "Unknown organizer"}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+            style={{ color: "#6b7a6b" }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1c1f1c")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-5">
+          <div
+            className="grid grid-cols-2 gap-x-4 gap-y-4 rounded-xl p-4"
+            style={{ backgroundColor: "rgba(255,255,255,0.02)", border: "1px solid #1c1f1c" }}
+          >
+            <DetailRow icon={MapPin} label="Venue" value={t.venue || "TBD"} />
+            <DetailRow icon={CalendarDays} label="Starts" value={t.startDate || "TBD"} />
+            <DetailRow icon={Users} label="Teams" value={`${teamCount} / ${maxTeams} confirmed`} />
+            <DetailRow icon={DollarSign} label="Entry fee" value={formatMoney(t.entry_fee)} />
+            <DetailRow icon={Phone} label="Contact" value={t.phone || "-"} />
+            <DetailRow icon={Phone} label="Co-contact" value={t.co_phone || "-"} />
+          </div>
+
+          {Array.isArray(t.prizes) && t.prizes.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-sm font-semibold text-white flex items-center gap-1.5">
+                <Award className="w-3.5 h-3.5 text-amber-400" /> Prizes
+              </div>
+              <PrizesSummary prizes={t.prizes} />
+            </div>
+          )}
+
+          {t.description && (
+            <div className="space-y-2">
+              <div className="text-sm font-semibold text-white flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5" style={{ color: "#6b7a6b" }} /> Description
+              </div>
+              <p className="text-sm leading-relaxed" style={{ color: "#c8ccc8" }}>
+                {t.description}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer actions */}
+        <div
+          className="sticky bottom-0 px-6 py-4 flex gap-3"
+          style={{ backgroundColor: "#0d0f0d", borderTop: "1px solid #1c1f1c" }}
+        >
+          <GhostButton onClick={onClose} className="flex-1 text-center">
+            Close
           </GhostButton>
+          {isMine ? (
+            <span className="flex-1 py-2 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1.5"
+              style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
+              <CheckCircle className="w-3.5 h-3.5" /> {roleLabel}
+            </span>
+          ) : registered ? (
+            <span className="flex-1 py-2 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1.5"
+              style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
+              <CheckCircle className="w-3.5 h-3.5" /> Registered
+            </span>
+          ) : (
+            <button
+              onClick={() => {
+                onRegister(t.id);
+                onClose();
+              }}
+              disabled={!canRegister}
+              className="flex-1 py-2 rounded-xl text-xs font-semibold transition-colors text-green-400 hover:opacity-80 disabled:opacity-50"
+              style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}
+            >
+              {full ? "Full" : t.status !== "registering" ? meta.label : "Register"}
+            </button>
+          )}
         </div>
-        {expandedId === FEATURED_TOURNAMENT_LOCAL.id && <div className="mt-4 rounded-xl p-4 text-xs space-y-1" style={{ backgroundColor: "rgba(13,15,13,0.5)", color: "#c8ccc8" }}>
-            <div>Format: {FEATURED_TOURNAMENT_LOCAL.format} · Venue: {FEATURED_TOURNAMENT_LOCAL.venue}</div>
-            <div>Matches scheduled: {FEATURED_TOURNAMENT_LOCAL.matches} · Prize pool: {FEATURED_TOURNAMENT_LOCAL.prize}</div>
-            <div>Teams confirmed: {FEATURED_TOURNAMENT_LOCAL.teams}</div>
-          </div>}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Card                                                                    */
+/* ---------------------------------------------------------------------- */
+
+function TournamentCard({ t, isMine, roleLabel, registered, onRegister, onView }) {
+  const spotsLeft = t.spots_left ?? Math.max((t.max_teams || 0) - (t.team_count || 0), 0);
+  const full = spotsLeft === 0;
+  const canRegister = t.status === "registering" && !full && !registered && !isMine;
+
+  return (
+    <div
+      className={cn(C, "rounded-2xl p-4 transition-all duration-200 hover:border-[#3a3a3a]")}
+      style={
+        isMine
+          ? {
+              border: "1px solid rgba(34,197,94,0.35)",
+              background: "linear-gradient(135deg, rgba(22,101,52,0.12), rgba(13,15,13,0.4))",
+            }
+          : undefined
+      }
+    >
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-white text-sm truncate">{t.name}</span>
+            {isMine && <Tag color="green">{roleLabel}</Tag>}
+          </div>
+          <div className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "#6b7a6b" }}>
+            <Trophy className="w-3 h-3" /> {t.creator_team_name || "Unknown organizer"}
+          </div>
+        </div>
+        <Tag color={statusMeta(t.status).color}>{statusMeta(t.status).label}</Tag>
       </div>
 
-      {/* Active leagues */}
+      <div className="flex items-center gap-3 text-xs mb-3" style={{ color: "#c8ccc8" }}>
+        <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3" /> {t.startDate || "TBA"}</span>
+        <span style={{ color: "#3a3a3a" }}>·</span>
+        <span className="flex items-center gap-1 truncate"><MapPin className="w-3 h-3 shrink-0" /> {t.venue || "TBD"}</span>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-3">
+        {t.format && <Tag color="blue">{t.format} Format</Tag>}
+        <TeamsRemainingBadge spotsLeft={spotsLeft} maxTeams={t.max_teams} />
+      </div>
+
+      <div className="flex gap-2">
+        {isMine ? (
+          <span
+            className="flex-1 py-2 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1"
+            style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}
+          >
+            <CheckCircle className="w-3.5 h-3.5" /> {roleLabel}
+          </span>
+        ) : registered ? (
+          <span
+            className="flex-1 py-2 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1"
+            style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}
+          >
+            <CheckCircle className="w-3.5 h-3.5" /> Registered
+          </span>
+        ) : (
+          <button
+            onClick={() => onRegister(t.id)}
+            disabled={!canRegister}
+            className="flex-1 py-2 rounded-xl text-xs font-semibold transition-colors text-green-400 hover:opacity-80 disabled:opacity-50"
+            style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}
+          >
+            {full ? "Full" : t.status !== "registering" ? statusMeta(t.status).label : "Register"}
+          </button>
+        )}
+        <GhostButton onClick={onView} className="flex-1 text-center">
+          View Tournament
+        </GhostButton>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Tab                                                                     */
+/* ---------------------------------------------------------------------- */
+
+function TournamentsTab({ registeredIds, onRegister, tournaments, token, currentUser, myTeamId, onTournamentCreated }) {
+  const [viewingId, setViewingId] = useState(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+
+  const allTournaments = tournaments || [];
+  const isMine = (t) => t.creator_team_id === myTeamId || registeredIds.includes(t.id);
+  const myTournaments = allTournaments.filter(isMine);
+  const otherTournaments = allTournaments.filter((t) => !isMine(t));
+  const viewingTournament = allTournaments.find((t) => t.id === viewingId) || null;
+
+  const handleCreated = (tournament) => {
+    setShowCreateForm(false);
+    onTournamentCreated?.(tournament);
+  };
+
+  return (
+    <div className="space-y-10">
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-semibold text-white">Active Leagues</h3>
-          <button className="text-xs text-green-400">Browse all →</button>
+          <h3 className="text-base font-semibold text-white">Your Tournaments</h3>
+          {myTournaments.length > 0 && (
+            <span className="text-xs" style={{ color: "#6b7a6b" }}>
+              {myTournaments.length} active
+            </span>
+          )}
         </div>
-        <div className="space-y-3">
-          {LEAGUES_LOCAL.map(l => <div key={l.id} className={cn(C, "rounded-2xl p-4")}>
-              <div className="flex items-start justify-between gap-2 mb-3">
-                <div>
-                  <div className="font-semibold text-white text-sm">{l.name}</div>
-                  <div className="text-xs mt-0.5" style={{ color: "#6b7a6b" }}>Prize: {l.prize}</div>
-                </div>
-                <Tag color={l.statusColor}>{l.status}</Tag>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center mb-3">
-                {[{ val: l.teams, label: "Teams", color: "#22c55e" }, { val: l.matches, label: "Matches", color: "#3b82f6" }, { val: l.completed, label: "Done", color: "#f59e0b" }].map(stat => <div key={stat.label} className="rounded-xl py-2" style={{ backgroundColor: "#222", border: "1px solid #2a2a2a" }}>
-                    <div className="font-bold text-sm font-mono" style={{ color: stat.color }}>{stat.val}</div>
-                    <div className="text-xs mt-0.5" style={{ color: "#4a5a4a" }}>{stat.label}</div>
-                  </div>)}
-              </div>
-              <div className="flex gap-2">
-                {registeredIds.includes(l.id) ? <span className="flex-1 py-2 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1" style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
-                    <CheckCircle className="w-3.5 h-3.5" /> Registered
-                  </span> : <button onClick={() => onRegister(l.id)} className="flex-1 py-2 rounded-xl text-xs font-semibold transition-colors text-green-400 hover:opacity-80" style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
-                    Register
-                  </button>}
-                <GhostButton onClick={() => toggleExpand(l.id)} className="flex-1 text-center">
-                  {expandedId === l.id ? "Hide Details" : "View Tournament"}
-                </GhostButton>
-              </div>
-              {expandedId === l.id && <div className="mt-3 rounded-xl p-3 text-xs space-y-1" style={{ backgroundColor: "#111", color: "#c8ccc8", border: "1px solid #2a2a2a" }}>
-                  <div>Format: {l.format} · Venue: {l.venue}</div>
-                  <div>Starts: {l.startDate}</div>
-                </div>}
-            </div>)}
+        {myTournaments.length === 0 ? (
+          <div className={cn(C, "rounded-2xl p-6 text-center text-sm")} style={{ color: "#4a5a4a" }}>
+            You haven't organized or registered for any tournament yet.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {myTournaments.map((t) => (
+              <TournamentCard
+                key={t.id}
+                t={t}
+                isMine
+                roleLabel={t.creator_team_id === myTeamId ? "Organizing" : "Registered"}
+                registered={registeredIds.includes(t.id)}
+                onRegister={onRegister}
+                onView={() => setViewingId(t.id)}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-base font-semibold text-white">All Tournaments</h3>
+          <span className="text-xs" style={{ color: "#6b7a6b" }}>
+            {otherTournaments.length} available
+          </span>
+        </div>
+        {otherTournaments.length === 0 ? (
+          <div className={cn(C, "rounded-2xl p-6 text-center text-sm")} style={{ color: "#4a5a4a" }}>
+            No other tournaments yet.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {otherTournaments.map((t) => (
+              <TournamentCard
+                key={t.id}
+                t={t}
+                isMine={false}
+                registered={registeredIds.includes(t.id)}
+                onRegister={onRegister}
+                onView={() => setViewingId(t.id)}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <div
+          className={cn(C, "rounded-2xl p-5 flex items-center justify-between gap-4")}
+          style={{ background: "linear-gradient(135deg, rgba(34,197,94,0.06), rgba(13,15,13,0.4))" }}
+        >
+          <div>
+            <div className="text-sm font-medium text-white">Ready to run your own tournament?</div>
+            <div className="text-xs mt-1" style={{ color: "#6b7a6b" }}>
+              Set the team count, entry fee, prizes and publish in one step.
+            </div>
+          </div>
+          <button
+            onClick={() => setShowCreateForm(true)}
+            className="px-5 py-2.5 rounded-xl bg-green-500 text-black font-bold text-sm hover:bg-green-400 transition-colors shrink-0"
+          >
+            + Create Tournament
+          </button>
         </div>
       </section>
 
-      {/* Registered tournaments */}
-      <section>
-        <h3 className="text-base font-semibold text-white mb-3">Your Registered Tournaments</h3>
-        {registered.length === 0 ? <div className={cn(C, "rounded-2xl p-6 text-center text-sm")} style={{ color: "#4a5a4a" }}>
-            You haven't registered for any tournaments yet.
-          </div> : <div className="space-y-2">
-            {registered.map(t => <div key={t.id} className={cn(C, "rounded-2xl p-3 flex items-center gap-3")}>
-                <Trophy className="w-4 h-4 text-amber-400 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-white">{t.name}</div>
-                  <div className="text-xs" style={{ color: "#6b7a6b" }}>Starts {t.startDate} · {t.format}</div>
-                </div>
-                <Tag color="green">Registered</Tag>
-              </div>)}
-          </div>}
-      </section>
+      {viewingTournament && (
+        <TournamentDetailsModal
+          t={viewingTournament}
+          onClose={() => setViewingId(null)}
+          isMine={isMine(viewingTournament)}
+          roleLabel={viewingTournament.creator_team_id === myTeamId ? "Organizing" : "Registered"}
+          registered={registeredIds.includes(viewingTournament.id)}
+          onRegister={onRegister}
+        />
+      )}
 
-      {/* Create tournament steps */}
-      <section>
-        <h3 className="text-base font-semibold text-white mb-4">Create a Tournament</h3>
-        <div className={cn(C, "rounded-2xl p-5")}>
-          {steps.map((step, i) => {
-          const done = completedSteps.includes(i);
-          const active = i === completedSteps.length;
-          return <div key={step} className="flex items-start gap-4 relative">
-                {i < steps.length - 1 && <div className="absolute w-0.5 z-0" style={{ left: 15, top: 32, height: "calc(100% - 16px)", backgroundColor: done ? "rgba(34,197,94,0.4)" : "#2a2a2a" }} />}
-                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 mt-0.5 text-xs font-bold" style={{ backgroundColor: done ? "#22c55e" : "#0d0f0d", border: done ? "2px solid #22c55e" : active ? "2px solid #22c55e" : "2px solid #2a2a2a", color: done ? "#000" : active ? "#22c55e" : "#4a5a4a" }}>
-                  {done ? <CheckCircle className="w-4 h-4" /> : i + 1}
-                </div>
-                <div className={cn("flex-1", i < steps.length - 1 ? "pb-5" : "pb-0")}>
-                  <div className="text-sm font-medium" style={{ color: done ? "#4a5a4a" : active ? "#fff" : "#4a5a4a", textDecoration: done ? "line-through" : "none" }}>{step}</div>
-                  {active && <button className="mt-2 px-4 py-1.5 rounded-lg bg-green-500 text-black text-xs font-bold hover:bg-green-400 transition-colors">Start →</button>}
-                </div>
-              </div>;
-        })}
-        </div>
-      </section>
-    </div>;
+      {showCreateForm && (
+        <CreateTournamentForm
+          token={token}
+          user={currentUser}
+          tournaments={allTournaments}
+          onClose={() => setShowCreateForm(false)}
+          onCreated={handleCreated}
+        />
+      )}
+    </div>
+  );
 }
 
 // ─── MY TEAM ──────────────────────────────────────────────────────────────────
@@ -3043,27 +3311,23 @@ function ReputationRow({ label, stars, status }) {
     </div>;
 }
 
-
-
-
-
 // ─── Squad section ──────────────────────────────────────────────────────────
-// Any user who registers (or later edits their profile) with the same
-// team_name + village_name + team_year as you is automatically your
-// teammate. This section shows the shared team name up top and every
-// member's name listed underneath — no phone numbers here, those only
-// unlock once a challenge is accepted (see the section below).
-function SquadSection() {
+function SquadSection({ token, currentUserId }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [team, setTeam] = useState(null);
   const [members, setMembers] = useState([]);
 
   useEffect(() => {
+    if (!token) {
+      setLoading(false);
+      setError("You need to be logged in to view your squad.");
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
-        const data = await apiRequest("/users/teammates");
+        const data = await apiRequest("/users/teammates", { token });
         if (cancelled) return;
         setTeam(data.team);
         setMembers(data.members || []);
@@ -3073,68 +3337,50 @@ function SquadSection() {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    return () => { cancelled = true; };
+  }, [token]);
+
+  if (loading) return <div className="text-sm text-center py-8" style={{ color: "#4a5a4a" }}>Loading squad...</div>;
+  if (error) return <div className="text-sm text-center py-8" style={{ color: "#4a5a4a" }}>{error}</div>;
+
+  if (!team) {
+    return (
+      <div className="rounded-2xl p-8 text-center border border-dashed" style={{ borderColor: "#2a2a2a", backgroundColor: "#131413" }}>
+        <div className="text-4xl mb-3 opacity-60">🧑‍🤝‍🧑</div>
+        <div className="text-sm font-semibold text-white">No squad yet</div>
+        <p className="text-xs mt-1.5 max-w-[26ch] mx-auto" style={{ color: "#6b7a6b" }}>
+          Add your team name, village and the year formed in Edit Profile — anyone with the same three values is grouped with you automatically.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <section>
-      <div className="flex items-center gap-2 mb-3">
-        <Users className="w-4 h-4 text-green-400" />
-        <h3 className="text-base font-semibold text-white">Squad</h3>
+    <div className="space-y-3">
+      <div className="rounded-2xl p-4" style={{ backgroundColor: "#151715", border: "1px solid #2a2a2a" }}>
+        <div className="text-sm font-semibold text-white">{team.team_name}</div>
+        <div className="text-xs mt-0.5" style={{ color: "#6b7a6b" }}>{team.village_name} · Formed {team.team_year}</div>
+        <div className="text-xs mt-1" style={{ color: "#4a5a4a" }}>{members.length} member{members.length !== 1 ? "s" : ""}</div>
       </div>
-
-      {loading && (
-        <div className="rounded-2xl p-5 text-center text-xs" style={{ backgroundColor: "#131413", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
-          Loading squad...
-        </div>
-      )}
-
-      {!loading && error && (
-        <div className="rounded-2xl p-5 text-center text-xs" style={{ backgroundColor: "#131413", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171" }}>
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && !team && (
-        <div className="rounded-2xl p-8 text-center border border-dashed" style={{ borderColor: "#2a2a2a", backgroundColor: "#131413" }}>
-          <div className="text-4xl mb-3 opacity-60">🛡️</div>
-          <div className="text-sm font-semibold text-white">No squad yet</div>
-          <p className="text-xs mt-1.5 max-w-[28ch] mx-auto" style={{ color: "#6b7a6b" }}>
-            Add your team name, village and the year your team was formed in Edit Profile to be grouped with your teammates.
-          </p>
-        </div>
-      )}
-
-      {!loading && !error && team && (
-        <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: "#151715", border: "1px solid #2a2a2a" }}>
-          <div className="p-4 flex items-center gap-3" style={{ borderBottom: "1px solid #2a2a2a" }}>
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}>
-              <Shield className="w-4 h-4 text-green-400" />
+      <div className="rounded-2xl overflow-hidden border divide-y" style={{ borderColor: "#2a2a2a" }}>
+        {members.map(m => (
+          <div key={m.id} className="flex items-center gap-3 px-4 py-3" style={{ backgroundColor: "#161616" }}>
+            <div className="w-9 h-9 rounded-full bg-green-500/15 text-green-400 flex items-center justify-center text-xs font-bold shrink-0">
+              {m.name?.split(" ").map(w => w[0]).slice(0, 2).join("")}
             </div>
-            <div className="min-w-0">
-              <div className="text-sm font-bold text-white truncate">{team.team_name}</div>
-              <div className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "#6b7a6b" }}>
-                <MapPin className="w-3 h-3" style={{ color: "#4a5a4a" }} />
-                {team.village_name} · Est. {team.team_year}
+            <div className="min-w-0 flex-1">
+              <div className="text-sm text-white truncate flex items-center gap-1.5">
+                {m.name}
+                {m.id === currentUserId && (
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "rgba(34,197,94,0.15)", color: "#22c55e" }}>You</span>
+                )}
               </div>
+              <div className="text-xs font-mono" style={{ color: "#6b7a6b" }}>{m.phone}</div>
             </div>
           </div>
-
-          <div className="divide-y" style={{ borderColor: "#2a2a2a" }}>
-            {members.map(m => (
-              <div key={m.id} className="px-4 py-2.5 flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
-                  {m.name?.[0]?.toUpperCase() || "?"}
-                </div>
-                <span className="text-xs text-white">{m.name}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </section>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -3143,63 +3389,63 @@ function MyTeamTab({
   registeredTournaments,
   bookings,
   onCancelChallenge,
+  onDeleteChallenge,
   cancelling,
+  deleting,
   onOpenChat,
   challenges = [],
   teammatePhones = [],
   teammateIds = [],
   user,
+  token,
 }) {
   const [activeSection, setActiveSection] = useState("bookings");
   const myPhone = normalizePhone(user?.phone);
 
-  // Every phone number on my own team — me plus each teammate pulled from
-  // /users/teammates. Same construction FindMatchTab uses, so both screens
-  // agree on who counts as "my team."
   const teamPhoneSet = new Set([myPhone, ...teammatePhones].filter(Boolean));
-
-  // Every user id on my own team — me plus each teammate id. This is the
-  // reliable way to check "did anyone on my team accept/post this," since
-  // challenge rows carry creator_id/accepted_by_user_id straight from the
-  // DB, whereas phone matching can miss on formatting differences.
-  // IDs are coerced to Number so a string/number mismatch between the auth
-  // payload (e.g. JWT claims serialized as strings) and DB rows (numeric)
-  // can't silently break Set membership checks below.
   const teamIdSet = new Set(
     [user?.id, ...teammateIds]
       .filter(id => id !== undefined && id !== null)
       .map(id => Number(id))
   );
 
-  // Resolve ALL of the team's accepted matches straight from the shared
-  // challenges list first — this is what makes an accept done by ANY
-  // teammate show up here for EVERY teammate immediately, rather than only
-  // for whichever teammate's own session happens to carry the
-  // acceptedChallenge prop. A team can now have several confirmed matches
-  // at once (on different dates), so this returns ALL of them, not just one.
-  // Checks user ids first (reliable), falls back to phone number matching
-  // for older challenge rows or callers that don't pass teammateIds yet.
-  const teamAcceptedMatches = (teamIdSet.size || teamPhoneSet.size)
-    ? challenges.filter(c => {
-        if (c.status !== "accepted") return false;
-        const idMatch =
-          teamIdSet.size &&
-          (teamIdSet.has(Number(c.creator_id)) || teamIdSet.has(Number(c.accepted_by_user_id)));
-        const phoneMatch =
-          teamPhoneSet.size &&
-          (teamPhoneSet.has(normalizePhone(c.contact_no)) ||
-            teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no)));
-        return idMatch || phoneMatch;
-      })
+  const hasTeamIdentity = teamIdSet.size > 0 || teamPhoneSet.size > 0;
+
+  const isTeamCreator = c => {
+    if (teamIdSet.size && c.creator_id !== undefined && c.creator_id !== null) {
+      return teamIdSet.has(Number(c.creator_id));
+    }
+    if (teamPhoneSet.size && c.contact_no) {
+      return teamPhoneSet.has(normalizePhone(c.contact_no));
+    }
+    return false;
+  };
+
+  const isTeamAcceptor = c => {
+    if (teamIdSet.size && c.accepted_by_user_id !== undefined && c.accepted_by_user_id !== null) {
+      return teamIdSet.has(Number(c.accepted_by_user_id));
+    }
+    if (teamPhoneSet.size && c.accepted_by_contact_no) {
+      return teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no));
+    }
+    return false;
+  };
+
+  // ── Category 1: Posted Challenges ──────────────────────────────────────
+  const postedChallenges = hasTeamIdentity
+    ? challenges.filter(c => isTeamCreator(c) && (c.status === "open" || c.status === "on_hold"))
     : [];
 
-  // If the shared list hasn't loaded yet for some reason, fall back to the
-  // single acceptedChallenge prop so at least that one still shows.
-  const displayedChallenges = teamAcceptedMatches.length
-    ? teamAcceptedMatches
+  // ── Category 2: Accepted Challenges ────────────────────────────────────
+  const acceptedChallenges = hasTeamIdentity
+    ? challenges.filter(c => c.status === "accepted" && (isTeamCreator(c) || isTeamAcceptor(c)))
+    : [];
+
+  const acceptedChallengesFinal = acceptedChallenges.length
+    ? acceptedChallenges
     : (acceptedChallenge ? [acceptedChallenge] : []);
 
-  const scheduleCount = displayedChallenges.length + registeredTournaments.length;
+  const scheduleCount = postedChallenges.length + acceptedChallengesFinal.length + registeredTournaments.length;
 
   return <div className="space-y-6">
       <div className="flex gap-2">
@@ -3261,101 +3507,203 @@ function MyTeamTab({
         </div>
       )}
 
-      {activeSection === "squad" && <SquadSection />}
+      {activeSection === "squad" && <SquadSection token={token} currentUserId={user?.id} />}
 
       {activeSection === "schedule" && (
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-green-400" />
-            <h3 className="text-base font-semibold text-white">Schedule</h3>
+        <section className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-green-400" />
+              <h3 className="text-base font-semibold text-white">Schedule</h3>
+            </div>
+            {scheduleCount > 0 && (
+              <span className="text-xs font-mono px-2 py-0.5 rounded-full" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
+                {scheduleCount} upcoming
+              </span>
+            )}
           </div>
-          {scheduleCount > 0 && <span className="text-xs font-mono px-2 py-0.5 rounded-full" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
-              {scheduleCount} upcoming
-            </span>}
-        </div>
 
-        <div className="space-y-3">
-          {displayedChallenges.length === 0 && registeredTournaments.length === 0 && <div className="rounded-2xl p-8 text-center border border-dashed" style={{ borderColor: "#2a2a2a", backgroundColor: "#131413" }}>
+          {postedChallenges.length === 0 && acceptedChallengesFinal.length === 0 && registeredTournaments.length === 0 && (
+            <div className="rounded-2xl p-8 text-center border border-dashed" style={{ borderColor: "#2a2a2a", backgroundColor: "#131413" }}>
               <div className="text-4xl mb-3 opacity-60">🗓️</div>
               <div className="text-sm font-semibold text-white">Nothing on the calendar yet</div>
               <p className="text-xs mt-1.5 max-w-[26ch] mx-auto" style={{ color: "#6b7a6b" }}>
-                Accept a challenge in Find Match, or register your team for a tournament, to see it here.
+                Post or accept a challenge in Find Match, or register your team for a tournament, to see it here.
               </p>
-            </div>}
+            </div>
+          )}
 
-          {displayedChallenges.map(displayedChallenge => <div key={displayedChallenge.id} className="rounded-2xl overflow-hidden relative" style={{ backgroundColor: "#151715", border: "1px solid rgba(245,158,11,0.25)" }}>
-              <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: "linear-gradient(180deg,#f59e0b,#b45309)" }} />
-              <div className="p-4 pl-5">
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.25)" }}>
-                      <Swords className="w-4 h-4 text-amber-400" />
+          {/* ═════════ Two-card layout: Posted Challenges & Accepted Challenges ═════════ */}
+          <div className="space-y-4">
+            {/* Card 1: Posted Challenges */}
+            <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: "#151715", border: "1px solid rgba(56,189,248,0.22)" }}>
+              <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid #1e1e1e" }}>
+                <Megaphone className="w-3.5 h-3.5 text-sky-400" />
+                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: "#8fa08f" }}>Posted Challenges</h4>
+                {postedChallenges.length > 0 && (
+                  <span className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
+                    {postedChallenges.length}
+                  </span>
+                )}
+              </div>
+
+              {postedChallenges.length === 0 ? (
+                <div className="px-4 py-6 text-center">
+                  <p className="text-xs" style={{ color: "#6b7a6b" }}>No posted challenges yet</p>
+                </div>
+              ) : (
+                <div className="divide-y" style={{ borderColor: "#1e1e1e" }}>
+                  {postedChallenges.map(pc => (
+                    <div key={pc.id} className="p-4">
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-white truncate">{pc.team_name}</div>
+                          <div className="text-xs mt-0.5" style={{ color: "#6b7a6b" }}>
+                            {pc.match_date} · {pc.time_slot}
+                          </div>
+                        </div>
+                        <Tag color="sky">{pc.status === "on_hold" ? "On Hold" : "Awaiting Opponent"}</Tag>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                        <Tag color="blue">{pc.format}</Tag>
+                        <span className="text-xs flex items-center gap-1" style={{ color: "#6b7a6b" }}>
+                          <MapPin className="w-3 h-3" style={{ color: "#4a5a4a" }} />
+                          {pc.ground_name || "Ground TBD"}
+                        </span>
+                      </div>
+
+                      {pc.note && (
+                        <p className="text-xs mb-2 line-clamp-2" style={{ color: "#8fa08f" }}>{pc.note}</p>
+                      )}
+
+                      <button
+                        disabled={deleting}
+                        onClick={() => onDeleteChallenge?.(pc.id)}
+                        className="w-full py-2 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1.5"
+                        style={deleting ? { opacity: 0.6, cursor: "not-allowed" } : {}}
+                      >
+                        <XCircle className="w-3.5 h-3.5" /> {deleting ? "Withdrawing..." : "Withdraw Challenge"}
+                      </button>
                     </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-white truncate">vs {displayedChallenge.team_name}</div>
-                      <div className="text-xs mt-0.5" style={{ color: "#6b7a6b" }}>
-                        {displayedChallenge.match_date} · {displayedChallenge.time_slot}
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Card 2: Accepted Challenges */}
+            <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: "#151715", border: "1px solid rgba(245,158,11,0.25)" }}>
+              <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid #1e1e1e" }}>
+                <Swords className="w-3.5 h-3.5 text-amber-400" />
+                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: "#8fa08f" }}>Accepted Challenges</h4>
+                {acceptedChallengesFinal.length > 0 && (
+                  <span className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
+                    {acceptedChallengesFinal.length}
+                  </span>
+                )}
+              </div>
+
+              {acceptedChallengesFinal.length === 0 ? (
+                <div className="px-4 py-6 text-center">
+                  <p className="text-xs" style={{ color: "#6b7a6b" }}>No accepted challenges yet</p>
+                </div>
+              ) : (
+                <div className="divide-y" style={{ borderColor: "#1e1e1e" }}>
+                  {acceptedChallengesFinal.map(ac => {
+                    const iAmCreator = isTeamCreator(ac);
+                    const opponentName = iAmCreator ? ac.accepted_by_team_name : ac.team_name;
+                    return (
+                      <div key={ac.id} className="p-4">
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold text-white truncate">vs {opponentName}</div>
+                            <div className="text-xs mt-0.5" style={{ color: "#6b7a6b" }}>
+                              {ac.match_date} · {ac.time_slot}
+                            </div>
+                          </div>
+                          <Tag color="amber">Confirmed</Tag>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                          <Tag color="blue">{ac.format}</Tag>
+                          <span className="text-xs flex items-center gap-1" style={{ color: "#6b7a6b" }}>
+                            <MapPin className="w-3 h-3" style={{ color: "#4a5a4a" }} />
+                            {ac.ground_name || "Ground TBD"}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 mb-2">
+                          <a href={`tel:${ac.contact_no}`} className="rounded-xl p-2.5 flex items-center gap-2 transition-colors hover:bg-white/5" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}>
+                            <Phone className="w-3.5 h-3.5 text-green-400 shrink-0" />
+                            <div className="min-w-0">
+                              <div className="text-xs truncate" style={{ color: "#6b7a6b" }}>{ac.team_name}</div>
+                              <div className="text-xs font-mono text-white">{ac.contact_no}</div>
+                            </div>
+                          </a>
+                          <a href={`tel:${ac.accepted_by_contact_no}`} className="rounded-xl p-2.5 flex items-center gap-2 transition-colors hover:bg-white/5" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}>
+                            <Phone className="w-3.5 h-3.5 text-green-400 shrink-0" />
+                            <div className="min-w-0">
+                              <div className="text-xs truncate" style={{ color: "#6b7a6b" }}>{ac.accepted_by_team_name}</div>
+                              <div className="text-xs font-mono text-white">{ac.accepted_by_contact_no}</div>
+                            </div>
+                          </a>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button onClick={() => onOpenChat(ac)} className="flex-1 py-2 rounded-xl bg-green-500 text-black text-xs font-bold hover:bg-green-400 transition-colors flex items-center justify-center gap-1.5">
+                            💬 Chat
+                          </button>
+                          <button disabled={cancelling} onClick={() => onCancelChallenge(ac.id)} className="flex-1 py-2 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1.5" style={cancelling ? { opacity: 0.6, cursor: "not-allowed" } : {}}>
+                            <XCircle className="w-3.5 h-3.5" /> {cancelling ? "Cancelling..." : "Cancel Match"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ═════════ Tournaments (unchanged) ═════════ */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Trophy className="w-3.5 h-3.5 text-green-400" />
+              <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: "#8fa08f" }}>
+                Tournaments
+              </h4>
+              {registeredTournaments.length > 0 && (
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
+                  {registeredTournaments.length}
+                </span>
+              )}
+            </div>
+
+            {registeredTournaments.length === 0 ? (
+              <div className="rounded-xl p-4 text-center border border-dashed" style={{ borderColor: "#2a2a2a", backgroundColor: "#131413" }}>
+                <p className="text-xs" style={{ color: "#6b7a6b" }}>No tournament registrations yet</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {registeredTournaments.map(t => (
+                  <div key={t.id} className={cn(C, "rounded-2xl p-4 flex items-center gap-3")}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}>
+                      <Trophy className="w-4 h-4 text-green-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-white truncate">{t.name}</div>
+                      <div className="text-xs mt-0.5 truncate" style={{ color: "#6b7a6b" }}>
+                        Starts {t.startDate} · {t.format} · 📍 {t.venue}
                       </div>
                     </div>
+                    <Tag color="green">Registered</Tag>
                   </div>
-                  <Tag color="amber">Confirmed</Tag>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-1.5 mb-3">
-                  <Tag color="blue">{displayedChallenge.format}</Tag>
-                  <span className="text-xs flex items-center gap-1" style={{ color: "#6b7a6b" }}>
-                    <MapPin className="w-3 h-3" style={{ color: "#4a5a4a" }} />
-                    {displayedChallenge.ground_name || "Ground TBD"}
-                  </span>
-                </div>
-
-                {/* Phone numbers — only revealed now that both sides have agreed to play */}
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  <a href={`tel:${displayedChallenge.contact_no}`} className="rounded-xl p-2.5 flex items-center gap-2 transition-colors hover:bg-white/5" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}>
-                    <Phone className="w-3.5 h-3.5 text-green-400 shrink-0" />
-                    <div className="min-w-0">
-                      <div className="text-xs truncate" style={{ color: "#6b7a6b" }}>{displayedChallenge.team_name}</div>
-                      <div className="text-xs font-mono text-white">{displayedChallenge.contact_no}</div>
-                    </div>
-                  </a>
-                  <a href={`tel:${displayedChallenge.accepted_by_contact_no}`} className="rounded-xl p-2.5 flex items-center gap-2 transition-colors hover:bg-white/5" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}>
-                    <Phone className="w-3.5 h-3.5 text-green-400 shrink-0" />
-                    <div className="min-w-0">
-                      <div className="text-xs truncate" style={{ color: "#6b7a6b" }}>{displayedChallenge.accepted_by_team_name}</div>
-                      <div className="text-xs font-mono text-white">{displayedChallenge.accepted_by_contact_no}</div>
-                    </div>
-                  </a>
-                </div>
-
-                <div className="flex gap-2">
-                  <button onClick={() => onOpenChat(displayedChallenge)} className="flex-1 py-2 rounded-xl bg-green-500 text-black text-xs font-bold hover:bg-green-400 transition-colors flex items-center justify-center gap-1.5">
-                    💬 Chat
-                  </button>
-                  <button disabled={cancelling} onClick={() => onCancelChallenge(displayedChallenge.id)} className="flex-1 py-2 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1.5" style={cancelling ? { opacity: 0.6, cursor: "not-allowed" } : {}}>
-                    <XCircle className="w-3.5 h-3.5" /> {cancelling ? "Cancelling..." : "Cancel Match"}
-                  </button>
-                </div>
+                ))}
               </div>
-            </div>)}
-
-          {registeredTournaments.map(t => <div key={t.id} className={cn(C, "rounded-2xl p-4 flex items-center gap-3")}>
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}>
-                <Trophy className="w-4 h-4 text-green-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-white truncate">{t.name}</div>
-                <div className="text-xs mt-0.5 truncate" style={{ color: "#6b7a6b" }}>
-                  Starts {t.startDate} · {t.format} · 📍 {t.venue}
-                </div>
-              </div>
-              <Tag color="green">Registered</Tag>
-            </div>)}
-        </div>
-      </section>
+            )}
+          </div>
+        </section>
       )}
-
-      {/* ...unchanged Reputation scores + Notifications below... */}
     </div>;
 }
 
@@ -3367,21 +3715,12 @@ export default function App() {
   useForceDark();
   const [activeTab, setActiveTab] = useState("Home");
   const [autoOpenChallengeForm, setAutoOpenChallengeForm] = useState(false);
-  // Tracks HOW the person arrived at the Find Match tab, so it can show a
-  // different layout for each entry point: "create" (via the Home page's
-  // "⚡ Create Challenge" shortcut) puts the post-a-challenge form on top;
-  // "browse" (clicking the Find Match nav tab directly) puts the filter/
-  // search section on top instead, since that's what a browsing user wants.
   const [findMatchEntryMode, setFindMatchEntryMode] = useState("browse");
-  // Called from the Home hero's "Create Challenge" shortcut — jumps to Find
-  // Match AND opens the post form immediately, instead of just switching tabs.
   const goCreateChallenge = () => {
     setActiveTab("Find Match");
     setAutoOpenChallengeForm(true);
     setFindMatchEntryMode("create");
   };
-  // Used by the nav bar so any direct tab click (including re-clicking
-  // "Find Match") resets the layout back to browse mode.
   const handleNavTabClick = tab => {
     setFindMatchEntryMode("browse");
     setActiveTab(tab);
@@ -3398,75 +3737,116 @@ export default function App() {
   const [backendStatus, setBackendStatus] = useState("connecting"); // connecting | online | offline
   const [challenges, setChallenges] = useState([]);
   const [grounds, setGrounds] = useState(GROUNDS.map(g => ({ ...g }))); // fallback until API loads
-  // Umpires: live data only, no dummy fallback — starts empty and is filled
-  // from GET /api/umpires once the backend responds (see loadAppData below).
   const [umpires, setUmpires] = useState([]);
-  const [tournaments, setTournaments] = useState([FEATURED_TOURNAMENT, ...LEAGUES]);
+  const [myTeam, setMyTeam] = useState(null);
+  const [tournaments, setTournaments] = useState([]);
 
-  // Push notifications: FCM messages received while the app is in the
-  // foreground get pushed into this list and surface as the red dot on the
-  // navbar's bell icon. Backgrounded/closed-tab pushes are handled by
-  // public/firebase-messaging-sw.js instead.
   const [pushNotifications, setPushNotifications] = useState([]);
 
-  // A reset-password email link points at /reset-password/<token> — catch that
-  // before anything else so the person lands straight on the reset form, even
-  // if they're already logged in on this browser (e.g. testing your own flow,
-  // or a stale session sitting around). Reset links always take priority.
   const resetMatch = window.location.pathname.match(/^\/reset-password\/(.+)$/);
   const resetToken = resetMatch ? resetMatch[1] : null;
 
   const registeredTournaments = tournaments.filter(t => registeredIds.includes(t.id));
 
 
-const loadTeammates = async (token) => {
-  try {
-    const res = await apiRequest("/users/teammates", { token });
-    const members = res.members || [];
-    setTeammates({
-      phones: members.map(m => m.phone).filter(Boolean),
-      ids: members.map(m => m.id).filter(Boolean)
-    });
-  } catch (err) {
-    // non-fatal — team-wide match visibility just won't work until this loads
-    console.warn("Could not load teammates:", err.message);
+  function transformTournament(t) {
+  if (!t) return null;
+
+  // prizes may arrive as a JSON string (from the jsonb column) or already parsed
+  let prizes = t.prizes;
+  if (typeof prizes === "string") {
+    try { prizes = JSON.parse(prizes); } catch { prizes = []; }
   }
-};
 
-const loadAppData = async (token, user) => {
-  try {
-    const [groundsRes, umpiresRes, tournamentsRes, challengesRes] = await Promise.all([
-      apiRequest("/grounds"),
-      apiRequest("/umpires"),
-      apiRequest("/tournaments"),
-      apiRequest("/challenges")
-    ]);
-    setGrounds(groundsRes.grounds.map(transformGround));
-    setUmpires(umpiresRes.umpires.map(transformUmpire));
-    setTournaments(tournamentsRes.tournaments.map(transformTournament));
+  const maxTeams = t.max_teams ?? 0;
+  const teamCount = t.team_count ?? 0;
 
-    const allChallenges = challengesRes.challenges || [];
-    setChallenges(allChallenges);
+  return {
+    ...t,
+    startDate: t.start_date ?? t.startDate ?? null, // normalize snake_case -> camelCase
+    prizes: Array.isArray(prizes) ? prizes : [],
+    max_teams: maxTeams,
+    team_count: teamCount,
+    spots_left: t.spots_left ?? Math.max(maxTeams - teamCount, 0),
+  };
+}
 
-    const myPhone = normalizePhone(user?.phone);
-    const myActive = myPhone
-      ? allChallenges.find(
-          c =>
-            c.status === "accepted" &&
-            (normalizePhone(c.contact_no) === myPhone ||
-              normalizePhone(c.accepted_by_contact_no) === myPhone)
-        )
-      : null;
-    setAcceptedChallenge(myActive || null);
+  const loadTeammates = async (token) => {
+    try {
+      const res = await apiRequest("/users/teammates", { token });
+      const members = res.members || [];
+      setTeammates({
+        phones: members.map(m => m.phone).filter(Boolean),
+        ids: members.map(m => m.id).filter(Boolean)
+      });
+    } catch (err) {
+      console.warn("Could not load teammates:", err.message);
+    }
+  };
 
-    setBackendStatus("online");
-    refreshBookings(token);
-    loadTeammates(token); // ← add this
-  } catch (err) {
-    console.warn("Backend unavailable, using demo data:", err.message);
-    setBackendStatus("offline");
-  }
-};
+  // FIXED: moved inside App() so these close over the component's own
+  // setMyTeam / setRegisteredIds / setTournaments — they used to live at
+  // module scope with a stray top-level useState(), which crashed the app
+  // with "Invalid hook call" / "Cannot read properties of null (reading
+  // 'useState')" since hooks can only run inside a function component.
+  const loadMyTeamAndRegistrations = async (token) => {
+    try {
+      const teamRes = await apiRequest("/teams/mine", { token });
+      const team = teamRes.team || null;
+      setMyTeam(team);
+      if (team) {
+        const res = await apiRequest(`/tournaments/mine/${team.id}`, { token });
+        setRegisteredIds((res.tournaments || []).map(t => t.id));
+      }
+    } catch (err) {
+      console.warn("Could not load team/tournament registrations:", err.message);
+    }
+  };
+
+  const refreshTournaments = async () => {
+    try {
+      const res = await apiRequest("/tournaments");
+      setTournaments(res.tournaments.map(transformTournament));
+    } catch (err) {
+      console.warn("Could not refresh tournaments:", err.message);
+    }
+  };
+
+  const loadAppData = async (token, user) => {
+    try {
+      const [groundsRes, umpiresRes, tournamentsRes, challengesRes] = await Promise.all([
+        apiRequest("/grounds"),
+        apiRequest("/umpires"),
+        apiRequest("/tournaments"),
+        apiRequest("/challenges",{token})
+      ]);
+      setGrounds(groundsRes.grounds.map(transformGround));
+      setUmpires(umpiresRes.umpires.map(transformUmpire));
+      setTournaments(tournamentsRes.tournaments.map(transformTournament));
+
+      const allChallenges = challengesRes.challenges || [];
+      setChallenges(allChallenges);
+
+      const myPhone = normalizePhone(user?.phone);
+      const myActive = myPhone
+        ? allChallenges.find(
+            c =>
+              c.status === "accepted" &&
+              (normalizePhone(c.contact_no) === myPhone ||
+                normalizePhone(c.accepted_by_contact_no) === myPhone)
+          )
+        : null;
+      setAcceptedChallenge(myActive || null);
+
+      setBackendStatus("online");
+      loadMyTeamAndRegistrations(token);
+      refreshBookings(token);
+      loadTeammates(token);
+    } catch (err) {
+      console.warn("Backend unavailable, using demo data:", err.message);
+      setBackendStatus("offline");
+    }
+  };
 
   const refreshBookings = async token => {
     try {
@@ -3477,40 +3857,39 @@ const loadAppData = async (token, user) => {
     }
   };
 
-  // Ask the browser for notification permission, grab the FCM registration
-  // token, and hand it to the backend so pushes can be targeted at this
-  // user/device. Safe to call repeatedly — if permission was already
-  // granted, requestNotificationPermission just resolves with the same
-  // token again instead of re-prompting.
   const registerPushNotifications = async (token) => {
-  try {
-    console.log("Starting FCM registration...");
+    try {
+      console.log("Starting FCM registration...");
 
-    const fcmToken = await requestNotificationPermission();
+      const fcmToken = await requestNotificationPermission();
 
-    console.log("Generated FCM Token:", fcmToken);
+      console.log("Generated FCM Token:", fcmToken);
 
-    if (!fcmToken) {
-      console.log("No FCM token generated");
-      return;
+      if (!fcmToken) {
+        console.log("No FCM token generated");
+        return;
+      }
+
+      const response = await apiRequest("/notifications/save-token", {
+        method: "POST",
+        token,
+        body: { token: fcmToken },
+      });
+
+      console.log("Save token response:", response);
+    } catch (err) {
+      console.error("FCM Registration Error:", err);
     }
+  };
 
-    const response = await apiRequest("/notifications/save-token", {
-      method: "POST",
-      token,
-      body: { token: fcmToken },
-    });
+  useEffect(() => {
+    if (!auth.token) return;
+    const interval = setInterval(() => {
+      refreshTournaments();
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [auth.token]);
 
-    console.log("Save token response:", response);
-  } catch (err) {
-    console.error("FCM Registration Error:", err);
-  }
-};
-
-  // Listen for foreground FCM messages for the lifetime of the app (not
-  // tied to auth state, since Firebase itself gates delivery by token).
-  // Incoming pushes are appended to pushNotifications, which lights up the
-  // bell icon in the navbar.
   useEffect(() => {
     let unsubscribe;
     (async () => {
@@ -3532,142 +3911,147 @@ const loadAppData = async (token, user) => {
     };
   }, []);
 
-  // Try to restore a session from a previously stored token on first load.
-  // Skipped entirely when a reset-password link brought us here — we don't
-  // want a valid session silently hiding the reset form.
   useEffect(() => {
-  if (resetToken) {
-    setAuthChecked(true);
-    return;
-  }
-  let cancelled = false;
-  (async () => {
-    const token = getStoredToken();
-    if (!token) {
+    if (resetToken) {
       setAuthChecked(true);
       return;
     }
-    try {
-      const { user } = await apiRequest("/auth/me", { token });
-      if (cancelled) return;
-      setAuth({ token, user });
-      loadAppData(token, user); // ← pass user through
-      registerPushNotifications(token); // ← ask for push permission + save FCM token
-    } catch {
-      setStoredToken(null);
-    } finally {
-      if (!cancelled) setAuthChecked(true);
-    }
-  })();
-  return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+    let cancelled = false;
+    (async () => {
+      const token = getStoredToken();
+      if (!token) {
+        setAuthChecked(true);
+        return;
+      }
+      try {
+        const { user } = await apiRequest("/auth/me", { token });
+        if (cancelled) return;
+        setAuth({ token, user });
+        loadAppData(token, user);
+        registerPushNotifications(token);
+      } catch {
+        setStoredToken(null);
+      } finally {
+        if (!cancelled) setAuthChecked(true);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-const handleAuthSuccess = (user, token) => {
-  setStoredToken(token);
-  setAuth({ token, user });
-  loadAppData(token, user); // ← pass user through
-  registerPushNotifications(token); // ← ask for push permission + save FCM token
-};
-  
+  const handleAuthSuccess = (user, token) => {
+    setStoredToken(token);
+    setAuth({ token, user });
+    loadAppData(token, user);
+    registerPushNotifications(token);
+  };
 
   const handleLogout = async () => {
-  // Best-effort: tell the backend to stop targeting this device with pushes.
-  // Non-fatal if it fails — we still want the local logout to proceed.
-  try {
-    if (auth.token) {
-      await apiRequest("/notifications/clear-token", { method: "POST", token: auth.token });
+    try {
+      if (auth.token) {
+        await apiRequest("/notifications/clear-token", { method: "POST", token: auth.token });
+      }
+    } catch (err) {
+      console.warn("Could not clear FCM token on logout:", err.message);
     }
-  } catch (err) {
-    console.warn("Could not clear FCM token on logout:", err.message);
-  }
-  setStoredToken(null);
-  setAuth({ token: null, user: null });
-  setBookings([]);
-  setTeammates({ phones: [], ids: [] }); // ← add this
-  setActiveTab("Home");
-};
+    setStoredToken(null);
+    setAuth({ token: null, user: null });
+    setBookings([]);
+    setTeammates({ phones: [], ids: [] });
+    setActiveTab("Home");
+  };
 
-  // Called after AcceptChallengeModal successfully hits POST /challenges/:id/accept
-const handleChallengeAccepted = (updatedChallenge) => {
-  setChallenges(prev => prev.map(c => c.id === updatedChallenge.id ? updatedChallenge : c));
-  setAcceptedChallenge(updatedChallenge);
-};
+  const handleChallengeAccepted = (updatedChallenge) => {
+    setChallenges(prev => prev.map(c => c.id === updatedChallenge.id ? updatedChallenge : c));
+    setAcceptedChallenge(updatedChallenge);
+  };
 
-const handleCancelAcceptedChallenge = async () => {
-  if (!acceptedChallenge || !auth.token) return;
-  setCancellingChallenge(true);
-  try {
-    const res = await apiRequest(`/challenges/${acceptedChallenge.id}/cancel`, { method: "POST", token: auth.token });
-    setChallenges(prev => prev.map(c => c.id === res.challenge.id ? res.challenge : c));
-    setAcceptedChallenge(null);
-  } catch (err) {
-    console.error("Could not cancel challenge:", err.message);
-  } finally {
-    setCancellingChallenge(false);
-  }
-};
-  const handleRegister = id => setRegisteredIds(prev => prev.includes(id) ? prev : [...prev, id]);
+  const handleCancelAcceptedChallenge = async () => {
+    if (!acceptedChallenge || !auth.token) return;
+    setCancellingChallenge(true);
+    try {
+      const res = await apiRequest(`/challenges/${acceptedChallenge.id}/cancel`, { method: "POST", token: auth.token });
+      setChallenges(prev => prev.map(c => c.id === res.challenge.id ? res.challenge : c));
+      setAcceptedChallenge(null);
+    } catch (err) {
+      console.error("Could not cancel challenge:", err.message);
+    } finally {
+      setCancellingChallenge(false);
+    }
+  };
+
+  const handleRegisterTournament = async (tournamentId) => {
+    if (!auth.token) return;
+    if (!myTeam) {
+      alert("You need a registered team before joining a tournament. Add your team details in Edit Profile first.");
+      return;
+    }
+    try {
+      const res = await apiRequest(`/tournaments/${tournamentId}/register`, {
+        method: "POST",
+        token: auth.token,
+        body: { team_id: myTeam.id },
+      });
+      setRegisteredIds(prev => (prev.includes(tournamentId) ? prev : [...prev, tournamentId]));
+      if (res.tournament) {
+        setTournaments(prev => prev.map(t => (t.id === tournamentId ? transformTournament(res.tournament) : t)));
+      } else {
+        refreshTournaments();
+      }
+    } catch (err) {
+      alert(err.message || "Could not register for this tournament.");
+    }
+  };
   const handleBookingConfirm = () => { if (auth.token) refreshBookings(auth.token); };
-  // A freshly created umpire/scorer (from the form in UmpiresTab) is added to
-  // the front of the live list right away, so the person sees it without
-  // needing a manual refresh or a second round-trip to the backend.
   const handleUmpireCreated = raw => setUmpires(prev => [transformUmpire(raw, prev.length), ...prev]);
 
-//   const handleGroundCreated = (newGround) => {
-//   setGrounds(prev => [newGround, ...prev]);
-// };
+  const handleTournamentCreated = (newTournament) => {
+    setTournaments(prev => [transformTournament(newTournament), ...prev]);
+  };
 
+  const handleGroundCreated = (newGround) => {
+    setGrounds(prev => [transformGround(newGround), ...prev]);
+  };
 
-const handleGroundCreated = (newGround) => {
-  setGrounds(prev => [transformGround(newGround), ...prev]);
-};
+  const handleGroundUpdated = (updatedGround) => {
+    const t = transformGround(updatedGround);
+    setGrounds(prev => prev.map(g => g.id === t.id ? t : g));
+  };
 
-const handleGroundUpdated = (updatedGround) => {
-  const t = transformGround(updatedGround);
-  setGrounds(prev => prev.map(g => g.id === t.id ? t : g));
-};
+  const handleGroundDeleted = (id) => {
+    setGrounds(prev => prev.filter(g => g.id !== id));
+  };
 
-const handleGroundDeleted = (id) => {
-  setGrounds(prev => prev.filter(g => g.id !== id));
-};
+  const handleChallengeCreated = (newChallenge) => {
+    setChallenges(prev => [newChallenge, ...prev]);
+  };
 
+  const handleChallengeDeleted = (id) => {
+    setChallenges(prev => prev.filter(c => c.id !== id));
+  };
 
-const handleChallengeCreated = (newChallenge) => {
-  setChallenges(prev => [newChallenge, ...prev]);
-};
-
-const handleChallengeDeleted = (id) => {
-  setChallenges(prev => prev.filter(c => c.id !== id));
-};
-
-  // Reset-password link takes priority over everything else, including an
-  // already-authenticated session. Render it immediately — no need to wait
-  // on authChecked since we skip the session-restore fetch above anyway.
   if (resetToken) {
     return <AuthScreen onAuthSuccess={handleAuthSuccess} resetToken={resetToken} initialMode="reset" />;
   }
 
-  // Still resolving whether a stored session is valid — avoid a flash of the login screen.
   if (!authChecked) {
     return <div style={{ minHeight: "100vh", backgroundColor: "#0d0f0d" }} />;
   }
 
-  // Not logged in: show the auth screen, nothing else in the app renders until this succeeds.
   if (!auth.user) {
     return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
   }
 
   const content = {
-  "Home": <HomeTab
-  setActiveTab={setActiveTab}
-  grounds={grounds}
-  tournaments={tournaments}
-  challenges={challenges.filter(c => c.status === "open").map(normalizeChallenge)}
-  allChallenges={challenges}
-  onCreateChallenge={goCreateChallenge}
-/>,
-  "Find Match": <FindMatchTab
+    "Home": <HomeTab
+      setActiveTab={setActiveTab}
+      grounds={grounds}
+      tournaments={tournaments}
+      challenges={challenges.filter(c => c.status === "open").map(normalizeChallenge)}
+      allChallenges={challenges}
+      onCreateChallenge={goCreateChallenge}
+    />,
+    "Find Match": <FindMatchTab
   acceptedChallenge={acceptedChallenge}
   onChallengeAccepted={handleChallengeAccepted}
   token={auth.token}
@@ -3675,29 +4059,39 @@ const handleChallengeDeleted = (id) => {
   challenges={challenges}
   onChallengeCreated={handleChallengeCreated}
   onChallengeDeleted={handleChallengeDeleted}
+  teammatePhones={teammates.phones}  
+  teammateIds={teammates.ids}         
   autoOpenForm={autoOpenChallengeForm}
   onAutoOpenHandled={() => setAutoOpenChallengeForm(false)}
   entryMode={findMatchEntryMode}
 />,
-  "Grounds": <GroundsTab
-  grounds={grounds}
-  token={auth.token}
-  user={auth.user}
-  teammateIds={teammates.ids}
-  onGroundCreated={handleGroundCreated}
-  onGroundUpdated={handleGroundUpdated}
-  onGroundDeleted={handleGroundDeleted}
-  onBook={g => setBookingModal({ type: "ground", item: g })}
-/>,
-  "Umpires": <UmpiresTab
-    umpires={umpires}
-    token={auth.token}
-    onCreated={handleUmpireCreated}
-    onBook={u => setBookingModal({ type: "umpire", item: u })}
-  />,
-  "Live Score": <LiveScoreTab/>,
-  "Tournaments": <TournamentsTab tournaments={tournaments} registeredIds={registeredIds} onRegister={handleRegister} />,
-  "My Team": <MyTeamTab
+    "Grounds": <GroundsTab
+      grounds={grounds}
+      token={auth.token}
+      user={auth.user}
+      teammateIds={teammates.ids}
+      onGroundCreated={handleGroundCreated}
+      onGroundUpdated={handleGroundUpdated}
+      onGroundDeleted={handleGroundDeleted}
+      onBook={g => setBookingModal({ type: "ground", item: g })}
+    />,
+    "Umpires": <UmpiresTab
+      umpires={umpires}
+      token={auth.token}
+      onCreated={handleUmpireCreated}
+      onBook={u => setBookingModal({ type: "umpire", item: u })}
+    />,
+    "Live Score": <LiveScoreTab/>,
+    "Tournaments": <TournamentsTab
+      tournaments={tournaments}
+      registeredIds={registeredIds}
+      onRegister={handleRegisterTournament}
+      token={auth.token}
+      currentUser={auth.user}
+      myTeamId={myTeam?.id}
+      onTournamentCreated={handleTournamentCreated}
+    />,
+    "My Team": <MyTeamTab
   acceptedChallenge={acceptedChallenge}
   registeredTournaments={registeredTournaments}
   bookings={bookings}
@@ -3708,22 +4102,23 @@ const handleChallengeDeleted = (id) => {
   teammatePhones={teammates.phones}
   teammateIds={teammates.ids}
   user={auth.user}
+  token={auth.token}   // ← add this
 />
-};
+  };
 
   return <div style={{ minHeight: "100vh", backgroundColor: "#0d0f0d", fontFamily: "Inter, sans-serif" }}>
       <Navbar
-  active={activeTab}
-  setActive={handleNavTabClick}
-  user={auth.user}
-  onLogout={handleLogout}
-  token={auth.token}
-  pushCount={pushNotifications.length}
- onUserUpdated={updatedUser => {
-  setAuth(prev => ({ ...prev, user: updatedUser }));
-  if (auth.token) loadTeammates(auth.token);
-}}
-/>
+        active={activeTab}
+        setActive={handleNavTabClick}
+        user={auth.user}
+        onLogout={handleLogout}
+        token={auth.token}
+        pushCount={pushNotifications.length}
+        onUserUpdated={updatedUser => {
+          setAuth(prev => ({ ...prev, user: updatedUser }));
+          if (auth.token) loadTeammates(auth.token);
+        }}
+      />
       {backendStatus === "offline" && <div className="max-w-3xl mx-auto px-4 pt-3">
           <div className="rounded-xl px-3 py-2 text-xs text-amber-400 flex items-center gap-2" style={{ backgroundColor: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)" }}>
             <AlertCircle className="w-3.5 h-3.5 shrink-0" /> Backend not reachable at localhost:8000 — showing demo data. Bookings won't save until the server is running.
@@ -3734,14 +4129,14 @@ const handleChallengeDeleted = (id) => {
       </main>
       {bookingModal && <BookingModal type={bookingModal.type} item={bookingModal.item} token={auth.token} onClose={() => setBookingModal(null)} onConfirm={handleBookingConfirm} />}
       {chatChallenge && (
-  <ChatModal
-    challenge={{
-      ...chatChallenge,
-      myTeamName: chatChallenge.creator_id === auth.user.id ? chatChallenge.team_name : chatChallenge.accepted_by_team_name
-    }}
-    token={auth.token}
-    onClose={() => setChatChallenge(null)}
-  />
-)}
+        <ChatModal
+          challenge={{
+            ...chatChallenge,
+            myTeamName: chatChallenge.creator_id === auth.user.id ? chatChallenge.team_name : chatChallenge.accepted_by_team_name
+          }}
+          token={auth.token}
+          onClose={() => setChatChallenge(null)}
+        />
+      )}
       </div>;
 }
