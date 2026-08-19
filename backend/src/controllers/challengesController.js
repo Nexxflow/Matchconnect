@@ -186,9 +186,79 @@ const cancelChallenge = asyncHandler(async (req, res) => {
   res.json({ ok: true, challenge: updated.rows[0] });
 });
 
+// ============================================================
+// PUT /api/challenges/:id
+// Update a challenge post (only by creator, only while open/on_hold).
+// Body: { team_name, contact_no, format, overs, match_date, time_slot,
+//         ground_id, ground_name, note }
+// ============================================================
+const updateChallenge = asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: "Not authenticated" });
+  const { id } = req.params;
+
+  const cRes = await pool.query(`SELECT * FROM challenges WHERE id = $1`, [id]);
+  if (cRes.rows.length === 0) return res.status(404).json({ error: "Challenge not found" });
+  const challenge = cRes.rows[0];
+
+  if (challenge.creator_id !== userId) {
+    return res.status(403).json({ error: "Only the challenge creator can edit it" });
+  }
+
+  const {
+    team_name,
+    contact_no,
+    format,
+    overs = null,
+    match_date,
+    time_slot,
+    ground_id = null,
+    ground_name = null,
+    note = null,
+  } = req.body;
+
+  if (!team_name || !contact_no || !format || !match_date || !time_slot) {
+    return res.status(400).json({
+      error: "team_name, contact_no, format, match_date and time_slot are required",
+    });
+  }
+
+  // Check conflict with other active challenges on same date for this team contact (excluding current challenge)
+  const conflict = await pool.query(
+    `SELECT id FROM challenges
+     WHERE (contact_no = $1 OR accepted_by_contact_no = $1)
+       AND match_date = $2
+       AND status IN ('open', 'on_hold', 'accepted')
+       AND id != $3`,
+    [contact_no, match_date, id]
+  );
+  if (conflict.rows.length > 0) {
+    return res.status(400).json({ error: "Your team already has another active challenge on this date" });
+  }
+
+  const updated = await pool.query(
+    `UPDATE challenges
+     SET team_name = $1,
+         contact_no = $2,
+         format = $3,
+         overs = $4,
+         match_date = $5,
+         time_slot = $6,
+         ground_id = $7,
+         ground_name = $8,
+         note = $9
+     WHERE id = $10
+     RETURNING *`,
+    [team_name, contact_no, format, overs, match_date, time_slot, ground_id, ground_name, note, id]
+  );
+
+  res.json({ ok: true, challenge: updated.rows[0] });
+});
+
 module.exports = {
   listChallenges,
   createChallenge,
+  updateChallenge,
   deleteChallenge,
   acceptChallenge,
   cancelChallenge,

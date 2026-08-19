@@ -68,7 +68,7 @@ function Section({ icon: Icon, title, children }) {
  *     onTournamentCreated={handleTournamentCreated}
  *   />
  */
-export default function CreateTournamentForm({ token, user, tournaments = [], onClose, onCreated }) {
+export default function CreateTournamentForm({ token, user, tournaments = [], initialTournament = null, onClose, onCreated, onUpdated, onDeleted }) {
   const [myTeam, setMyTeam] = useState(null); // { id, name } | null, fetched from GET /teams/mine
   const [loadingTeam, setLoadingTeam] = useState(true);
 
@@ -90,40 +90,45 @@ export default function CreateTournamentForm({ token, user, tournaments = [], on
   }, [token]);
 
   // A team can only run one tournament (registering/ongoing) at a time.
-  // The team keeps organizing it until it's marked completed or cancelled.
-  const myActiveTournament = myTeam
+  const myActiveTournament = myTeam && !initialTournament
     ? tournaments.find(
         (t) => t.creator_team_id === myTeam.id && (t.status === "registering" || t.status === "ongoing")
       )
     : null;
 
   const [form, setForm] = useState({
-    name: "",
-    maxTeams: 8,
-    includeOwnTeam: true,
-    phone: user?.phone || "",
-    coPhone: "",
-    entryFee: "",
-    description: "",
-    venue: "",
-    startDate: "",
+    name: initialTournament?.name || "",
+    maxTeams: initialTournament?.max_teams || 8,
+    includeOwnTeam: initialTournament ? !!initialTournament.creator_included : true,
+    phone: initialTournament?.phone || user?.phone || "",
+    coPhone: initialTournament?.co_phone || "",
+    entryFee: initialTournament?.entry_fee ?? "",
+    description: initialTournament?.description || "",
+    venue: initialTournament?.venue || "",
+    startDate: initialTournament?.start_date ? initialTournament.start_date.split("T")[0] : "",
   });
 
-  const [prizeCount, setPrizeCount] = useState(1);
+  const parsedPrizes = Array.isArray(initialTournament?.prizes)
+    ? initialTournament.prizes
+    : typeof initialTournament?.prizes === "string"
+    ? JSON.parse(initialTournament.prizes || "[]")
+    : [];
+
+  const [prizeCount, setPrizeCount] = useState(parsedPrizes.length > 0 ? parsedPrizes.length : 1);
   const [prizes, setPrizes] = useState([
-    { position: 1, money: "", trophy: true },
-    { position: 2, money: "", trophy: false },
-    { position: 3, money: "", trophy: false },
+    { position: 1, money: parsedPrizes[0]?.money ?? "", trophy: parsedPrizes[0]?.trophy ?? true },
+    { position: 2, money: parsedPrizes[1]?.money ?? "", trophy: parsedPrizes[1]?.trophy ?? false },
+    { position: 3, money: parsedPrizes[2]?.money ?? "", trophy: parsedPrizes[2]?.trophy ?? false },
   ]);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!loadingTeam && !myTeam) {
+    if (!loadingTeam && !myTeam && !initialTournament) {
       setForm((f) => ({ ...f, includeOwnTeam: false }));
     }
-  }, [loadingTeam, myTeam]);
+  }, [loadingTeam, myTeam, initialTournament]);
 
   const update = (field, value) => setForm((f) => ({ ...f, [field]: value }));
   const updatePrize = (idx, field, value) =>
@@ -136,7 +141,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], on
     if (!form.name.trim()) return "Tournament name is required";
     const maxTeams = parseInt(form.maxTeams, 10);
     if (!Number.isInteger(maxTeams) || maxTeams < 2) return "Number of teams must be at least 2";
-    if (form.includeOwnTeam && !myTeam) return "You don't have a team registered — turn off 'include my team', or register a team first";
+    if (form.includeOwnTeam && !myTeam && !initialTournament) return "You don't have a team registered — turn off 'include my team', or register a team first";
     for (let i = 0; i < prizeCount; i++) {
       if (prizes[i].money === "" || Number(prizes[i].money) < 0) {
         return `Enter a prize amount for position ${i + 1}`;
@@ -153,7 +158,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], on
       return;
     }
     if (!token) {
-      setError("You need to be logged in to create a tournament.");
+      setError("You need to be logged in.");
       return;
     }
     setError(null);
@@ -176,15 +181,39 @@ export default function CreateTournamentForm({ token, user, tournaments = [], on
         })),
       };
 
-      const res = await apiRequest("/tournaments", {
-        method: "POST",
-        token,
-        body: payload,
-      });
-
-      onCreated?.(res.tournament || res);
+      if (initialTournament) {
+        const res = await apiRequest(`/tournaments/${initialTournament.id}`, {
+          method: "PUT",
+          token,
+          body: payload,
+        });
+        onUpdated?.(res.tournament || res);
+      } else {
+        const res = await apiRequest("/tournaments", {
+          method: "POST",
+          token,
+          body: payload,
+        });
+        onCreated?.(res.tournament || res);
+      }
     } catch (err) {
-      setError(err.message || "Failed to create tournament");
+      setError(err.message || "Failed to save tournament");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!initialTournament?.id || !token) return;
+    if (!window.confirm("Are you sure you want to delete this tournament?")) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await apiRequest(`/tournaments/${initialTournament.id}`, { method: "DELETE", token });
+      onDeleted?.(initialTournament.id);
+      onClose?.();
+    } catch (err) {
+      setError(err.message || "Failed to delete tournament");
     } finally {
       setSubmitting(false);
     }
@@ -206,7 +235,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], on
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-white">Create a Tournament</h2>
+          <h2 className="text-lg font-bold text-white">{initialTournament ? "Edit Tournament" : "Create a Tournament"}</h2>
           <button onClick={onClose} className="text-[#6b7a6b] hover:text-white transition-colors">
             <X className="w-5 h-5" />
           </button>
@@ -423,6 +452,16 @@ export default function CreateTournamentForm({ token, user, tournaments = [], on
           )}
 
           <div className="flex gap-3">
+            {initialTournament && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={submitting}
+                className="py-2.5 px-4 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 font-bold text-sm hover:bg-red-500/20 transition-colors"
+              >
+                Delete
+              </button>
+            )}
             <GhostButton onClick={onClose} className="flex-1 text-center">
               Cancel
             </GhostButton>
@@ -432,7 +471,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], on
               className="flex-1 py-2.5 rounded-xl bg-green-500 text-black font-bold text-sm hover:bg-green-400 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-              {submitting ? "Publishing..." : "Publish Tournament"}
+              {submitting ? (initialTournament ? "Saving..." : "Publishing...") : (initialTournament ? "Save Changes" : "Publish Tournament")}
             </button>
           </div>
         </form>

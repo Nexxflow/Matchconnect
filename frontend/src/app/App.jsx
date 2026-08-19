@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Bell, Search, MapPin, CalendarDays, ChevronDown, Phone, Star, CheckCircle, Car, Droplets, Wind, Hash, Plus, Filter, Shield, Swords, Trophy, AlertCircle, CheckCheck, Clock, XCircle, Calendar, Users, X, CreditCard, CalendarCheck, LogOut, Pencil, ExternalLink, Map, Award, DollarSign } from "lucide-react";
+import { Bell, Search, MapPin, CalendarDays, ChevronDown, Phone, Star, CheckCircle, Car, Droplets, Wind, Hash, Plus, Filter, Shield, Swords, Trophy, AlertCircle, CheckCheck, Clock, XCircle, Calendar, Users, X, CreditCard, CalendarCheck, LogOut, Pencil, Trash2, ExternalLink, Map, Award, DollarSign } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -2455,6 +2455,34 @@ function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundCreated, onGroun
                   {availableNow ? "Book Now" : "Unavailable"}
                 </button>
                 <GhostButton className="flex-1 text-center" onClick={() => { setSelectedGround(g); setShowMap(false); }}>View Details</GhostButton>
+                {isOwnedByMyTeam(g) && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setEditingGround(g)}
+                      title="Edit Ground"
+                      className="px-3 py-2 rounded-xl text-xs font-bold transition-colors text-gray-300 hover:text-white bg-[#252525] hover:bg-[#333]"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!window.confirm("Delete this ground?")) return;
+                        try {
+                          await apiRequest(`/grounds/${g.id}`, { method: "DELETE", token });
+                          onGroundDeleted?.(g.id);
+                        } catch (err) {
+                          alert(err.message || "Could not delete ground");
+                        }
+                      }}
+                      title="Delete Ground"
+                      className="px-3 py-2 rounded-xl text-xs font-bold transition-colors text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                )}
               </div>
             </div>;
           })}
@@ -2575,15 +2603,16 @@ function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundCreated, onGroun
 // POST /api/umpires (auth required) so a real record gets created and shows
 // up immediately in the list.
 
-function UmpireForm({ token, onCreated }) {
+function UmpireForm({ token, onCreated, onUpdated, onDeleted, initialUmpire = null, onClose }) {
+  const editing = !!initialUmpire;
   const emptyForm = {
-    name: "",
-    mobile: "",
-    role: "Umpire",
-    experience: "",
-    fee_per_match: ""
+    name: initialUmpire?.name || "",
+    mobile: initialUmpire?.mobile || "",
+    role: initialUmpire?.role || "Umpire",
+    experience: initialUmpire?.experience !== undefined && initialUmpire?.experience !== null ? String(initialUmpire.experience) : "",
+    fee_per_match: initialUmpire?.fee_per_match !== undefined && initialUmpire?.fee_per_match !== null ? String(initialUmpire.fee_per_match) : (initialUmpire?.price ? String(initialUmpire.price).replace(/[^0-9.]/g, "") : "")
   };
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(editing);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -2597,14 +2626,13 @@ function UmpireForm({ token, onCreated }) {
     if (!form.name.trim()) return setError("Name is required.");
     if (!/^[0-9]{10,15}$/.test(form.mobile.trim())) return setError("Enter a valid mobile number (10-15 digits).");
     if (!form.fee_per_match || Number(form.fee_per_match) <= 0) return setError("Fee per match must be greater than 0.");
-    if (form.experience !== "" &&
-    Number(form.experience) < 0) return setError("Experience can't be negative.");
-    if (!token) return setError("You need to be logged in to register as an umpire or scorer.");
+    if (form.experience !== "" && Number(form.experience) < 0) return setError("Experience can't be negative.");
+    if (!token) return setError("You need to be logged in.");
 
     setSubmitting(true);
     try {
-      const res = await apiRequest("/umpires", {
-        method: "POST",
+      const res = await apiRequest(editing ? `/umpires/${initialUmpire.id}` : "/umpires", {
+        method: editing ? "PUT" : "POST",
         token,
         body: {
           name: form.name.trim(),
@@ -2614,17 +2642,39 @@ function UmpireForm({ token, onCreated }) {
           fee_per_match: Number(form.fee_per_match)
         }
       });
-      onCreated(res.umpire);
-      setForm(emptyForm);
-      setOpen(false);
+      if (editing) {
+        onUpdated?.(res.umpire);
+        onClose?.();
+      } else {
+        onCreated(res.umpire);
+        setForm(emptyForm);
+        setOpen(false);
+      }
     } catch (err) {
-      setError(err.message || "Could not register — please try again.");
+      setError(err.message || "Could not save — please try again.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (!open) {
+  const handleDelete = async () => {
+    if (!editing || !initialUmpire?.id || !token) return;
+    if (!window.confirm("Are you sure you want to delete this umpire?")) return;
+
+    setSubmitting(true);
+    setError(null);
+    try {
+      await apiRequest(`/umpires/${initialUmpire.id}`, { method: "DELETE", token });
+      onDeleted?.(initialUmpire.id);
+      onClose?.();
+    } catch (err) {
+      setError(err.message || "Could not delete umpire.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (!open && !editing) {
     return <button onClick={() => setOpen(true)} className="w-full py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors hover:bg-white/5" style={{ border: "1px dashed #2a2a2a", color: "#22c55e" }}>
         <Plus className="w-4 h-4" /> Register as Umpire / Scorer
       </button>;
@@ -2632,8 +2682,8 @@ function UmpireForm({ token, onCreated }) {
 
   return <form onSubmit={handleSubmit} className={cn(C, "rounded-2xl p-4 space-y-3")}>
       <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-white">Register as Umpire / Scorer</span>
-        <button type="button" onClick={() => { setOpen(false); setError(null); }} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ backgroundColor: "#222" }}>
+        <span className="text-sm font-semibold text-white">{editing ? "Edit Umpire / Scorer" : "Register as Umpire / Scorer"}</span>
+        <button type="button" onClick={() => { if (editing) onClose?.(); else { setOpen(false); setError(null); } }} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ backgroundColor: "#222" }}>
           <X className="w-3.5 h-3.5 text-[#c8ccc8]" />
         </button>
       </div>
@@ -2668,16 +2718,22 @@ function UmpireForm({ token, onCreated }) {
 
       {error && <div className="text-xs text-red-400 rounded-lg p-2" style={{ backgroundColor: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}>{error}</div>}
 
-      <button type="submit" disabled={submitting} className="w-full py-2.5 rounded-xl bg-green-500 text-black font-bold text-sm hover:bg-green-400 transition-colors" style={submitting ? { opacity: 0.6, cursor: "not-allowed" } : {}}>
-        {submitting ? "Registering..." : "Register"}
-      </button>
+      <div className="flex gap-2">
+        {editing && <button type="button" onClick={handleDelete} disabled={submitting} className="flex-1 py-2.5 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 font-bold text-sm hover:bg-red-500/20 transition-colors" style={submitting ? { opacity: 0.6, cursor: "not-allowed" } : {}}>
+            Delete Umpire
+          </button>}
+        <button type="submit" disabled={submitting} className="flex-1 py-2.5 rounded-xl bg-green-500 text-black font-bold text-sm hover:bg-green-400 transition-colors" style={submitting ? { opacity: 0.6, cursor: "not-allowed" } : {}}>
+          {submitting ? (editing ? "Saving..." : "Registering...") : (editing ? "Save Changes" : "Register")}
+        </button>
+      </div>
     </form>;
 }
 
-function UmpiresTab({ umpires, onBook, token, onCreated }) {
+function UmpiresTab({ umpires, onBook, token, onCreated, onUpdated, onDeleted }) {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("All");
   const [sortBy, setSortBy] = useState("default");
+  const [editingUmpire, setEditingUmpire] = useState(null);
 
   const roleColor = (role) => {
     if (role === "Scorer") return { bg: "bg-blue-900", text: "text-blue-300" };
@@ -2772,9 +2828,6 @@ function UmpiresTab({ umpires, onBook, token, onCreated }) {
               <option value="default">Sort: default</option>
               <option value="price_low">Price: low to high</option>
               <option value="price_high">Price: high to low</option>
-              {/* <option value="exp_high">Experience: most first</option>
-              <option value="exp_low">Experience: least first</option>
-              <option value="name">Name: A to Z</option> */}
             </select>
           </div>
 
@@ -2831,23 +2884,69 @@ function UmpiresTab({ umpires, onBook, token, onCreated }) {
                       {u.price}
                     </div>
 
-                    <button
-                      disabled={!u.avail}
-                      onClick={() => u.avail && onBook(u)}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold shrink-0 transition-colors ${
-                        u.avail
-                          ? "bg-green-500 hover:bg-green-400 text-black"
-                          : "bg-[#252525] text-gray-500 cursor-not-allowed"
-                      }`}
-                    >
-                      {u.avail ? "Book" : "Unavailable"}
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setEditingUmpire(u)}
+                        title="Edit Umpire"
+                        className="p-2 rounded-xl text-xs font-bold transition-colors text-gray-300 hover:text-white bg-[#252525] hover:bg-[#333]"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!window.confirm(`Delete ${u.name}?`)) return;
+                          try {
+                            await apiRequest(`/umpires/${u.id}`, { method: "DELETE", token });
+                            onDeleted?.(u.id);
+                          } catch (err) {
+                            alert(err.message || "Could not delete umpire.");
+                          }
+                        }}
+                        title="Delete Umpire"
+                        className="p-2 rounded-xl text-xs font-bold transition-colors text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        disabled={!u.avail}
+                        onClick={() => u.avail && onBook(u)}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold shrink-0 transition-colors ${
+                          u.avail
+                            ? "bg-green-500 hover:bg-green-400 text-black"
+                            : "bg-[#252525] text-gray-500 cursor-not-allowed"
+                        }`}
+                      >
+                        {u.avail ? "Book" : "Unavailable"}
+                      </button>
+                    </div>
                   </div>
                 );
               })}
             </div>
           )}
         </>
+      )}
+
+      {editingUmpire && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.75)", backdropFilter: "blur(2px)" }} onClick={() => setEditingUmpire(null)}>
+          <div className="w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            <UmpireForm
+              token={token}
+              initialUmpire={editingUmpire}
+              onUpdated={updated => {
+                onUpdated?.(updated);
+                setEditingUmpire(null);
+              }}
+              onDeleted={id => {
+                onDeleted?.(id);
+                setEditingUmpire(null);
+              }}
+              onClose={() => setEditingUmpire(null)}
+            />
+          </div>
+        </div>
       )}
 
       {/* ─── New Rules (dummy/static for now — wire up to a real backend later) ─── */}
@@ -2957,7 +3056,7 @@ function DetailRow({ icon: Icon, label, value }) {
   );
 }
 
-function TournamentDetailsModal({ t, onClose, isMine, roleLabel, registered, onRegister }) {
+function TournamentDetailsModal({ t, onClose, isMine, roleLabel, registered, onRegister, onEdit, onDelete, token }) {
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
     document.addEventListener("keydown", onKey);
@@ -3074,6 +3173,38 @@ function TournamentDetailsModal({ t, onClose, isMine, roleLabel, registered, onR
           <GhostButton onClick={onClose} className="flex-1 text-center">
             Close
           </GhostButton>
+
+          {isMine && roleLabel === "Organizing" && (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onEdit?.(t);
+                }}
+                className="px-3 py-2 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-colors bg-[#1c1f1c] hover:bg-[#252825] text-white border border-[#2a2a2a]"
+              >
+                <Pencil className="w-3.5 h-3.5" /> Edit
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!window.confirm("Are you sure you want to delete this tournament?")) return;
+                  try {
+                    await apiRequest(`/tournaments/${t.id}`, { method: "DELETE", token });
+                    onDelete?.(t.id);
+                    onClose();
+                  } catch (err) {
+                    alert(err.message || "Failed to delete tournament");
+                  }
+                }}
+                className="px-3 py-2 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-colors bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Delete
+              </button>
+            </div>
+          )}
+
           {isMine ? (
             <span className="flex-1 py-2 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1.5"
               style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
@@ -3107,7 +3238,7 @@ function TournamentDetailsModal({ t, onClose, isMine, roleLabel, registered, onR
 /* Card                                                                    */
 /* ---------------------------------------------------------------------- */
 
-function TournamentCard({ t, isMine, roleLabel, registered, onRegister, onView }) {
+function TournamentCard({ t, isMine, roleLabel, registered, onRegister, onView, onEdit, onDelete, token }) {
   const spotsLeft = t.spots_left ?? Math.max((t.max_teams || 0) - (t.team_count || 0), 0);
   const full = spotsLeft === 0;
   const canRegister = t.status === "registering" && !full && !registered && !isMine;
@@ -3150,12 +3281,42 @@ function TournamentCard({ t, isMine, roleLabel, registered, onRegister, onView }
 
       <div className="flex gap-2">
         {isMine ? (
-          <span
-            className="flex-1 py-2 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1"
-            style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}
-          >
-            <CheckCircle className="w-3.5 h-3.5" /> {roleLabel}
-          </span>
+          <div className="flex-1 flex gap-1.5">
+            <span
+              className="flex-1 py-2 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1"
+              style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}
+            >
+              <CheckCircle className="w-3.5 h-3.5" /> {roleLabel}
+            </span>
+            {roleLabel === "Organizing" && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onEdit?.(t)}
+                  title="Edit Tournament"
+                  className="px-3 py-2 rounded-xl text-xs font-bold transition-colors text-gray-300 hover:text-white bg-[#252525] hover:bg-[#333]"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!window.confirm("Delete this tournament?")) return;
+                    try {
+                      await apiRequest(`/tournaments/${t.id}`, { method: "DELETE", token });
+                      onDelete?.(t.id);
+                    } catch (err) {
+                      alert(err.message || "Could not delete tournament");
+                    }
+                  }}
+                  title="Delete Tournament"
+                  className="px-3 py-2 rounded-xl text-xs font-bold transition-colors text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </>
+            )}
+          </div>
         ) : registered ? (
           <span
             className="flex-1 py-2 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1"
@@ -3185,9 +3346,10 @@ function TournamentCard({ t, isMine, roleLabel, registered, onRegister, onView }
 /* Tab                                                                     */
 /* ---------------------------------------------------------------------- */
 
-function TournamentsTab({ registeredIds, onRegister, tournaments, token, currentUser, myTeamId, onTournamentCreated }) {
+function TournamentsTab({ registeredIds, onRegister, tournaments, token, currentUser, myTeamId, onTournamentCreated, onTournamentUpdated, onTournamentDeleted }) {
   const [viewingId, setViewingId] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [editingTournament, setEditingTournament] = useState(null);
 
   const allTournaments = tournaments || [];
   const isMine = (t) => t.creator_team_id === myTeamId || registeredIds.includes(t.id);
@@ -3226,6 +3388,9 @@ function TournamentsTab({ registeredIds, onRegister, tournaments, token, current
                 registered={registeredIds.includes(t.id)}
                 onRegister={onRegister}
                 onView={() => setViewingId(t.id)}
+                onEdit={(item) => setEditingTournament(item)}
+                onDelete={(id) => onTournamentDeleted?.(id)}
+                token={token}
               />
             ))}
           </div>
@@ -3253,6 +3418,9 @@ function TournamentsTab({ registeredIds, onRegister, tournaments, token, current
                 registered={registeredIds.includes(t.id)}
                 onRegister={onRegister}
                 onView={() => setViewingId(t.id)}
+                onEdit={(item) => setEditingTournament(item)}
+                onDelete={(id) => onTournamentDeleted?.(id)}
+                token={token}
               />
             ))}
           </div>
@@ -3287,6 +3455,9 @@ function TournamentsTab({ registeredIds, onRegister, tournaments, token, current
           roleLabel={viewingTournament.creator_team_id === myTeamId ? "Organizing" : "Registered"}
           registered={registeredIds.includes(viewingTournament.id)}
           onRegister={onRegister}
+          onEdit={(item) => setEditingTournament(item)}
+          onDelete={(id) => onTournamentDeleted?.(id)}
+          token={token}
         />
       )}
 
@@ -3297,6 +3468,24 @@ function TournamentsTab({ registeredIds, onRegister, tournaments, token, current
           tournaments={allTournaments}
           onClose={() => setShowCreateForm(false)}
           onCreated={handleCreated}
+        />
+      )}
+
+      {editingTournament && (
+        <CreateTournamentForm
+          token={token}
+          user={currentUser}
+          tournaments={allTournaments}
+          initialTournament={editingTournament}
+          onClose={() => setEditingTournament(null)}
+          onUpdated={(updated) => {
+            onTournamentUpdated?.(updated);
+            setEditingTournament(null);
+          }}
+          onDeleted={(id) => {
+            onTournamentDeleted?.(id);
+            setEditingTournament(null);
+          }}
         />
       )}
     </div>
@@ -4002,11 +4191,24 @@ export default function App() {
       alert(err.message || "Could not register for this tournament.");
     }
   };
-  const handleBookingConfirm = () => { if (auth.token) refreshBookings(auth.token); };
   const handleUmpireCreated = raw => setUmpires(prev => [transformUmpire(raw, prev.length), ...prev]);
+  const handleUmpireUpdated = raw => {
+    const t = transformUmpire(raw);
+    setUmpires(prev => prev.map(u => u.id === t.id ? { ...u, ...t } : u));
+  };
+  const handleUmpireDeleted = id => {
+    setUmpires(prev => prev.filter(u => u.id !== id));
+  };
 
   const handleTournamentCreated = (newTournament) => {
     setTournaments(prev => [transformTournament(newTournament), ...prev]);
+  };
+  const handleTournamentUpdated = (updated) => {
+    const t = transformTournament(updated);
+    setTournaments(prev => prev.map(x => x.id === t.id ? t : x));
+  };
+  const handleTournamentDeleted = (id) => {
+    setTournaments(prev => prev.filter(x => x.id !== id));
   };
 
   const handleGroundCreated = (newGround) => {
@@ -4079,6 +4281,8 @@ export default function App() {
       umpires={umpires}
       token={auth.token}
       onCreated={handleUmpireCreated}
+      onUpdated={handleUmpireUpdated}
+      onDeleted={handleUmpireDeleted}
       onBook={u => setBookingModal({ type: "umpire", item: u })}
     />,
     "Live Score": <LiveScoreTab/>,
@@ -4090,6 +4294,8 @@ export default function App() {
       currentUser={auth.user}
       myTeamId={myTeam?.id}
       onTournamentCreated={handleTournamentCreated}
+      onTournamentUpdated={handleTournamentUpdated}
+      onTournamentDeleted={handleTournamentDeleted}
     />,
     "My Team": <MyTeamTab
   acceptedChallenge={acceptedChallenge}

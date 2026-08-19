@@ -1,11 +1,12 @@
 const express = require("express");
 const router = express.Router();
-const { listChallenges, createChallenge, deleteChallenge, acceptChallenge, cancelChallenge } = require("../controllers/challengesController");
+const { listChallenges, createChallenge, updateChallenge, deleteChallenge, acceptChallenge, cancelChallenge } = require("../controllers/challengesController");
 const { listMessages, sendMessage } = require("../controllers/messagesController");
 const { authRequired } = require("../middleware/auth");
 
 router.get("/", listChallenges);
 router.post("/", authRequired, createChallenge);
+router.put("/:id", authRequired, updateChallenge);
 router.post("/:id/accept", authRequired, acceptChallenge);
 router.post("/:id/cancel", authRequired, cancelChallenge);
 router.get("/:id/messages", authRequired, listMessages);

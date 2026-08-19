@@ -273,11 +273,119 @@ const myTournaments = asyncHandler(async (req, res) => {
   res.json({ tournaments: rows });
 });
 
+const updateTournament = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const {
+    name,
+    format = null,
+    venue = null,
+    start_date = null,
+    max_teams,
+    phone = null,
+    co_phone = null,
+    entry_fee = 0,
+    description = null,
+    prizes = [],
+  } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: "Tournament name is required" });
+  }
+  if (!Number.isInteger(max_teams) || max_teams < 2) {
+    return res.status(400).json({ error: "Number of teams must be an integer of at least 2" });
+  }
+  if (!req.user?.id) {
+    return res.status(401).json({ error: "You must be logged in to update a tournament" });
+  }
+
+  const existing = await pool.query(`SELECT * FROM tournaments WHERE id = $1`, [id]);
+  if (existing.rows.length === 0) return res.status(404).json({ error: "Tournament not found" });
+  if (String(existing.rows[0].created_by) !== String(req.user.id)) {
+    return res.status(403).json({ error: "Only the tournament creator can edit it" });
+  }
+
+  if (!Array.isArray(prizes) || prizes.length < 1 || prizes.length > 3) {
+    return res.status(400).json({ error: "Provide between 1 and 3 prizes" });
+  }
+  for (const p of prizes) {
+    if (![1, 2, 3].includes(p.position)) {
+      return res.status(400).json({ error: "Each prize needs a position of 1, 2, or 3" });
+    }
+    if (typeof p.money !== "number" || p.money < 0) {
+      return res.status(400).json({ error: "Each prize needs a money amount >= 0" });
+    }
+    if (typeof p.trophy !== "boolean") {
+      return res.status(400).json({ error: "Each prize needs trophy: true/false" });
+    }
+  }
+
+  const updatedRes = await pool.query(
+    `UPDATE tournaments
+     SET name = $1,
+         format = $2,
+         venue = $3,
+         start_date = $4,
+         max_teams = $5,
+         phone = $6,
+         co_phone = $7,
+         entry_fee = $8,
+         description = $9,
+         prizes = $10::jsonb,
+         updated_at = now()
+     WHERE id = $11
+     RETURNING *`,
+    [
+      name.trim(),
+      format,
+      venue,
+      start_date,
+      max_teams,
+      phone,
+      co_phone,
+      entry_fee,
+      description,
+      JSON.stringify(prizes),
+      id,
+    ]
+  );
+
+  const team_count_res = await pool.query(
+    `SELECT COUNT(*)::int AS count FROM tournament_registrations WHERE tournament_id = $1 AND status = 'confirmed'`,
+    [id]
+  );
+  const team_count = team_count_res.rows[0]?.count || 0;
+
+  res.json({
+    tournament: {
+      ...updatedRes.rows[0],
+      team_count,
+      spots_left: Math.max(updatedRes.rows[0].max_teams - team_count, 0),
+    },
+  });
+});
+
+const deleteTournament = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  if (!req.user?.id) {
+    return res.status(401).json({ error: "You must be logged in to delete a tournament" });
+  }
+
+  const existing = await pool.query(`SELECT * FROM tournaments WHERE id = $1`, [id]);
+  if (existing.rows.length === 0) return res.status(404).json({ error: "Tournament not found" });
+  if (String(existing.rows[0].created_by) !== String(req.user.id)) {
+    return res.status(403).json({ error: "Only the tournament creator can delete it" });
+  }
+
+  await pool.query(`DELETE FROM tournaments WHERE id = $1`, [id]);
+  res.json({ message: "Tournament deleted successfully" });
+});
+
 module.exports = {
   listTournaments,
   getTournament,
   createTournament,
+  updateTournament,
+  deleteTournament,
   registerTeam,
   myTournaments,
-  createTournament,
 };
