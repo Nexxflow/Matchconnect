@@ -247,7 +247,7 @@ const BTN_TRANSITION = "transition-all duration-150 ease-out active:scale-[0.96]
 // ============================================================================
 // Top-level app
 // ============================================================================
-export default function ScoringApp() {
+export default function ScoringApp({ user }) {
   // home | new | squads | toss | score | scoreboard
   const [view, setView] = useState("home");
   const [activeMatchId, setActiveMatchId] = useState(null);
@@ -338,6 +338,7 @@ export default function ScoringApp() {
 
       {view === "new" && (
         <NewMatchForm
+          user={user}
           onCreated={(id) => {
             setActiveMatchId(id);
             setView("squads");
@@ -552,8 +553,8 @@ function MatchHome({ onScoreNew, onResume, onViewScoreboard }) {
 // ============================================================================
 // Step 1: Team Info
 // ============================================================================
-function NewMatchForm({ onCreated, onCancel }) {
-  const [team1Name, setTeam1Name] = useState("");
+function NewMatchForm({ user, onCreated, onCancel }) {
+  const [team1Name, setTeam1Name] = useState(user?.team_name || "");
   const [team2Name, setTeam2Name] = useState("");
   const [venue, setVenue] = useState("");
   const [oversLimit, setOversLimit] = useState(20);

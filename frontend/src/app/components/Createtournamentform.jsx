@@ -128,13 +128,30 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
     if (!loadingTeam && !myTeam && !initialTournament) {
       setForm((f) => ({ ...f, includeOwnTeam: false }));
     }
-  }, [loadingTeam, myTeam, initialTournament]);
+    if (user?.phone && !form.phone) {
+      setForm((f) => ({ ...f, phone: user.phone }));
+    }
+  }, [loadingTeam, myTeam, initialTournament, user]);
 
   const update = (field, value) => setForm((f) => ({ ...f, [field]: value }));
   const updatePrize = (idx, field, value) =>
     setPrizes((p) => p.map((prize, i) => (i === idx ? { ...prize, [field]: value } : prize)));
 
   const validate = () => {
+    const nameVal = user?.name?.trim() || "";
+    const phoneVal = form.phone?.trim() || user?.phone?.trim() || "";
+    const teamVal = user?.team_name?.trim() || myTeam?.team_name?.trim() || "";
+
+    const missingProfile = [];
+    if (!nameVal) missingProfile.push("Name");
+    if (!phoneVal) missingProfile.push("Phone number");
+    if (!teamVal && form.includeOwnTeam) missingProfile.push("Team name");
+
+    if (missingProfile.length > 0) {
+      const msg = `Please update your required profile details (${missingProfile.join(", ")}) in the Profile page first.`;
+      alert(msg);
+      return msg;
+    }
     if (myActiveTournament) {
       return `Your team already has an active tournament ("${myActiveTournament.name}"). Complete or cancel it before creating another.`;
     }

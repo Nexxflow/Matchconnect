@@ -168,7 +168,8 @@ function GhostButton({ children, onClick, disabled, className = "" }) {
 // ─── Dummy data shared across tabs ─────────────────────────────────────────────
 // NOTE: Umpires no longer have a dummy dataset — that tab is 100% live-data now
 // (see UmpiresTab / UmpireForm below). Grounds/Tournaments/etc. still fall back
-// to this demo data only while the backend is unreachable.
+// to this demo data only wh
+// ile the backend is unreachable.
 const FORMATS = [
   { key: "T20", emoji: "⚡", title: "T20 Match", desc: "20 overs per side, fast-paced" },
   { key: "ODI", emoji: "🏏", title: "ODI Format", desc: "50 overs, balanced game" },
@@ -689,7 +690,7 @@ function TimeField({ value, onChange }) {
 // ─── Challenge form ─────────────────────────────────────────────────────────
 function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], autoOpen = false, onAutoOpenHandled }) {
   const emptyForm = {
-    team_name: "",
+    team_name: user?.team_name || "",
     format: "T20",
     overs: DEFAULT_OVERS.T20,
     match_date: "",
@@ -704,6 +705,15 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
+  const contact = user?.phone || "";
+  const normalizedContact = normalizePhone(contact);
+
+  useEffect(() => {
+    if (user?.team_name && !form.team_name) {
+      setForm(prev => ({ ...prev, team_name: user.team_name }));
+    }
+  }, [user]);
+
   // When navigated here via the Home page's "⚡ Create Challenge" shortcut,
   // pop the form open right away instead of showing the collapsed button.
   useEffect(() => {
@@ -713,10 +723,21 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
     }
   }, [autoOpen, disabledReason]);
 
-  const contact = user?.phone || "";
-  const normalizedContact = normalizePhone(contact);
-
   const update = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
+
+  const checkProfileCompleteness = () => {
+    const missing = [];
+    if (!user?.name?.trim()) missing.push("Name");
+    if (!normalizedContact || normalizedContact.length < 10 || normalizedContact.length > 15) missing.push("Phone number");
+    if (!form.team_name.trim() && !user?.team_name?.trim()) missing.push("Team name");
+
+    if (missing.length > 0) {
+      const msg = `Please update your required profile details (${missing.join(", ")}) in the Profile page first.`;
+      alert(msg);
+      return msg;
+    }
+    return null;
+  };
 
   // Changing format resets overs to that format's typical default —
   // the user can still type a custom number afterwards.
@@ -727,6 +748,9 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
   const handleSubmit = async e => {
     e.preventDefault();
     setError(null);
+
+    const profileErr = checkProfileCompleteness();
+    if (profileErr) return setError(profileErr);
 
     if (!form.team_name.trim()) return setError("Team name is required.");
     if (normalizedContact.length < 10 || normalizedContact.length > 15) {
@@ -780,7 +804,11 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
   }
 
   if (!open) {
-    return <button onClick={() => setOpen(true)} className="w-full py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors hover:bg-white/5" style={{ border: "1px dashed #2a2a2a", color: "#22c55e" }}>
+    return <button onClick={() => {
+      const err = checkProfileCompleteness();
+      if (err) return;
+      setOpen(true);
+    }} className="w-full py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors hover:bg-white/5" style={{ border: "1px dashed #2a2a2a", color: "#22c55e" }}>
         <Plus className="w-4 h-4" /> Post a Match Challenge
       </button>;
   }
@@ -900,19 +928,31 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
 }
 
 function AcceptChallengeModal({ challenge, token, user, onClose, onAccepted }) {
-  const [teamName, setTeamName] = useState("");
-  // Pulled straight from the logged-in account — not editable, so it always
-  // matches what "My Team" later uses to recognize this as your match.
+  const [teamName, setTeamName] = useState(user?.team_name || "");
   const contact = user?.phone || "";
+  const normalizedContact = normalizePhone(contact);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
+  useEffect(() => {
+    if (user?.team_name && !teamName) {
+      setTeamName(user.team_name);
+    }
+  }, [user]);
+
   const handleSubmit = async e => {
     e.preventDefault();
-    if (!teamName.trim()) return setError("Your team name is required.");
-    if (!/^[0-9]{10,15}$/.test(contact.trim())) {
-      return setError("Your account doesn't have a valid phone number on file. Please update your profile first.");
+    const missing = [];
+    if (!user?.name?.trim()) missing.push("Name");
+    if (!contact.trim() || normalizedContact.length < 10) missing.push("Phone number");
+    if (!teamName.trim()) missing.push("Team name");
+
+    if (missing.length > 0) {
+      const msg = `Please update your required profile details (${missing.join(", ")}) in the Profile page first.`;
+      alert(msg);
+      return setError(msg);
     }
+
     if (!token) return setError("You need to be logged in to accept a challenge.");
 
     setSubmitting(true);
@@ -2595,27 +2635,47 @@ function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundCreated, onGroun
     </div>;
 }
 
-// ─── UMPIRES & SCORERS ──────────────────────────────────────────────────────────
-// Live data only: the list comes straight from GET /api/umpires (loaded in App
-// and passed down as `umpires`). There is no dummy fallback here anymore — if
-// the backend is offline or the table is empty, the tab shows an empty state
-// instead of silently displaying fake officials. The form below posts to
-// POST /api/umpires (auth required) so a real record gets created and shows
-// up immediately in the list.
-
-function UmpireForm({ token, onCreated, onUpdated, onDeleted, initialUmpire = null, onClose }) {
+function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpire = null, onClose }) {
+  
+  console.log("UmpireForm received user:", user);
   const editing = !!initialUmpire;
-  const emptyForm = {
-    name: initialUmpire?.name || "",
-    mobile: initialUmpire?.mobile || "",
-    role: initialUmpire?.role || "Umpire",
-    experience: initialUmpire?.experience !== undefined && initialUmpire?.experience !== null ? String(initialUmpire.experience) : "",
-    fee_per_match: initialUmpire?.fee_per_match !== undefined && initialUmpire?.fee_per_match !== null ? String(initialUmpire.fee_per_match) : (initialUmpire?.price ? String(initialUmpire.price).replace(/[^0-9.]/g, "") : "")
-  };
+
+  const buildForm = (ump, u) => ({
+    name: ump?.name || u?.name || "",
+    role: ump?.role || "Umpire",
+    experience: ump?.experience !== undefined && ump?.experience !== null ? String(ump.experience) : "",
+    fee_per_match: ump?.fee_per_match !== undefined && ump?.fee_per_match !== null
+      ? String(ump.fee_per_match)
+      : (ump?.price ? String(ump.price).replace(/[^0-9.]/g, "") : "")
+  });
+
   const [open, setOpen] = useState(editing);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(() => buildForm(initialUmpire, user));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+
+  const normalizedPhone = normalizePhone(user?.phone);
+
+  // Re-sync whenever the umpire being edited changes, or the account's
+  // name updates (e.g. profile edited elsewhere) — but never clobber the
+  // person's fee/experience edits mid-form, and never touch the name once
+  // they've started typing something different from the current default.
+  useEffect(() => {
+    setForm(prev => {
+      const fresh = buildForm(initialUmpire, user);
+      const prevDefaultName = initialUmpire?.name || user?.name || "";
+      const nameWasUntouched = prev.name === prevDefaultName || prev.name === "";
+      return {
+        ...prev,
+        name: nameWasUntouched ? fresh.name : prev.name,
+        role: initialUmpire ? fresh.role : prev.role,
+        experience: initialUmpire ? fresh.experience : prev.experience,
+        fee_per_match: initialUmpire ? fresh.fee_per_match : prev.fee_per_match
+      };
+    });
+    if (editing) setOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialUmpire?.id, user?.name]);
 
   const update = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
 
@@ -2624,7 +2684,9 @@ function UmpireForm({ token, onCreated, onUpdated, onDeleted, initialUmpire = nu
     setError(null);
 
     if (!form.name.trim()) return setError("Name is required.");
-    if (!/^[0-9]{10,15}$/.test(form.mobile.trim())) return setError("Enter a valid mobile number (10-15 digits).");
+    if (normalizedPhone.length < 10 || normalizedPhone.length > 15) {
+      return setError("Your account doesn't have a valid phone number on file. Please update your profile first.");
+    }
     if (!form.fee_per_match || Number(form.fee_per_match) <= 0) return setError("Fee per match must be greater than 0.");
     if (form.experience !== "" && Number(form.experience) < 0) return setError("Experience can't be negative.");
     if (!token) return setError("You need to be logged in.");
@@ -2636,7 +2698,7 @@ function UmpireForm({ token, onCreated, onUpdated, onDeleted, initialUmpire = nu
         token,
         body: {
           name: form.name.trim(),
-          mobile: form.mobile.trim(),
+          mobile: normalizedPhone,      // always from the account, never from free-text input
           role: form.role,
           experience: Number(form.experience || 0),
           fee_per_match: Number(form.fee_per_match)
@@ -2647,7 +2709,7 @@ function UmpireForm({ token, onCreated, onUpdated, onDeleted, initialUmpire = nu
         onClose?.();
       } else {
         onCreated(res.umpire);
-        setForm(emptyForm);
+        setForm(buildForm(null, user));
         setOpen(false);
       }
     } catch (err) {
@@ -2691,12 +2753,20 @@ function UmpireForm({ token, onCreated, onUpdated, onDeleted, initialUmpire = nu
       <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2">
           <label className="text-xs mb-1 block" style={{ color: "#6b7a6b" }}>Full name</label>
-          <input value={form.name} onChange={e => update("name", e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm text-white focus:outline-none" style={{ backgroundColor: "#111", border: "1px solid #2a2a2a" }} placeholder="Rahul Desai" />
+          <input value={user?.name || form.name} readOnly onChange={e => update("name", e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm text-white focus:outline-none" style={{ backgroundColor: "#111", border: "1px solid #2a2a2a" }} placeholder="Rahul Desai" />
         </div>
+
         <div>
           <label className="text-xs mb-1 block" style={{ color: "#6b7a6b" }}>Mobile number</label>
-          <input value={form.mobile} onChange={e => update("mobile", e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm text-white font-mono focus:outline-none" style={{ backgroundColor: "#111", border: "1px solid #2a2a2a" }} placeholder="9876543210" />
+          <input
+            value={user?.phone || ""}
+            readOnly
+            className="w-full rounded-xl px-3 py-2 text-sm font-mono cursor-not-allowed"
+            style={{ backgroundColor: "#151515", border: "1px solid #2a2a2a", color: "#6b7a6b" }}
+          />
+          <p className="text-xs mt-1" style={{ color: "#4a5a4a" }}>From your account. Update it in Edit Profile if it's wrong.</p>
         </div>
+
         <div>
           <label className="text-xs mb-1 block" style={{ color: "#6b7a6b" }}>Role</label>
           <div className="relative">
@@ -2706,10 +2776,12 @@ function UmpireForm({ token, onCreated, onUpdated, onDeleted, initialUmpire = nu
             <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: "#6b7a6b" }} />
           </div>
         </div>
+
         <div>
           <label className="text-xs mb-1 block" style={{ color: "#6b7a6b" }}>Experience (years)</label>
           <input type="number" min="0" value={form.experience} onChange={e => update("experience", e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm text-white font-mono focus:outline-none" style={{ backgroundColor: "#111", border: "1px solid #2a2a2a" }} placeholder="5" />
         </div>
+
         <div>
           <label className="text-xs mb-1 block" style={{ color: "#6b7a6b" }}>Fee per match (₹)</label>
           <input type="number" min="1" value={form.fee_per_match} onChange={e => update("fee_per_match", e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm text-white font-mono focus:outline-none" style={{ backgroundColor: "#111", border: "1px solid #2a2a2a" }} placeholder="800" />
@@ -2722,18 +2794,26 @@ function UmpireForm({ token, onCreated, onUpdated, onDeleted, initialUmpire = nu
         {editing && <button type="button" onClick={handleDelete} disabled={submitting} className="flex-1 py-2.5 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 font-bold text-sm hover:bg-red-500/20 transition-colors" style={submitting ? { opacity: 0.6, cursor: "not-allowed" } : {}}>
             Delete Umpire
           </button>}
-        <button type="submit" disabled={submitting} className="flex-1 py-2.5 rounded-xl bg-green-500 text-black font-bold text-sm hover:bg-green-400 transition-colors" style={submitting ? { opacity: 0.6, cursor: "not-allowed" } : {}}>
+        <button type="submit" disabled={submitting || !normalizedPhone} className="flex-1 py-2.5 rounded-xl bg-green-500 text-black font-bold text-sm hover:bg-green-400 transition-colors" style={(submitting || !normalizedPhone) ? { opacity: 0.6, cursor: "not-allowed" } : {}}>
           {submitting ? (editing ? "Saving..." : "Registering...") : (editing ? "Save Changes" : "Register")}
         </button>
       </div>
     </form>;
 }
 
-function UmpiresTab({ umpires, onBook, token, onCreated, onUpdated, onDeleted }) {
+function UmpiresTab({ umpires, onBook, token, user, onCreated, onUpdated, onDeleted }) {
+  
+  console.log("UmpiresTab received user:", user);
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("All");
   const [sortBy, setSortBy] = useState("default");
   const [editingUmpire, setEditingUmpire] = useState(null);
+
+  const userPhoneNorm = normalizePhone(user?.phone);
+  console.log("userphone", user?.phone);
+  const myUmpire = umpires.find(
+    (u) => (u.user_id && user?.id && String(u.user_id) === String(user.id)) || (userPhoneNorm && normalizePhone(u.mobile) === userPhoneNorm)
+  );
 
   const roleColor = (role) => {
     if (role === "Scorer") return { bg: "bg-blue-900", text: "text-blue-300" };
@@ -2782,7 +2862,32 @@ function UmpiresTab({ umpires, onBook, token, onCreated, onUpdated, onDeleted })
         </div>
       </div>
 
-      <UmpireForm token={token} onCreated={onCreated} />
+      {myUmpire ? (
+        <div className="w-full p-4 rounded-2xl flex items-center justify-between gap-3" style={{ backgroundColor: "#151715", border: "1px solid rgba(34,197,94,0.3)" }}>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center bg-green-500/10 text-green-400 font-bold border border-green-500/20 shrink-0">
+              ✓
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-bold text-white flex items-center gap-2 truncate">
+                You are registered as {myUmpire.role || "Umpire"}
+              </div>
+              <div className="text-xs text-gray-400 mt-0.5 font-mono truncate">
+                {myUmpire.name} • 📞 {myUmpire.mobile} • ₹{myUmpire.price || myUmpire.fee_per_match || 0}/match
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setEditingUmpire(myUmpire)}
+            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-[#252525] hover:bg-[#333] text-white flex items-center gap-1.5 transition-colors border border-[#333] shrink-0"
+          >
+            <Pencil className="w-3.5 h-3.5 text-green-400" /> Edit Registration
+          </button>
+        </div>
+      ) : (
+        <UmpireForm user={user} token={token} onCreated={onCreated} />
+      )}
 
       {umpires.length === 0 ? (
         <div
@@ -2933,6 +3038,7 @@ function UmpiresTab({ umpires, onBook, token, onCreated, onUpdated, onDeleted })
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.75)", backdropFilter: "blur(2px)" }} onClick={() => setEditingUmpire(null)}>
           <div className="w-full max-w-lg" onClick={e => e.stopPropagation()}>
             <UmpireForm
+              user={user}
               token={token}
               initialUmpire={editingUmpire}
               onUpdated={updated => {
@@ -3600,29 +3706,48 @@ function MyTeamTab({
 
   const hasTeamIdentity = teamIdSet.size > 0 || teamPhoneSet.size > 0;
 
+  // Stricter match: when a challenge carries BOTH creator_id and contact_no,
+  // require both to line up with your team. This avoids a false-positive
+  // match slipping through on a shared/duplicate creator_id or phone alone
+  // (e.g. from a different real team that happens to share your team_name +
+  // village + year, which is how /users/teammates groups people).
   const isTeamCreator = c => {
-    if (teamIdSet.size && c.creator_id !== undefined && c.creator_id !== null) {
+    const hasId = c.creator_id !== undefined && c.creator_id !== null;
+    const hasPhone = !!c.contact_no;
+
+    if (hasId && hasPhone && teamIdSet.size && teamPhoneSet.size) {
+      return teamIdSet.has(Number(c.creator_id)) && teamPhoneSet.has(normalizePhone(c.contact_no));
+    }
+    if (hasId && teamIdSet.size) {
       return teamIdSet.has(Number(c.creator_id));
     }
-    if (teamPhoneSet.size && c.contact_no) {
+    if (hasPhone && teamPhoneSet.size) {
       return teamPhoneSet.has(normalizePhone(c.contact_no));
     }
     return false;
   };
 
   const isTeamAcceptor = c => {
-    if (teamIdSet.size && c.accepted_by_user_id !== undefined && c.accepted_by_user_id !== null) {
+    const hasId = c.accepted_by_user_id !== undefined && c.accepted_by_user_id !== null;
+    const hasPhone = !!c.accepted_by_contact_no;
+
+    if (hasId && hasPhone && teamIdSet.size && teamPhoneSet.size) {
+      return teamIdSet.has(Number(c.accepted_by_user_id)) && teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no));
+    }
+    if (hasId && teamIdSet.size) {
       return teamIdSet.has(Number(c.accepted_by_user_id));
     }
-    if (teamPhoneSet.size && c.accepted_by_contact_no) {
+    if (hasPhone && teamPhoneSet.size) {
       return teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no));
     }
     return false;
   };
 
   // ── Category 1: Posted Challenges ──────────────────────────────────────
+  // Only show a challenge here if it was created by a confirmed teammate
+  // AND it's still actually "open" (not on_hold / accepted / anything else).
   const postedChallenges = hasTeamIdentity
-    ? challenges.filter(c => isTeamCreator(c) && (c.status === "open" || c.status === "on_hold"))
+    ? challenges.filter(c => isTeamCreator(c) && c.status === "open")
     : [];
 
   // ── Category 2: Accepted Challenges ────────────────────────────────────
@@ -3636,6 +3761,7 @@ function MyTeamTab({
 
   const scheduleCount = postedChallenges.length + acceptedChallengesFinal.length + registeredTournaments.length;
 
+  
   return <div className="space-y-6">
       <div className="flex gap-2">
         {[
@@ -4279,6 +4405,7 @@ export default function App() {
     />,
     "Umpires": <UmpiresTab
       umpires={umpires}
+      user={auth.user}
       token={auth.token}
       onCreated={handleUmpireCreated}
       onUpdated={handleUmpireUpdated}
