@@ -66,9 +66,13 @@ const getTournament = asyncHandler(async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Create a tournament. One active tournament (registering/ongoing) per team,
+// Create a tournament. One active tournament (registering/ongoing) per TEAM,
 // enforced server-side with FOR UPDATE row locking so two concurrent
-// requests for the same team can't both slip through.
+// requests from the same team can't both slip through.
+//
+// REQUIRES: users.team_id (run add_users_team_id.sql first). "My team" is
+// resolved by membership, not just ownership, so the one-tournament rule —
+// and the Create button being disabled — applies to every teammate.
 // ---------------------------------------------------------------------------
 const createTournament = asyncHandler(async (req, res) => {
   const {
@@ -113,7 +117,14 @@ const createTournament = asyncHandler(async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    const teamRes = await client.query(`SELECT id, name FROM teams WHERE owner_id = $1 FOR UPDATE`, [req.user.id]);
+    const teamRes = await client.query(
+      `SELECT tm.id, tm.name
+       FROM teams tm
+       JOIN users u ON u.team_id = tm.id
+       WHERE u.id = $1
+       FOR UPDATE OF tm`,
+      [req.user.id]
+    );
     const myTeam = teamRes.rows[0] || null;
 
     if (include_own_team && !myTeam) {
@@ -133,7 +144,7 @@ const createTournament = asyncHandler(async (req, res) => {
         const active = activeRes.rows[0];
         throw Object.assign(
           new Error(
-            `Your team is already organizing "${active.name}" (${active.status}). Complete or cancel it before creating another tournament.`
+            `Your team is already organizing "${active.name}" (${active.status}). Any team member can wait for it to complete, or the organizer can cancel/delete it before creating another.`
           ),
           { status: 409 }
         );
@@ -300,8 +311,14 @@ const updateTournament = asyncHandler(async (req, res) => {
 
   const existing = await pool.query(`SELECT * FROM tournaments WHERE id = $1`, [id]);
   if (existing.rows.length === 0) return res.status(404).json({ error: "Tournament not found" });
-  if (String(existing.rows[0].created_by) !== String(req.user.id)) {
-    return res.status(403).json({ error: "Only the tournament creator can edit it" });
+
+  // Any teammate of the organizing team can edit — matches createTournament.
+  const editorTeamRes = await pool.query(`SELECT team_id FROM users WHERE id = $1`, [req.user.id]);
+  const editorTeamId = editorTeamRes.rows[0]?.team_id ?? null;
+  const isCreator = String(existing.rows[0].created_by) === String(req.user.id);
+  const isTeammate = editorTeamId != null && editorTeamId === existing.rows[0].creator_team_id;
+  if (!isCreator && !isTeammate) {
+    return res.status(403).json({ error: "Only the organizing team can edit this tournament" });
   }
 
   if (!Array.isArray(prizes) || prizes.length < 1 || prizes.length > 3) {
@@ -372,8 +389,14 @@ const deleteTournament = asyncHandler(async (req, res) => {
 
   const existing = await pool.query(`SELECT * FROM tournaments WHERE id = $1`, [id]);
   if (existing.rows.length === 0) return res.status(404).json({ error: "Tournament not found" });
-  if (String(existing.rows[0].created_by) !== String(req.user.id)) {
-    return res.status(403).json({ error: "Only the tournament creator can delete it" });
+
+  // Any teammate of the organizing team can delete — matches createTournament.
+  const editorTeamRes = await pool.query(`SELECT team_id FROM users WHERE id = $1`, [req.user.id]);
+  const editorTeamId = editorTeamRes.rows[0]?.team_id ?? null;
+  const isCreator = String(existing.rows[0].created_by) === String(req.user.id);
+  const isTeammate = editorTeamId != null && editorTeamId === existing.rows[0].creator_team_id;
+  if (!isCreator && !isTeammate) {
+    return res.status(403).json({ error: "Only the organizing team can delete this tournament" });
   }
 
   await pool.query(`DELETE FROM tournaments WHERE id = $1`, [id]);

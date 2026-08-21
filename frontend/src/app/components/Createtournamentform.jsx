@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Trophy, Users, Phone, DollarSign, FileText, Loader2, AlertCircle } from "lucide-react";
+import { X, Trophy, Users, Phone, DollarSign, FileText, Loader2, AlertCircle, Trash2 } from "lucide-react";
 import { apiRequest } from "../api"; // same helper App.jsx already uses
 
 function cn(...classes) {
@@ -474,9 +474,9 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
                 type="button"
                 onClick={handleDelete}
                 disabled={submitting}
-                className="py-2.5 px-4 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 font-bold text-sm hover:bg-red-500/20 transition-colors"
+                className="py-2.5 px-5 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 font-bold text-sm hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1.5"
               >
-                Delete
+                <Trash2 className="w-4 h-4" /> Delete Tournament
               </button>
             )}
             <GhostButton onClick={onClose} className="flex-1 text-center">

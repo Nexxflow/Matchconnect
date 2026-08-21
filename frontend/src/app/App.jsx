@@ -318,14 +318,17 @@ export default function App() {
   };
 
   const handleTournamentCreated = (newTournament) => {
-    setTournaments(prev => [transformTournament(newTournament), ...prev]);
+    setTournaments(prev => [transformTournament(newTournament), ...prev.filter(x => x.id !== newTournament.id)]);
+    refreshTournaments();
   };
   const handleTournamentUpdated = (updated) => {
     const t = transformTournament(updated);
     setTournaments(prev => prev.map(x => x.id === t.id ? t : x));
+    refreshTournaments();
   };
   const handleTournamentDeleted = (id) => {
     setTournaments(prev => prev.filter(x => x.id !== id));
+    refreshTournaments();
   };
 
   const handleGroundCreated = (newGround) => {

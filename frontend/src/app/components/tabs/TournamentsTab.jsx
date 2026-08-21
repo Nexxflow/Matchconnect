@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Award, MapPin, CalendarDays, Users, DollarSign, Phone, Trophy, X, Pencil, Trash2, CheckCircle, Info } from "lucide-react";
+import { Award, MapPin, CalendarDays, Users, DollarSign, Phone, Trophy, X, Pencil, Trash2, CheckCircle, Info, Plus } from "lucide-react";
 import { apiRequest } from "../../api";
 import CreateTournamentForm from "../CreateTournamentForm";
 import { C, cn, Tag, GhostButton } from "../../utils/helpers.jsx";
@@ -16,6 +16,21 @@ function statusMeta(status) {
 function formatMoney(n) {
   if (n === null || n === undefined || n === "") return "-";
   return `₹${Number(n).toLocaleString("en-IN")}`;
+}
+
+// ---------------------------------------------------------------------------
+// Single source of truth for "is this user the organizer of this tournament".
+// Both the card and the modal use this so their Edit/Delete gating can never
+// drift out of sync again. Note: the backend field is `created_by`, NOT
+// `creator_user_id` (that field doesn't exist in the API response).
+// ---------------------------------------------------------------------------
+function isOrganizerOf(t, { myTeamId, currentUser } = {}) {
+  const userTeamName = currentUser?.team_name?.trim()?.toLowerCase();
+  return !!(
+    (myTeamId && t.creator_team_id === myTeamId) ||
+    (currentUser?.id && t.created_by === currentUser.id) ||
+    (userTeamName && t.creator_team_name?.trim()?.toLowerCase() === userTeamName)
+  );
 }
 
 function TeamsRemainingBadge({ spotsLeft, maxTeams }) {
@@ -60,7 +75,7 @@ function DetailRow({ icon: Icon, label, value }) {
   );
 }
 
-function TournamentDetailsModal({ t, onClose, isMine, roleLabel, registered, onRegister, onEdit, onDelete, token }) {
+function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, registered, onRegister, onEdit, onDelete, token }) {
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
     document.addEventListener("keydown", onKey);
@@ -175,7 +190,10 @@ function TournamentDetailsModal({ t, onClose, isMine, roleLabel, registered, onR
             Close
           </GhostButton>
 
-          {isMine && roleLabel === "Organizing" && (
+          {/* Fixed: previously gated on `isMine && t.creator_team_name`, which is true
+              for anyone merely registered (not just the organizer). Now uses the same
+              isOrganizer check as the card, so only the actual organizer sees these. */}
+          {(roleLabel === "Organizing" || isOrganizer) && (
             <div className="flex gap-2">
               <button
                 type="button"
@@ -235,7 +253,7 @@ function TournamentDetailsModal({ t, onClose, isMine, roleLabel, registered, onR
   );
 }
 
-function TournamentCard({ t, isMine, roleLabel, registered, onRegister, onView, onEdit, onDelete, token }) {
+function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegister, onView, onEdit, onDelete, token }) {
   const spotsLeft = t.spots_left ?? Math.max((t.max_teams || 0) - (t.team_count || 0), 0);
   const full = spotsLeft === 0;
   const canRegister = t.status === "registering" && !full && !registered && !isMine;
@@ -285,20 +303,20 @@ function TournamentCard({ t, isMine, roleLabel, registered, onRegister, onView, 
             >
               <CheckCircle className="w-3.5 h-3.5" /> {roleLabel}
             </span>
-            {roleLabel === "Organizing" && (
+            {(roleLabel === "Organizing" || isOrganizer) && (
               <>
                 <button
                   type="button"
                   onClick={() => onEdit?.(t)}
                   title="Edit Tournament"
-                  className="px-3 py-2 rounded-xl text-xs font-bold transition-colors text-gray-300 hover:text-white bg-[#252525] hover:bg-[#333]"
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold transition-colors text-white bg-green-500/10 border border-green-500/20 hover:bg-green-500/20 flex items-center gap-1.5"
                 >
-                  <Pencil className="w-3.5 h-3.5" />
+                  <Pencil className="w-3.5 h-3.5" /> Edit
                 </button>
                 <button
                   type="button"
                   onClick={async () => {
-                    if (!window.confirm("Delete this tournament?")) return;
+                    if (!window.confirm("Are you sure you want to delete this tournament?")) return;
                     try {
                       await apiRequest(`/tournaments/${t.id}`, { method: "DELETE", token });
                       onDelete?.(t.id);
@@ -307,9 +325,9 @@ function TournamentCard({ t, isMine, roleLabel, registered, onRegister, onView, 
                     }
                   }}
                   title="Delete Tournament"
-                  className="px-3 py-2 rounded-xl text-xs font-bold transition-colors text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20"
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold transition-colors text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 flex items-center gap-1.5"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-3.5 h-3.5" /> Delete
                 </button>
               </>
             )}
@@ -339,13 +357,20 @@ function TournamentCard({ t, isMine, roleLabel, registered, onRegister, onView, 
   );
 }
 
-export default function TournamentsTab({ registeredIds, onRegister, tournaments, token, currentUser, myTeamId, onTournamentCreated, onTournamentUpdated, onTournamentDeleted }) {
+export default function TournamentsTab({ registeredIds = [], onRegister, tournaments, token, currentUser, myTeamId, onTournamentCreated, onTournamentUpdated, onTournamentDeleted }) {
   const [viewingId, setViewingId] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingTournament, setEditingTournament] = useState(null);
 
   const allTournaments = tournaments || [];
-  const isMine = (t) => t.creator_team_id === myTeamId || registeredIds.includes(t.id);
+
+  // Single check used everywhere: organizer = created the tournament (by team
+  // match, user id match via `created_by`, or team-name fallback).
+  const organizerCheck = (t) => isOrganizerOf(t, { myTeamId, currentUser });
+  const isMine = (t) => organizerCheck(t) || registeredIds.includes(t.id);
+
+  const myCreatedTournament = allTournaments.find(organizerCheck);
+
   const myTournaments = allTournaments.filter(isMine);
   const otherTournaments = allTournaments.filter((t) => !isMine(t));
   const viewingTournament = allTournaments.find((t) => t.id === viewingId) || null;
@@ -356,7 +381,47 @@ export default function TournamentsTab({ registeredIds, onRegister, tournaments,
   };
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
+      {/* Top Header with Title and Create Tournament Button */}
+      <div className="flex items-center justify-between flex-wrap gap-3 pb-2 border-b border-[#2a2a2a]">
+        <div>
+          <h2 className="text-xl font-bold text-white">Tournaments</h2>
+          <p className="text-sm mt-0.5" style={{ color: "#6b7a6b" }}>Organize or register for local cricket tournaments</p>
+        </div>
+
+        {myCreatedTournament ? (
+          <button
+            disabled
+            title="Your team has already created an active tournament. Delete it first to create a new one."
+            className="px-4 py-2.5 rounded-xl text-sm font-bold opacity-60 cursor-not-allowed flex items-center gap-2"
+            style={{ backgroundColor: "#1e241e", color: "#6b7a6b", border: "1px solid #2a2a2a" }}
+          >
+            <Plus className="w-4 h-4" /> Create Tournament
+          </button>
+        ) : (
+          <button
+            onClick={() => setShowCreateForm(true)}
+            className="px-5 py-2.5 rounded-xl bg-green-500 text-black font-bold text-sm hover:bg-green-400 transition-colors flex items-center gap-2 shrink-0"
+          >
+            <Plus className="w-4 h-4" /> Create Tournament
+          </button>
+        )}
+      </div>
+
+      {/* Notice if team already created a tournament */}
+      {myCreatedTournament && (
+        <div className="rounded-xl px-4 py-3 text-xs flex items-center justify-between gap-3" style={{ backgroundColor: "#161b16", border: "1px solid rgba(34,197,94,0.2)", color: "#8ea08b" }}>
+          <span>Your team (<strong>{myCreatedTournament.creator_team_name || "Organizing Team"}</strong>) has an active tournament: <strong>{myCreatedTournament.name}</strong>. Delete it if you wish to create a new one.</span>
+          <button
+            onClick={() => setEditingTournament(myCreatedTournament)}
+            className="px-3 py-1 rounded-lg text-xs font-semibold bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors shrink-0"
+          >
+            Edit Tournament
+          </button>
+        </div>
+      )}
+
+      {/* Your Tournaments Section */}
       <section>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-base font-semibold text-white">Your Tournaments</h3>
@@ -377,7 +442,8 @@ export default function TournamentsTab({ registeredIds, onRegister, tournaments,
                 key={t.id}
                 t={t}
                 isMine
-                roleLabel={t.creator_team_id === myTeamId ? "Organizing" : "Registered"}
+                isOrganizer={organizerCheck(t)}
+                roleLabel={organizerCheck(t) ? "Organizing" : "Registered"}
                 registered={registeredIds.includes(t.id)}
                 onRegister={onRegister}
                 onView={() => setViewingId(t.id)}
@@ -390,6 +456,7 @@ export default function TournamentsTab({ registeredIds, onRegister, tournaments,
         )}
       </section>
 
+      {/* All Tournaments Section */}
       <section>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-base font-semibold text-white">All Tournaments</h3>
@@ -399,7 +466,7 @@ export default function TournamentsTab({ registeredIds, onRegister, tournaments,
         </div>
         {otherTournaments.length === 0 ? (
           <div className={cn(C, "rounded-2xl p-6 text-center text-sm")} style={{ color: "#4a5a4a" }}>
-            No other tournaments yet.
+            No other tournaments available right now.
           </div>
         ) : (
           <div className="space-y-3">
@@ -408,6 +475,8 @@ export default function TournamentsTab({ registeredIds, onRegister, tournaments,
                 key={t.id}
                 t={t}
                 isMine={false}
+                isOrganizer={organizerCheck(t)}
+                roleLabel={organizerCheck(t) ? "Organizing" : undefined}
                 registered={registeredIds.includes(t.id)}
                 onRegister={onRegister}
                 onView={() => setViewingId(t.id)}
@@ -420,32 +489,13 @@ export default function TournamentsTab({ registeredIds, onRegister, tournaments,
         )}
       </section>
 
-      <section>
-        <div
-          className={cn(C, "rounded-2xl p-5 flex items-center justify-between gap-4")}
-          style={{ background: "linear-gradient(135deg, rgba(34,197,94,0.06), rgba(13,15,13,0.4))" }}
-        >
-          <div>
-            <div className="text-sm font-medium text-white">Ready to run your own tournament?</div>
-            <div className="text-xs mt-1" style={{ color: "#6b7a6b" }}>
-              Set the team count, entry fee, prizes and publish in one step.
-            </div>
-          </div>
-          <button
-            onClick={() => setShowCreateForm(true)}
-            className="px-5 py-2.5 rounded-xl bg-green-500 text-black font-bold text-sm hover:bg-green-400 transition-colors shrink-0"
-          >
-            + Create Tournament
-          </button>
-        </div>
-      </section>
-
       {viewingTournament && (
         <TournamentDetailsModal
           t={viewingTournament}
           onClose={() => setViewingId(null)}
           isMine={isMine(viewingTournament)}
-          roleLabel={viewingTournament.creator_team_id === myTeamId ? "Organizing" : "Registered"}
+          isOrganizer={organizerCheck(viewingTournament)}
+          roleLabel={organizerCheck(viewingTournament) ? "Organizing" : "Registered"}
           registered={registeredIds.includes(viewingTournament.id)}
           onRegister={onRegister}
           onEdit={(item) => setEditingTournament(item)}
