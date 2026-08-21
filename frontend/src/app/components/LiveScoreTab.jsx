@@ -20,17 +20,41 @@ import { useEffect, useState, useCallback, useRef } from "react";
    ============================================================================ */
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
-
 async function api(path, options) {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
+
+  const contentType = res.headers.get("content-type") || "";
+  const isJson = contentType.includes("application/json");
+
   if (!res.ok) {
+    // Try to pull a useful message out of the error body, whether it's JSON or not.
+    if (isJson) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.error || `${options?.method || "GET"} ${path} failed (${res.status})`);
+    }
     const text = await res.text().catch(() => "");
-    throw new Error(`${options?.method || "GET"} ${path} failed (${res.status}) ${text}`);
+    throw new Error(
+      `${options?.method || "GET"} ${path} failed (${res.status}). ` +
+      `Expected JSON but got "${contentType || "unknown content-type"}" — ` +
+      `is VITE_API_URL set correctly and is the backend route mounted?`
+    );
   }
+
   if (res.status === 204) return null;
+
+  if (!isJson) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `${options?.method || "GET"} ${path} returned a non-JSON 200 response ` +
+      `(content-type: "${contentType || "unknown"}"). This usually means the request ` +
+      `hit the frontend dev server instead of the API (check VITE_API_URL) or a proxy/rewrite ` +
+      `is intercepting it. First 80 chars: ${text.slice(0, 80)}`
+    );
+  }
+
   return res.json();
 }
 

@@ -25,14 +25,6 @@ export async function apiRequest(path, { method = "GET", body, token } = {}) {
     headers.Authorization = `Bearer ${authToken}`;
   }
 
-  console.log("========================================");
-  console.log("📤 API REQUEST");
-  console.log("URL:", `${API_BASE}${path}`);
-  console.log("Method:", method);
-  console.log("Headers:", headers);
-  console.log("Body:", body);
-  console.log("========================================");
-
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       method,
@@ -40,16 +32,7 @@ export async function apiRequest(path, { method = "GET", body, token } = {}) {
       body: body ? JSON.stringify(body) : undefined,
     });
 
-    console.log("========================================");
-    console.log("📥 API RESPONSE");
-    console.log("Status:", res.status);
-    console.log("Status Text:", res.statusText);
-    console.log("OK:", res.ok);
-
     const data = await res.json().catch(() => ({}));
-
-    console.log("Response Data:", data);
-    console.log("========================================");
 
     if (!res.ok) {
       if (res.status === 401) {

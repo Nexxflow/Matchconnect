@@ -8,6 +8,7 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "migrate": "node src/db/migrate.js",
+    "migrate:livescore": "node src/db/migrate-livescore.js",
     "seed": "node src/db/seed.js"
   },
   "dependencies": {
