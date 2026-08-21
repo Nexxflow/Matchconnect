@@ -74,14 +74,14 @@ const getTournament = asyncHandler(async (req, res) => {
 // resolved by membership, not just ownership, so the one-tournament rule —
 // and the Create button being disabled — applies to every teammate.
 //
-// Self-heal: if team_id had to be resolved via the team_name fallback below,
-// we persist it onto the user's row (outside the transaction, so it survives
-// even if this request ends in a 409 rollback). This is what fixes teammates
-// like D, who join a team after it's created and otherwise never get
-// users.team_id populated — every previous request for them fell back to
-// name-matching, and the frontend's `myTeamId` stayed empty since /me and
-// /login didn't select team_id at all. See authController.js's
-// backfillTeamId for the equivalent self-heal on login/me/profile-update.
+// IMPORTANT: `creator_team_name` is NOT a real column on `tournaments`. It
+// only ever exists as a derived value via `LEFT JOIN teams ct ON ct.id =
+// t.creator_team_id` (see listTournaments/getTournament above). Writing to
+// it or filtering on it directly, as earlier versions of this function did,
+// throws "column creator_team_name does not exist" (Postgres 42703). The
+// persisted source of truth is always creator_team_id; anywhere we need the
+// display name, we either derive it via join or pass it through in the JS
+// response object without storing it.
 // ---------------------------------------------------------------------------
 const createTournament = asyncHandler(async (req, res) => {
   const {
@@ -148,11 +148,9 @@ const createTournament = asyncHandler(async (req, res) => {
       myTeam = teamByNameRes.rows[0] || null;
 
       // Self-heal: persist the resolved team_id onto the user row so future
-      // requests (and the /me and /login responses that populate the
-      // frontend's `myTeamId`) don't need to re-derive it by name every
-      // time. Uses `pool`, not `client` — this must commit independently of
-      // the surrounding transaction, since that transaction may still roll
-      // back below (e.g. on the 409 "already has an active tournament").
+      // requests don't need to re-derive it by name every time. Uses `pool`
+      // (not `client`) so it commits independently of this transaction —
+      // it must survive even if we're about to roll back on the 409 below.
       if (myTeam) {
         await pool.query(
           `UPDATE users SET team_id = $1 WHERE id = $2 AND team_id IS NULL`,
@@ -168,17 +166,28 @@ const createTournament = asyncHandler(async (req, res) => {
       );
     }
 
-    // Check for active tournament created by team_id OR creator's team_name
-    const activeQuery = myTeam
-      ? `SELECT id, name, status FROM tournaments
-         WHERE (creator_team_id = $1 OR LOWER(TRIM(creator_team_name)) = LOWER(TRIM($2)))
-           AND status IN ('registering', 'ongoing')`
-      : `SELECT id, name, status FROM tournaments
-         WHERE LOWER(TRIM(creator_team_name)) = LOWER(TRIM($1))
-           AND status IN ('registering', 'ongoing')`;
-    const activeArgs = myTeam ? [myTeam.id, myTeam.name || user.team_name] : [user.team_name];
-    
-    const activeRes = await client.query(activeQuery, activeArgs);
+    // Check for an active tournament already organized by this team.
+    // See the note at the top of this function: creator_team_name isn't a
+    // real column, so we match on the actual FK (creator_team_id) when we
+    // have one, or join to teams for a name comparison when we don't.
+    let activeRes;
+    if (myTeam) {
+      activeRes = await client.query(
+        `SELECT id, name, status FROM tournaments
+         WHERE creator_team_id = $1
+           AND status IN ('registering', 'ongoing')`,
+        [myTeam.id]
+      );
+    } else {
+      activeRes = await client.query(
+        `SELECT t.id, t.name, t.status
+         FROM tournaments t
+         LEFT JOIN teams ct ON ct.id = t.creator_team_id
+         WHERE LOWER(TRIM(ct.name)) = LOWER(TRIM($1))
+           AND t.status IN ('registering', 'ongoing')`,
+        [user.team_name]
+      );
+    }
     if (activeRes.rows.length > 0) {
       const active = activeRes.rows[0];
       throw Object.assign(
@@ -189,16 +198,20 @@ const createTournament = asyncHandler(async (req, res) => {
       );
     }
 
+    // teamName is only used for the JSON response below (and as a display
+    // fallback) — it is never written to the DB. The persisted source of
+    // truth for the organizing team is creator_team_id; the display name is
+    // always derived via a join to teams, same as listTournaments/getTournament.
     const teamName = myTeam?.name || user?.team_name || null;
     const insertRes = await client.query(
       `INSERT INTO tournaments
          (name, format, venue, start_date, status, max_teams,
-          created_by, creator_team_id, creator_team_name, creator_included,
+          created_by, creator_team_id, creator_included,
           phone, co_phone, entry_fee, description, prizes)
        VALUES
          ($1, $2, $3, $4, 'registering', $5,
-          $6, $7, $8, $9,
-          $10, $11, $12, $13, $14::jsonb)
+          $6, $7, $8,
+          $9, $10, $11, $12, $13::jsonb)
        RETURNING *`,
       [
         name.trim(),
@@ -208,7 +221,6 @@ const createTournament = asyncHandler(async (req, res) => {
         max_teams,
         req.user.id,
         myTeam ? myTeam.id : null,
-        teamName,
         include_own_team,
         phone,
         co_phone,
@@ -353,6 +365,7 @@ const updateTournament = asyncHandler(async (req, res) => {
   const existing = await pool.query(`SELECT * FROM tournaments WHERE id = $1`, [id]);
   if (existing.rows.length === 0) return res.status(404).json({ error: "Tournament not found" });
 
+  // Only the specific user who created/published the tournament can edit it.
   const isCreator = String(existing.rows[0].created_by) === String(req.user.id);
   if (!isCreator) {
     return res.status(403).json({ error: "Only the user who created this tournament can edit it" });
@@ -427,7 +440,7 @@ const deleteTournament = asyncHandler(async (req, res) => {
   const existing = await pool.query(`SELECT * FROM tournaments WHERE id = $1`, [id]);
   if (existing.rows.length === 0) return res.status(404).json({ error: "Tournament not found" });
 
-  // Any teammate of the organizing team can delete — matches createTournament.
+  // Only the specific user who created/published the tournament can delete it.
   const isCreator = String(existing.rows[0].created_by) === String(req.user.id);
   if (!isCreator) {
     return res.status(403).json({ error: "Only the user who created this tournament can delete it" });
