@@ -90,9 +90,14 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
   }, [token]);
 
   // A team can only run one tournament (registering/ongoing) at a time.
-  const myActiveTournament = myTeam && !initialTournament
+  const userTeamName = user?.team_name?.trim()?.toLowerCase();
+  const myActiveTournament = !initialTournament
     ? tournaments.find(
-        (t) => t.creator_team_id === myTeam.id && (t.status === "registering" || t.status === "ongoing")
+        (t) =>
+          (t.status === "registering" || t.status === "ongoing") &&
+          ((myTeam && t.creator_team_id === myTeam.id) ||
+            (user?.id && t.created_by === user.id) ||
+            (userTeamName && t.creator_team_name?.trim()?.toLowerCase() === userTeamName))
       )
     : null;
 

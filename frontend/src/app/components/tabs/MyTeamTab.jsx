@@ -77,7 +77,9 @@ function SquadSection({ token, currentUserId }) {
 
 export default function MyTeamTab({
   acceptedChallenge,
-  registeredTournaments,
+  registeredTournaments = [],
+  tournaments = [],
+  myTeam = null,
   bookings,
   onCancelChallenge,
   onDeleteChallenge,
@@ -92,6 +94,16 @@ export default function MyTeamTab({
 }) {
   const [activeSection, setActiveSection] = useState("bookings");
   const myPhone = normalizePhone(user?.phone);
+  const userTeamName = user?.team_name?.trim()?.toLowerCase();
+  const myTeamId = myTeam?.id;
+
+  // Filter tournaments published by our team (by creator_team_id, created_by, or creator_team_name)
+  const ourPublishedTournaments = tournaments.filter(t => {
+    if (myTeamId && t.creator_team_id === myTeamId) return true;
+    if (user?.id && t.created_by === user.id) return true;
+    if (userTeamName && t.creator_team_name?.trim()?.toLowerCase() === userTeamName) return true;
+    return false;
+  });
 
   const teamPhoneSet = new Set([myPhone, ...teammatePhones].filter(Boolean));
   const teamIdSet = new Set(
@@ -364,41 +376,86 @@ export default function MyTeamTab({
             </div>
           </div>
 
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Trophy className="w-3.5 h-3.5 text-green-400" />
-              <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: "#8fa08f" }}>
-                Tournaments
-              </h4>
-              {registeredTournaments.length > 0 && (
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
-                  {registeredTournaments.length}
-                </span>
+          <div className="space-y-4">
+            {/* Card 1: Our Team Published Tournaments */}
+            <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: "#151715", border: "1px solid rgba(34,197,94,0.25)" }}>
+              <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid #1e1e1e" }}>
+                <Trophy className="w-3.5 h-3.5 text-green-400" />
+                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: "#8fa08f" }}>
+                  Our Team Published Tournaments
+                </h4>
+                {ourPublishedTournaments.length > 0 && (
+                  <span className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
+                    {ourPublishedTournaments.length}
+                  </span>
+                )}
+              </div>
+
+              {ourPublishedTournaments.length === 0 ? (
+                <div className="px-4 py-6 text-center">
+                  <p className="text-xs" style={{ color: "#6b7a6b" }}>No active tournament published by your team yet</p>
+                </div>
+              ) : (
+                <div className="divide-y" style={{ borderColor: "#1e1e1e" }}>
+                  {ourPublishedTournaments.map(t => (
+                    <div key={t.id} className="p-4 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}>
+                          <Trophy className="w-4 h-4 text-green-400" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-white truncate">{t.name}</div>
+                          <div className="text-xs mt-0.5 truncate" style={{ color: "#6b7a6b" }}>
+                            Starts {t.startDate || "TBA"} · {t.format} · 📍 {t.venue || "TBD"}
+                          </div>
+                        </div>
+                      </div>
+                      <Tag color="green">Organizing</Tag>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 
-            {registeredTournaments.length === 0 ? (
-              <div className="rounded-xl p-4 text-center border border-dashed" style={{ borderColor: "#2a2a2a", backgroundColor: "#131413" }}>
-                <p className="text-xs" style={{ color: "#6b7a6b" }}>No tournament registrations yet</p>
+            {/* Card 2: Registered Tournaments */}
+            <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: "#151715", border: "1px solid rgba(59,130,246,0.25)" }}>
+              <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid #1e1e1e" }}>
+                <Trophy className="w-3.5 h-3.5 text-blue-400" />
+                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: "#8fa08f" }}>
+                  Registered Tournaments
+                </h4>
+                {registeredTournaments.length > 0 && (
+                  <span className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
+                    {registeredTournaments.length}
+                  </span>
+                )}
               </div>
-            ) : (
-              <div className="space-y-2">
-                {registeredTournaments.map(t => (
-                  <div key={t.id} className={cn(C, "rounded-2xl p-4 flex items-center gap-3")}>
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}>
-                      <Trophy className="w-4 h-4 text-green-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold text-white truncate">{t.name}</div>
-                      <div className="text-xs mt-0.5 truncate" style={{ color: "#6b7a6b" }}>
-                        Starts {t.startDate} · {t.format} · 📍 {t.venue}
+
+              {registeredTournaments.length === 0 ? (
+                <div className="px-4 py-6 text-center">
+                  <p className="text-xs" style={{ color: "#6b7a6b" }}>No tournament registrations yet</p>
+                </div>
+              ) : (
+                <div className="divide-y" style={{ borderColor: "#1e1e1e" }}>
+                  {registeredTournaments.map(t => (
+                    <div key={t.id} className="p-4 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)" }}>
+                          <Trophy className="w-4 h-4 text-blue-400" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-white truncate">{t.name}</div>
+                          <div className="text-xs mt-0.5 truncate" style={{ color: "#6b7a6b" }}>
+                            Starts {t.startDate} · {t.format} · 📍 {t.venue}
+                          </div>
+                        </div>
                       </div>
+                      <Tag color="blue">Registered</Tag>
                     </div>
-                    <Tag color="green">Registered</Tag>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </section>
       )}

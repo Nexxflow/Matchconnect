@@ -9,13 +9,39 @@ const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
 
 // Columns that are safe to return to the client. password_hash and reset
 // token fields never leave this file.
+// NOTE: team_id is included here on purpose — without it the frontend's
+// `myTeamId` is always empty, which is what caused teammates like D to fall
+// through to name-matching on every single tournament request.
 const PUBLIC_USER_COLUMNS =
-  "id, name, email, phone, team_name, village_name, team_year, created_at";
+  "id, name, email, phone, team_id, team_name, village_name, team_year, created_at";
 
 function signToken(user) {
   return jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || "7d"
   });
+}
+
+// ─── Team self-heal ─────────────────────────────────────────────────────────
+// Best-effort: if a user has a team_name but no team_id, try to link them to
+// an existing team row (case/whitespace-insensitive match on name). This is
+// what lets teammates who never created the team (e.g. D, who joined after
+// C created "team A") end up with the same team_id as the creator, instead
+// of silently having team_id = NULL forever. It's called from every place a
+// user record gets loaded, so it self-corrects on next login/profile fetch
+// without needing a one-off migration script.
+async function backfillTeamId(user) {
+  if (!user || user.team_id || !user.team_name?.trim()) return user;
+
+  const teamRes = await pool.query(
+    `SELECT id FROM teams WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
+    [user.team_name.trim()]
+  );
+  const team = teamRes.rows[0];
+  if (!team) return user; // no matching team row exists yet — nothing to link
+
+  await pool.query(`UPDATE users SET team_id = $1 WHERE id = $2`, [team.id, user.id]);
+  user.team_id = team.id;
+  return user;
 }
 
 // ─── Mailer setup ───────────────────────────────────────────────────────────
@@ -120,7 +146,9 @@ const signup = asyncHandler(async (req, res) => {
     ]
   );
 
-  const user = result.rows[0];
+  // Try to link team_id immediately if a team with this name already exists
+  // (e.g. D signs up and types the same team_name C already registered).
+  const user = await backfillTeamId(result.rows[0]);
 
   // Signing up no longer grants access. No token is issued here —
   // the user has to log in separately to get one.
@@ -150,6 +178,11 @@ const login = asyncHandler(async (req, res) => {
     return res.status(401).json({ error: "Invalid credentials" });
   }
 
+  // Self-heal team_id on every login — cheap no-op once it's set, and this
+  // is the main path that fixes teammates (like D) who joined a team after
+  // it was created and never got team_id populated.
+  await backfillTeamId(user);
+
   const token = signToken(user);
   delete user.password_hash;
   delete user.reset_password_token;
@@ -158,7 +191,7 @@ const login = asyncHandler(async (req, res) => {
 });
 
 // GET /api/auth/me
-// Returns the full profile (name, email, phone, team_name, village_name, team_year).
+// Returns the full profile (name, email, phone, team_id, team_name, village_name, team_year).
 // The UI decides what to show at a glance (name + phone) vs. in the edit form.
 const me = asyncHandler(async (req, res) => {
   const result = await pool.query(
@@ -166,7 +199,12 @@ const me = asyncHandler(async (req, res) => {
     [req.user.id]
   );
   if (result.rows.length === 0) return res.status(404).json({ error: "User not found" });
-  res.json({ user: result.rows[0] });
+
+  // Also self-heal here, so an already-logged-in session (long-lived JWT)
+  // picks up a team_id fix the next time the frontend calls /me, without
+  // requiring the user to log out and back in.
+  const user = await backfillTeamId(result.rows[0]);
+  res.json({ user });
 });
 
 // PUT /api/auth/profile
@@ -220,7 +258,11 @@ const updateProfile = asyncHandler(async (req, res) => {
     ]
   );
 
-  res.json({ user: result.rows[0], message: "Profile updated" });
+  // If the user just set/corrected their team_name to match an existing
+  // team, link team_id right away instead of waiting for their next login.
+  const user = await backfillTeamId(result.rows[0]);
+
+  res.json({ user, message: "Profile updated" });
 });
 
 // POST /api/auth/forgot-password

@@ -73,6 +73,15 @@ const getTournament = asyncHandler(async (req, res) => {
 // REQUIRES: users.team_id (run add_users_team_id.sql first). "My team" is
 // resolved by membership, not just ownership, so the one-tournament rule —
 // and the Create button being disabled — applies to every teammate.
+//
+// Self-heal: if team_id had to be resolved via the team_name fallback below,
+// we persist it onto the user's row (outside the transaction, so it survives
+// even if this request ends in a 409 rollback). This is what fixes teammates
+// like D, who join a team after it's created and otherwise never get
+// users.team_id populated — every previous request for them fell back to
+// name-matching, and the frontend's `myTeamId` stayed empty since /me and
+// /login didn't select team_id at all. See authController.js's
+// backfillTeamId for the equivalent self-heal on login/me/profile-update.
 // ---------------------------------------------------------------------------
 const createTournament = asyncHandler(async (req, res) => {
   const {
@@ -117,49 +126,79 @@ const createTournament = asyncHandler(async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    const teamRes = await client.query(
-      `SELECT tm.id, tm.name
-       FROM teams tm
-       JOIN users u ON u.team_id = tm.id
-       WHERE u.id = $1
-       FOR UPDATE OF tm`,
+    // Look up team via users.team_id OR by matching registered team_name
+    const userRes = await client.query(
+      `SELECT id, team_name, village_name, team_year, team_id FROM users WHERE id = $1`,
       [req.user.id]
     );
-    const myTeam = teamRes.rows[0] || null;
+    const user = userRes.rows[0];
 
-    if (include_own_team && !myTeam) {
-      throw Object.assign(
-        new Error("You don't have a team registered yet, so you can't include your own team. Register a team first, or turn off 'include my team'."),
-        { status: 400 }
-      );
+    let myTeam = null;
+    if (user?.team_id) {
+      const teamRes = await client.query(`SELECT id, name FROM teams WHERE id = $1 FOR UPDATE`, [user.team_id]);
+      myTeam = teamRes.rows[0] || null;
     }
 
-    if (myTeam) {
-      const activeRes = await client.query(
-        `SELECT id, name, status FROM tournaments
-         WHERE creator_team_id = $1 AND status IN ('registering', 'ongoing')`,
-        [myTeam.id]
+    // Fallback: match team by name if team_id isn't directly populated on user
+    if (!myTeam && user?.team_name?.trim()) {
+      const teamByNameRes = await client.query(
+        `SELECT id, name FROM teams WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
+        [user.team_name.trim()]
       );
-      if (activeRes.rows.length > 0) {
-        const active = activeRes.rows[0];
-        throw Object.assign(
-          new Error(
-            `Your team is already organizing "${active.name}" (${active.status}). Any team member can wait for it to complete, or the organizer can cancel/delete it before creating another.`
-          ),
-          { status: 409 }
+      myTeam = teamByNameRes.rows[0] || null;
+
+      // Self-heal: persist the resolved team_id onto the user row so future
+      // requests (and the /me and /login responses that populate the
+      // frontend's `myTeamId`) don't need to re-derive it by name every
+      // time. Uses `pool`, not `client` — this must commit independently of
+      // the surrounding transaction, since that transaction may still roll
+      // back below (e.g. on the 409 "already has an active tournament").
+      if (myTeam) {
+        await pool.query(
+          `UPDATE users SET team_id = $1 WHERE id = $2 AND team_id IS NULL`,
+          [myTeam.id, req.user.id]
         );
       }
     }
 
+    if (include_own_team && !myTeam && !user?.team_name?.trim()) {
+      throw Object.assign(
+        new Error("You don't have a team registered yet, so you can't include your own team. Register a team first in Edit Profile, or turn off 'include my team'."),
+        { status: 400 }
+      );
+    }
+
+    // Check for active tournament created by team_id OR creator's team_name
+    const activeQuery = myTeam
+      ? `SELECT id, name, status FROM tournaments
+         WHERE (creator_team_id = $1 OR LOWER(TRIM(creator_team_name)) = LOWER(TRIM($2)))
+           AND status IN ('registering', 'ongoing')`
+      : `SELECT id, name, status FROM tournaments
+         WHERE LOWER(TRIM(creator_team_name)) = LOWER(TRIM($1))
+           AND status IN ('registering', 'ongoing')`;
+    const activeArgs = myTeam ? [myTeam.id, myTeam.name || user.team_name] : [user.team_name];
+    
+    const activeRes = await client.query(activeQuery, activeArgs);
+    if (activeRes.rows.length > 0) {
+      const active = activeRes.rows[0];
+      throw Object.assign(
+        new Error(
+          `Your team is already organizing "${active.name}" (${active.status}). Any team member can wait for it to complete, or the organizer can cancel/delete it before creating another.`
+        ),
+        { status: 409 }
+      );
+    }
+
+    const teamName = myTeam?.name || user?.team_name || null;
     const insertRes = await client.query(
       `INSERT INTO tournaments
          (name, format, venue, start_date, status, max_teams,
-          created_by, creator_team_id, creator_included,
+          created_by, creator_team_id, creator_team_name, creator_included,
           phone, co_phone, entry_fee, description, prizes)
        VALUES
          ($1, $2, $3, $4, 'registering', $5,
-          $6, $7, $8,
-          $9, $10, $11, $12, $13::jsonb)
+          $6, $7, $8, $9,
+          $10, $11, $12, $13, $14::jsonb)
        RETURNING *`,
       [
         name.trim(),
@@ -169,6 +208,7 @@ const createTournament = asyncHandler(async (req, res) => {
         max_teams,
         req.user.id,
         myTeam ? myTeam.id : null,
+        teamName,
         include_own_team,
         phone,
         co_phone,
@@ -179,10 +219,11 @@ const createTournament = asyncHandler(async (req, res) => {
     );
     const tournament = insertRes.rows[0];
 
-    if (include_own_team) {
+    if (include_own_team && myTeam?.id) {
       await client.query(
         `INSERT INTO tournament_registrations (tournament_id, team_id, registered_by, status)
-         VALUES ($1, $2, $3, 'confirmed')`,
+         VALUES ($1, $2, $3, 'confirmed')
+         ON CONFLICT DO NOTHING`,
         [tournament.id, myTeam.id, req.user.id]
       );
     }
@@ -193,7 +234,7 @@ const createTournament = asyncHandler(async (req, res) => {
     res.status(201).json({
       tournament: {
         ...tournament,
-        creator_team_name: myTeam?.name || null,
+        creator_team_name: teamName,
         team_count,
         spots_left: Math.max(tournament.max_teams - team_count, 0),
       },
@@ -312,13 +353,9 @@ const updateTournament = asyncHandler(async (req, res) => {
   const existing = await pool.query(`SELECT * FROM tournaments WHERE id = $1`, [id]);
   if (existing.rows.length === 0) return res.status(404).json({ error: "Tournament not found" });
 
-  // Any teammate of the organizing team can edit — matches createTournament.
-  const editorTeamRes = await pool.query(`SELECT team_id FROM users WHERE id = $1`, [req.user.id]);
-  const editorTeamId = editorTeamRes.rows[0]?.team_id ?? null;
   const isCreator = String(existing.rows[0].created_by) === String(req.user.id);
-  const isTeammate = editorTeamId != null && editorTeamId === existing.rows[0].creator_team_id;
-  if (!isCreator && !isTeammate) {
-    return res.status(403).json({ error: "Only the organizing team can edit this tournament" });
+  if (!isCreator) {
+    return res.status(403).json({ error: "Only the user who created this tournament can edit it" });
   }
 
   if (!Array.isArray(prizes) || prizes.length < 1 || prizes.length > 3) {
@@ -391,12 +428,9 @@ const deleteTournament = asyncHandler(async (req, res) => {
   if (existing.rows.length === 0) return res.status(404).json({ error: "Tournament not found" });
 
   // Any teammate of the organizing team can delete — matches createTournament.
-  const editorTeamRes = await pool.query(`SELECT team_id FROM users WHERE id = $1`, [req.user.id]);
-  const editorTeamId = editorTeamRes.rows[0]?.team_id ?? null;
   const isCreator = String(existing.rows[0].created_by) === String(req.user.id);
-  const isTeammate = editorTeamId != null && editorTeamId === existing.rows[0].creator_team_id;
-  if (!isCreator && !isTeammate) {
-    return res.status(403).json({ error: "Only the organizing team can delete this tournament" });
+  if (!isCreator) {
+    return res.status(403).json({ error: "Only the user who created this tournament can delete it" });
   }
 
   await pool.query(`DELETE FROM tournaments WHERE id = $1`, [id]);

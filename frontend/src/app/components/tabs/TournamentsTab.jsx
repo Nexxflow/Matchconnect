@@ -21,16 +21,12 @@ function formatMoney(n) {
 // ---------------------------------------------------------------------------
 // Single source of truth for "is this user the organizer of this tournament".
 // Both the card and the modal use this so their Edit/Delete gating can never
-// drift out of sync again. Note: the backend field is `created_by`, NOT
-// `creator_user_id` (that field doesn't exist in the API response).
+// drift out of sync. Note: strictly checks `created_by` matching `currentUser.id`
+// so only the creating user can edit/delete, not their teammates.
 // ---------------------------------------------------------------------------
-function isOrganizerOf(t, { myTeamId, currentUser } = {}) {
-  const userTeamName = currentUser?.team_name?.trim()?.toLowerCase();
-  return !!(
-    (myTeamId && t.creator_team_id === myTeamId) ||
-    (currentUser?.id && t.created_by === currentUser.id) ||
-    (userTeamName && t.creator_team_name?.trim()?.toLowerCase() === userTeamName)
-  );
+function isOrganizerOf(t, { currentUser } = {}) {
+  if (!currentUser?.id || !t?.created_by) return false;
+  return String(t.created_by) === String(currentUser.id);
 }
 
 function TeamsRemainingBadge({ spotsLeft, maxTeams }) {
@@ -364,9 +360,8 @@ export default function TournamentsTab({ registeredIds = [], onRegister, tournam
 
   const allTournaments = tournaments || [];
 
-  // Single check used everywhere: organizer = created the tournament (by team
-  // match, user id match via `created_by`, or team-name fallback).
-  const organizerCheck = (t) => isOrganizerOf(t, { myTeamId, currentUser });
+  // Single check used everywhere: organizer = user who directly created the tournament (`created_by === currentUser.id`).
+  const organizerCheck = (t) => isOrganizerOf(t, { currentUser });
   const isMine = (t) => organizerCheck(t) || registeredIds.includes(t.id);
 
   const myCreatedTournament = allTournaments.find(organizerCheck);

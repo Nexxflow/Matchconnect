@@ -423,6 +423,7 @@ export default function App() {
         token={auth.token}
         currentUser={auth.user}
         myTeamId={myTeam?.id}
+        teammates={teammates}
         onTournamentCreated={handleTournamentCreated}
         onTournamentUpdated={handleTournamentUpdated}
         onTournamentDeleted={handleTournamentDeleted}
@@ -432,6 +433,8 @@ export default function App() {
       <MyTeamTab
         acceptedChallenge={acceptedChallenge}
         registeredTournaments={registeredTournaments}
+        tournaments={tournaments}
+        myTeam={myTeam}
         bookings={bookings}
         onCancelChallenge={handleCancelAcceptedChallenge}
         cancelling={cancellingChallenge}
