@@ -1,6 +1,9 @@
 // ─── API layer ──────────────────────────────────────────────────────────────
-// export const API_BASE = "https://hdr2k2kf-8000.inc1.devtunnels.ms/api";
-export const API_BASE = "http://localhost:8000/api";
+// Reads VITE_API_URL from the environment (.env / .env.production) so the
+// same build can point at localhost in dev and the real deployed backend in
+// production, instead of a hardcoded host. Falls back to localhost so local
+// `npm run dev` keeps working even if a dev hasn't set up a .env yet.
+export const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
 // ─── Auth token persistence ─────────────────────────────────────────────────
 const TOKEN_KEY = "mc_token";

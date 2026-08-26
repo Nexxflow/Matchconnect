@@ -13,6 +13,7 @@ const errorHandler = require("./middleware/errorHandler");
 // Routes
 // =========================
 const authRoutes = require("./routes/authRoutes");
+const teamsRoutes = require("./routes/teamsRoutes");
 const groundsRoutes = require("./routes/groundsRoutes");
 const umpiresRoutes = require("./routes/umpiresRoutes");
 const bookingsRoutes = require("./routes/bookingsRoutes");
@@ -129,7 +130,7 @@ app.get("/health", (req, res) => {
 // ====================================================
 
 app.use("/api/auth", authRoutes);
-// app.use("/api/teams", teamsRoutes);
+app.use("/api/teams", teamsRoutes);
 
 app.use("/api/grounds", groundsRoutes);
 app.use("/api/umpires", umpiresRoutes);
