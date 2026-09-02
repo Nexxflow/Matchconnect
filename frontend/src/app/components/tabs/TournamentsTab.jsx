@@ -71,7 +71,11 @@ function DetailRow({ icon: Icon, label, value }) {
   );
 }
 
-function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, registered, onRegister, onEdit, onDelete, token }) {
+function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, registered, onRegister, onUnregister, onEdit, onDelete, token }) {
+  const [details, setDetails] = useState(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [showTeams, setShowTeams] = useState(false);
+
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
     document.addEventListener("keydown", onKey);
@@ -82,9 +86,29 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
     };
   }, [onClose]);
 
+  useEffect(() => {
+    if (!t?.id) return;
+    let cancelled = false;
+    (async () => {
+      setLoadingDetails(true);
+      try {
+        const data = await apiRequest(`/tournaments/${t.id}`);
+        if (!cancelled && data?.tournament) {
+          setDetails(data.tournament);
+        }
+      } catch (err) {
+        console.error("Failed to load tournament details:", err);
+      } finally {
+        if (!cancelled) setLoadingDetails(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [t?.id]);
+
+  const confirmedTeams = details?.teams || [];
   const maxTeams = t.max_teams ?? 0;
-  const teamCount = t.team_count ?? 0;
-  const spotsLeft = t.spots_left ?? Math.max(maxTeams - teamCount, 0);
+  const teamCount = details?.team_count ?? (t.team_count ?? 0);
+  const spotsLeft = Math.max(maxTeams - teamCount, 0);
   const full = spotsLeft === 0;
   const canRegister = t.status === "registering" && !full && !registered && !isMine;
   const meta = statusMeta(t.status);
@@ -157,6 +181,50 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
             <DetailRow icon={Phone} label="Co-contact" value={t.co_phone || "-"} />
           </div>
 
+          {/* Confirmed Teams Button & List */}
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={() => setShowTeams(!showTeams)}
+              className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors bg-[#161816] hover:bg-[#1f221f] text-white border border-[#2a2a2a]"
+            >
+              <span className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-green-400" />
+                Confirmed Teams ({teamCount})
+              </span>
+              <span className="text-[10px] text-green-400 font-medium">
+                {showTeams ? "Hide Teams ▲" : "View Teams ▼"}
+              </span>
+            </button>
+
+            {showTeams && (
+              <div className="rounded-xl p-3 border border-[#2a2a2a] bg-[#111311] space-y-2 max-h-48 overflow-y-auto">
+                {loadingDetails ? (
+                  <div className="text-xs text-center py-3" style={{ color: "#6b7a6b" }}>
+                    Loading confirmed teams...
+                  </div>
+                ) : confirmedTeams.length === 0 ? (
+                  <div className="text-xs text-center py-3" style={{ color: "#6b7a6b" }}>
+                    No teams confirmed yet
+                  </div>
+                ) : (
+                  confirmedTeams.map((team, idx) => (
+                    <div
+                      key={team.id || idx}
+                      className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-[#161816] border border-[#1e201e]"
+                    >
+                      <span className="text-xs font-medium text-white flex items-center gap-2">
+                        <span className="text-[10px] font-mono w-4 text-[#6b7a6b]">{idx + 1}.</span>
+                        {team.name}
+                      </span>
+                      <Tag color="green">Confirmed</Tag>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
           {Array.isArray(t.prizes) && t.prizes.length > 0 && (
             <div className="space-y-2">
               <div className="text-sm font-semibold text-white flex items-center gap-1.5">
@@ -226,15 +294,31 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
               <CheckCircle className="w-3.5 h-3.5" /> {roleLabel}
             </span>
           ) : registered ? (
-            <span className="flex-1 py-2 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1.5"
-              style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
-              <CheckCircle className="w-3.5 h-3.5" /> Registered
-            </span>
+            <div className="flex-1 flex gap-1.5">
+              <span className="flex-1 py-2 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1.5"
+                style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
+                <CheckCircle className="w-3.5 h-3.5" /> Registered
+              </span>
+              {onUnregister && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onUnregister(t.id);
+                    onClose();
+                  }}
+                  className="px-3 py-2 rounded-xl text-xs font-bold transition-colors text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
           ) : (
             <button
               onClick={() => {
-                onRegister(t.id);
-                onClose();
+                if (window.confirm(`Are you sure you want to register your team for "${t.name}"?`)) {
+                  onRegister(t.id);
+                  onClose();
+                }
               }}
               disabled={!canRegister}
               className="flex-1 py-2 rounded-xl text-xs font-semibold transition-colors text-green-400 hover:opacity-80 disabled:opacity-50"
@@ -249,7 +333,7 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
   );
 }
 
-function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegister, onView, onEdit, onDelete, token }) {
+function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegister, onUnregister, onView, onEdit, onDelete, token }) {
   const spotsLeft = t.spots_left ?? Math.max((t.max_teams || 0) - (t.team_count || 0), 0);
   const full = spotsLeft === 0;
   const canRegister = t.status === "registering" && !full && !registered && !isMine;
@@ -329,15 +413,31 @@ function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegis
             )}
           </div>
         ) : registered ? (
-          <span
-            className="flex-1 py-2 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1"
-            style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}
-          >
-            <CheckCircle className="w-3.5 h-3.5" /> Registered
-          </span>
+          <div className="flex-1 flex gap-1.5">
+            <span
+              className="flex-1 py-2 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1"
+              style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}
+            >
+              <CheckCircle className="w-3.5 h-3.5" /> Registered
+            </span>
+            {onUnregister && (
+              <button
+                type="button"
+                onClick={() => onUnregister(t.id)}
+                title="Cancel Registration"
+                className="px-3 py-2 rounded-xl text-xs font-bold transition-colors text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
         ) : (
           <button
-            onClick={() => onRegister(t.id)}
+            onClick={() => {
+              if (window.confirm(`Are you sure you want to register your team for "${t.name}"?`)) {
+                onRegister(t.id);
+              }
+            }}
             disabled={!canRegister}
             className="flex-1 py-2 rounded-xl text-xs font-semibold transition-colors text-green-400 hover:opacity-80 disabled:opacity-50"
             style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}
@@ -353,21 +453,33 @@ function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegis
   );
 }
 
-export default function TournamentsTab({ registeredIds = [], onRegister, tournaments, token, currentUser, myTeamId, onTournamentCreated, onTournamentUpdated, onTournamentDeleted }) {
+export default function TournamentsTab({ registeredIds = [], onRegister, onUnregister, tournaments, token, currentUser, myTeamId, teammates, onTournamentCreated, onTournamentUpdated, onTournamentDeleted }) {
   const [viewingId, setViewingId] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingTournament, setEditingTournament] = useState(null);
 
   const allTournaments = tournaments || [];
 
+  // Gather all squad member IDs (current user + teammates)
+  const squadMemberIds = new Set(
+    [currentUser?.id, ...(teammates?.ids || [])]
+      .filter(Boolean)
+      .map(id => String(id))
+  );
+
   // Single check used everywhere: organizer = user who directly created the tournament (`created_by === currentUser.id`).
   const organizerCheck = (t) => isOrganizerOf(t, { currentUser });
   const isMine = (t) => organizerCheck(t) || registeredIds.includes(t.id);
 
-  const myCreatedTournament = allTournaments.find(organizerCheck);
+  // Check if tournament was published by any member of our squad
+  const isSquadPublished = (t) => t.created_by && squadMemberIds.has(String(t.created_by));
+
+  // Check if any teammate in the squad has published a tournament
+  const teamPublishedTournament = allTournaments.find(isSquadPublished);
 
   const myTournaments = allTournaments.filter(isMine);
-  const otherTournaments = allTournaments.filter((t) => !isMine(t));
+  // All Tournaments section should only show tournaments published by other teams (not our squad) and not already mine
+  const otherTournaments = allTournaments.filter((t) => !isMine(t) && !isSquadPublished(t));
   const viewingTournament = allTournaments.find((t) => t.id === viewingId) || null;
 
   const handleCreated = (tournament) => {
@@ -384,10 +496,10 @@ export default function TournamentsTab({ registeredIds = [], onRegister, tournam
           <p className="text-sm mt-0.5" style={{ color: "#6b7a6b" }}>Organize or register for local cricket tournaments</p>
         </div>
 
-        {myCreatedTournament ? (
+        {teamPublishedTournament ? (
           <button
             disabled
-            title="Your team has already created an active tournament. Delete it first to create a new one."
+            title="A member of your squad has already published an active tournament. Only the creator can delete it to allow new creations."
             className="px-4 py-2.5 rounded-xl text-sm font-bold opacity-60 cursor-not-allowed flex items-center gap-2"
             style={{ backgroundColor: "#1e241e", color: "#6b7a6b", border: "1px solid #2a2a2a" }}
           >
@@ -403,34 +515,17 @@ export default function TournamentsTab({ registeredIds = [], onRegister, tournam
         )}
       </div>
 
-      {/* Notice if team already created a tournament */}
-      {myCreatedTournament && (
-        <div className="rounded-xl px-4 py-3 text-xs flex items-center justify-between gap-3" style={{ backgroundColor: "#161b16", border: "1px solid rgba(34,197,94,0.2)", color: "#8ea08b" }}>
-          <span>Your team (<strong>{myCreatedTournament.creator_team_name || "Organizing Team"}</strong>) has an active tournament: <strong>{myCreatedTournament.name}</strong>. Delete it if you wish to create a new one.</span>
-          <button
-            onClick={() => setEditingTournament(myCreatedTournament)}
-            className="px-3 py-1 rounded-lg text-xs font-semibold bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors shrink-0"
-          >
-            Edit Tournament
-          </button>
-        </div>
-      )}
 
-      {/* Your Tournaments Section */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-semibold text-white">Your Tournaments</h3>
-          {myTournaments.length > 0 && (
+
+      {/* Your Tournaments Section - only shown if user has published/organized or registered for a tournament */}
+      {myTournaments.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-base font-semibold text-white">Your Tournaments</h3>
             <span className="text-xs" style={{ color: "#6b7a6b" }}>
               {myTournaments.length} active
             </span>
-          )}
-        </div>
-        {myTournaments.length === 0 ? (
-          <div className={cn(C, "rounded-2xl p-6 text-center text-sm")} style={{ color: "#4a5a4a" }}>
-            You haven't organized or registered for any tournament yet.
           </div>
-        ) : (
           <div className="space-y-3">
             {myTournaments.map((t) => (
               <TournamentCard
@@ -441,6 +536,7 @@ export default function TournamentsTab({ registeredIds = [], onRegister, tournam
                 roleLabel={organizerCheck(t) ? "Organizing" : "Registered"}
                 registered={registeredIds.includes(t.id)}
                 onRegister={onRegister}
+                onUnregister={onUnregister}
                 onView={() => setViewingId(t.id)}
                 onEdit={(item) => setEditingTournament(item)}
                 onDelete={(id) => onTournamentDeleted?.(id)}
@@ -448,8 +544,8 @@ export default function TournamentsTab({ registeredIds = [], onRegister, tournam
               />
             ))}
           </div>
-        )}
-      </section>
+        </section>
+      )}
 
       {/* All Tournaments Section */}
       <section>
@@ -474,6 +570,7 @@ export default function TournamentsTab({ registeredIds = [], onRegister, tournam
                 roleLabel={organizerCheck(t) ? "Organizing" : undefined}
                 registered={registeredIds.includes(t.id)}
                 onRegister={onRegister}
+                onUnregister={onUnregister}
                 onView={() => setViewingId(t.id)}
                 onEdit={(item) => setEditingTournament(item)}
                 onDelete={(id) => onTournamentDeleted?.(id)}
@@ -493,6 +590,7 @@ export default function TournamentsTab({ registeredIds = [], onRegister, tournam
           roleLabel={organizerCheck(viewingTournament) ? "Organizing" : "Registered"}
           registered={registeredIds.includes(viewingTournament.id)}
           onRegister={onRegister}
+          onUnregister={onUnregister}
           onEdit={(item) => setEditingTournament(item)}
           onDelete={(id) => onTournamentDeleted?.(id)}
           token={token}

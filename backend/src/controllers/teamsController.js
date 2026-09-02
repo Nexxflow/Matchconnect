@@ -8,8 +8,29 @@ const asyncHandler = require("../utils/asyncHandler");
 const getMyTeam = asyncHandler(async (req, res) => {
   if (!req.user?.id) return res.status(401).json({ error: "Not logged in" });
 
-  const { rows } = await pool.query(`SELECT * FROM teams WHERE owner_id = $1`, [req.user.id]);
-  res.json({ team: rows[0] || null });
+  const uRes = await pool.query(`SELECT id, team_name, team_id FROM users WHERE id = $1`, [req.user.id]);
+  const u = uRes.rows[0];
+
+  let team = null;
+  if (u?.team_id) {
+    const tRes = await pool.query(`SELECT * FROM teams WHERE id = $1`, [u.team_id]);
+    team = tRes.rows[0] || null;
+  }
+
+  if (!team) {
+    const tRes = await pool.query(`SELECT * FROM teams WHERE owner_id = $1 OR created_by = $1`, [req.user.id]);
+    team = tRes.rows[0] || null;
+  }
+
+  if (!team && u?.team_name?.trim()) {
+    const tRes = await pool.query(
+      `SELECT * FROM teams WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
+      [u.team_name.trim()]
+    );
+    team = tRes.rows[0] || null;
+  }
+
+  res.json({ team });
 });
 
 module.exports = {

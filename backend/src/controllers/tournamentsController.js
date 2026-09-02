@@ -262,12 +262,49 @@ const createTournament = asyncHandler(async (req, res) => {
 
 const registerTeam = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { team_id } = req.body;
-  if (!team_id) return res.status(400).json({ error: "team_id is required" });
+  let { team_id } = req.body;
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+
+    // Auto-resolve team_id if missing from req.body
+    if (!team_id && req.user?.id) {
+      const uRes = await client.query(
+        `SELECT id, team_name, village_name, team_year, team_id FROM users WHERE id = $1`,
+        [req.user.id]
+      );
+      const u = uRes.rows[0];
+      if (u?.team_id) {
+        team_id = u.team_id;
+      } else {
+        // Resolve or create team for the user automatically
+        const teamName = u?.team_name?.trim() || `Team ${u?.id || "Player"}`;
+        const village = u?.village_name?.trim() || null;
+        const year = u?.team_year ? Number(u.team_year) : new Date().getFullYear();
+
+        const findRes = await client.query(
+          `SELECT id FROM teams WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
+          [teamName]
+        );
+        if (findRes.rows.length > 0) {
+          team_id = findRes.rows[0].id;
+        } else {
+          const insRes = await client.query(
+            `INSERT INTO teams (name, village_name, year_formed, created_by)
+             VALUES ($1, $2, $3, $4)
+             RETURNING id`,
+            [teamName, village, year, req.user.id]
+          );
+          team_id = insRes.rows[0].id;
+        }
+        await client.query(`UPDATE users SET team_id = $1 WHERE id = $2`, [team_id, req.user.id]);
+      }
+    }
+
+    if (!team_id) {
+      throw Object.assign(new Error("team_id is required"), { status: 400 });
+    }
 
     const tRes = await client.query(`SELECT * FROM tournaments WHERE id = $1 FOR UPDATE`, [id]);
     if (tRes.rows.length === 0) throw Object.assign(new Error("Tournament not found"), { status: 404 });
@@ -309,6 +346,75 @@ const registerTeam = asyncHandler(async (req, res) => {
     await client.query("COMMIT");
 
     res.status(201).json({
+      tournament: {
+        ...fullRes.rows[0],
+        team_count,
+        spots_left: Math.max(fullRes.rows[0].max_teams - team_count, 0),
+      },
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    throw err;
+  } finally {
+    client.release();
+  }
+});
+
+const unregisterTeam = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Resolve user's team ID
+    const uRes = await client.query(
+      `SELECT id, team_name, team_id FROM users WHERE id = $1`,
+      [req.user.id]
+    );
+    const u = uRes.rows[0];
+    let team_id = u?.team_id;
+    if (!team_id) {
+      const tRes = await client.query(`SELECT id FROM teams WHERE owner_id = $1 OR created_by = $1`, [req.user.id]);
+      team_id = tRes.rows[0]?.id;
+    }
+    if (!team_id && u?.team_name?.trim()) {
+      const tRes = await client.query(
+        `SELECT id FROM teams WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
+        [u.team_name.trim()]
+      );
+      team_id = tRes.rows[0]?.id;
+    }
+
+    if (!team_id) {
+      throw Object.assign(new Error("Could not find your team to cancel registration"), { status: 400 });
+    }
+
+    await client.query(
+      `UPDATE tournament_registrations
+       SET status = 'withdrawn'
+       WHERE tournament_id = $1 AND (team_id = $2 OR registered_by = $3)`,
+      [id, team_id, req.user.id]
+    );
+
+    const updatedCountRes = await client.query(
+      `SELECT COUNT(*)::int AS n FROM tournament_registrations
+       WHERE tournament_id = $1 AND status = 'confirmed'`,
+      [id]
+    );
+    const team_count = updatedCountRes.rows[0].n;
+
+    const fullRes = await client.query(
+      `SELECT t.*, ct.name AS creator_team_name
+       FROM tournaments t LEFT JOIN teams ct ON ct.id = t.creator_team_id
+       WHERE t.id = $1`,
+      [id]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({
+      message: "Successfully cancelled registration",
       tournament: {
         ...fullRes.rows[0],
         team_count,
@@ -457,5 +563,6 @@ module.exports = {
   updateTournament,
   deleteTournament,
   registerTeam,
+  unregisterTeam,
   myTournaments,
 };

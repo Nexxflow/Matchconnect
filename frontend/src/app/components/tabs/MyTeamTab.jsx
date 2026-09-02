@@ -82,6 +82,7 @@ export default function MyTeamTab({
   myTeam = null,
   bookings,
   onCancelChallenge,
+  onUnregisterTournament,
   onDeleteChallenge,
   cancelling,
   deleting,
@@ -97,11 +98,15 @@ export default function MyTeamTab({
   const userTeamName = user?.team_name?.trim()?.toLowerCase();
   const myTeamId = myTeam?.id;
 
-  // Filter tournaments published by our team (by creator_team_id, created_by, or creator_team_name)
+  // Filter tournaments published strictly by users present in squad (current user + squad teammates)
+  const squadMemberIds = new Set(
+    [user?.id, ...(teammateIds || [])]
+      .filter(Boolean)
+      .map(id => String(id))
+  );
+
   const ourPublishedTournaments = tournaments.filter(t => {
-    if (myTeamId && t.creator_team_id === myTeamId) return true;
-    if (user?.id && t.created_by === user.id) return true;
-    if (userTeamName && t.creator_team_name?.trim()?.toLowerCase() === userTeamName) return true;
+    if (t.created_by && squadMemberIds.has(String(t.created_by))) return true;
     return false;
   });
 
@@ -289,14 +294,14 @@ export default function MyTeamTab({
                         <p className="text-xs mb-2 line-clamp-2" style={{ color: "#8fa08f" }}>{pc.note}</p>
                       )}
 
-                      <button
+                      {/* <button
                         disabled={deleting}
                         onClick={() => onDeleteChallenge?.(pc.id)}
                         className="w-full py-2 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1.5"
                         style={deleting ? { opacity: 0.6, cursor: "not-allowed" } : {}}
                       >
                         <XCircle className="w-3.5 h-3.5" /> {deleting ? "Withdrawing..." : "Withdraw Challenge"}
-                      </button>
+                      </button> */}
                     </div>
                   ))}
                 </div>
@@ -446,11 +451,22 @@ export default function MyTeamTab({
                         <div className="min-w-0">
                           <div className="text-sm font-semibold text-white truncate">{t.name}</div>
                           <div className="text-xs mt-0.5 truncate" style={{ color: "#6b7a6b" }}>
-                            Starts {t.startDate} · {t.format} · 📍 {t.venue}
+                            Starts {t.startDate || "TBA"} · {t.format} · 📍 {t.venue || "TBD"}
                           </div>
                         </div>
                       </div>
-                      <Tag color="blue">Registered</Tag>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Tag color="blue">Registered</Tag>
+                        {onUnregisterTournament && (
+                          <button
+                            type="button"
+                            onClick={() => onUnregisterTournament(t.id)}
+                            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

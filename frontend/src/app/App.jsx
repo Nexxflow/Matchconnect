@@ -287,24 +287,40 @@ export default function App() {
 
   const handleRegisterTournament = async (tournamentId) => {
     if (!auth.token) return;
-    if (!myTeam) {
-      alert("You need a registered team before joining a tournament. Add your team details in Edit Profile first.");
-      return;
-    }
     try {
       const res = await apiRequest(`/tournaments/${tournamentId}/register`, {
         method: "POST",
         token: auth.token,
-        body: { team_id: myTeam.id },
+        body: myTeam?.id ? { team_id: myTeam.id } : {},
       });
       setRegisteredIds(prev => (prev.includes(tournamentId) ? prev : [...prev, tournamentId]));
       if (res.tournament) {
         setTournaments(prev => prev.map(t => (t.id === tournamentId ? transformTournament(res.tournament) : t)));
-      } else {
-        refreshTournaments();
       }
+      // Reload team & registrations data to keep backend sync seamless across all tabs
+      await loadMyTeamAndRegistrations(auth.token);
+      await refreshTournaments();
     } catch (err) {
       alert(err.message || "Could not register for this tournament.");
+    }
+  };
+
+  const handleUnregisterTournament = async (tournamentId) => {
+    if (!auth.token) return;
+    if (!window.confirm("Are you sure you want to cancel registration for this tournament?")) return;
+    try {
+      const res = await apiRequest(`/tournaments/${tournamentId}/unregister`, {
+        method: "POST",
+        token: auth.token,
+      });
+      setRegisteredIds(prev => prev.filter(id => id !== tournamentId));
+      if (res.tournament) {
+        setTournaments(prev => prev.map(t => (t.id === tournamentId ? transformTournament(res.tournament) : t)));
+      }
+      await loadMyTeamAndRegistrations(auth.token);
+      await refreshTournaments();
+    } catch (err) {
+      alert(err.message || "Could not cancel tournament registration.");
     }
   };
 
@@ -321,13 +337,14 @@ export default function App() {
     setTournaments(prev => [transformTournament(newTournament), ...prev.filter(x => x.id !== newTournament.id)]);
     refreshTournaments();
   };
-  const handleTournamentUpdated = (updated) => {
-    const t = transformTournament(updated);
-    setTournaments(prev => prev.map(x => x.id === t.id ? t : x));
+  const handleTournamentUpdated = (raw) => {
+    const t = transformTournament(raw);
+    setTournaments(prev => prev.map(item => item.id === t.id ? { ...item, ...t } : item));
     refreshTournaments();
   };
   const handleTournamentDeleted = (id) => {
-    setTournaments(prev => prev.filter(x => x.id !== id));
+    setTournaments(prev => prev.filter(item => item.id !== id));
+    setRegisteredIds(prev => prev.filter(item => item !== id));
     refreshTournaments();
   };
 
@@ -420,6 +437,7 @@ export default function App() {
         tournaments={tournaments}
         registeredIds={registeredIds}
         onRegister={handleRegisterTournament}
+        onUnregister={handleUnregisterTournament}
         token={auth.token}
         currentUser={auth.user}
         myTeamId={myTeam?.id}
@@ -437,6 +455,7 @@ export default function App() {
         myTeam={myTeam}
         bookings={bookings}
         onCancelChallenge={handleCancelAcceptedChallenge}
+        onUnregisterTournament={handleUnregisterTournament}
         cancelling={cancellingChallenge}
         onOpenChat={setChatChallenge}
         challenges={challenges}
