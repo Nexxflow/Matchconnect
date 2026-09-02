@@ -3,20 +3,20 @@ import { useEffect, useState, useCallback, useRef } from "react";
 /* ============================================================================
    BACKEND CONTRACT (matches matchController.js / liveScoreRoutes.js)
    ----------------------------------------------------------------------------
-   GET  /api/matches
-   POST /api/matches                      { team1_name, team2_name, venue, overs_limit } -> { match_id }
-   GET  /api/matches/:id/squads           -> { team1: {name, players}, team2: {name, players} }
-   POST /api/matches/:id/squads           { team1_players: string[], team2_players: string[] } -> squads
-   POST /api/matches/:id/toss             { toss_winner_team: "team1"|"team2", toss_decision: "bat"|"bowl" } -> live state
-   GET  /api/matches/:id/live             -> { match, current_innings, batting, bowling, recent_balls }
-   POST /api/matches/:id/start-innings    { innings_number, batting_team, striker_id, non_striker_id, bowler_id }
-   POST /api/matches/:id/balls            { runs, extra_type, extra_runs, is_wicket, wicket_type,
+   GET  /matches
+   POST /matches                      { team1_name, team2_name, venue, overs_limit } -> { match_id }
+   GET  /matches/:id/squads           -> { team1: {name, players}, team2: {name, players} }
+   POST /matches/:id/squads           { team1_players: string[], team2_players: string[] } -> squads
+   POST /matches/:id/toss             { toss_winner_team: "team1"|"team2", toss_decision: "bat"|"bowl" } -> live state
+   GET  /matches/:id/live             -> { match, current_innings, batting, bowling, recent_balls }
+   POST /matches/:id/start-innings    { innings_number, batting_team, striker_id, non_striker_id, bowler_id }
+   POST /matches/:id/balls            { runs, extra_type, extra_runs, is_wicket, wicket_type,
                                              dismissed_player_id, fielder_id, striker_id, non_striker_id, bowler_id }
-   POST /api/matches/:id/balls/undo
-   POST /api/matches/:id/select-bowler    { bowler_id }
-   POST /api/matches/:id/new-batsman      { player_id }
-   POST /api/matches/:id/complete         { result }
-   GET  /api/matches/:id/scoreboard
+   POST /matches/:id/balls/undo
+   POST /matches/:id/select-bowler    { bowler_id }
+   POST /matches/:id/new-batsman      { player_id }
+   POST /matches/:id/complete         { result }
+   GET  /matches/:id/scoreboard
    ============================================================================ */
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
@@ -439,7 +439,7 @@ function MatchHome({ onScoreNew, onResume, onViewScoreboard }) {
 
   useEffect(() => {
     let cancelled = false;
-    api("/api/matches")
+    api("/matches")
       .then((json) => { if (!cancelled) setMatches(json); })
       .catch((err) => { if (!cancelled) setError(err.message); });
     return () => { cancelled = true; };
@@ -593,7 +593,7 @@ function NewMatchForm({ user, onCreated, onCancel }) {
     setSubmitting(true);
     setError(null);
     try {
-      const json = await api("/api/matches", {
+      const json = await api("/matches", {
         method: "POST",
         body: JSON.stringify({
           team1_name: team1Name.trim(),
@@ -714,7 +714,7 @@ function SquadForm({ matchId, onDone, onCancel }) {
 
   useEffect(() => {
     let cancelled = false;
-    api(`/api/matches/${matchId}/squads`)
+    api(`/matches/${matchId}/squads`)
       .then((json) => { if (!cancelled) setNames({ team1_name: json.team1.name, team2_name: json.team2.name }); })
       .catch((err) => { if (!cancelled) setError(err.message); });
     return () => { cancelled = true; };
@@ -755,7 +755,7 @@ function SquadForm({ matchId, onDone, onCancel }) {
     setSubmitting(true);
     setError(null);
     try {
-      await api(`/api/matches/${matchId}/squads`, {
+      await api(`/matches/${matchId}/squads`, {
         method: "POST",
         body: JSON.stringify({ team1_players: t1Filled, team2_players: t2Filled }),
       });
@@ -925,7 +925,7 @@ function TossForm({ matchId, onDone, onCancel }) {
 
   useEffect(() => {
     let cancelled = false;
-    api(`/api/matches/${matchId}/squads`)
+    api(`/matches/${matchId}/squads`)
       .then((json) => { if (!cancelled) setNames({ team1_name: json.team1.name, team2_name: json.team2.name }); })
       .catch((err) => { if (!cancelled) setError(err.message); });
     return () => { cancelled = true; };
@@ -938,7 +938,7 @@ function TossForm({ matchId, onDone, onCancel }) {
     setSubmitting(true);
     setError(null);
     try {
-      await api(`/api/matches/${matchId}/toss`, {
+      await api(`/matches/${matchId}/toss`, {
         method: "POST",
         body: JSON.stringify({ toss_winner_team: winner, toss_decision: decision }),
       });
@@ -1061,7 +1061,7 @@ function ScorerConsole({ matchId, onMatchComplete }) {
 
   const loadScorecard = useCallback(async () => {
     try {
-      const sc = await api(`/api/matches/${matchId}/scoreboard`);
+      const sc = await api(`/matches/${matchId}/scoreboard`);
       setScorecard(sc);
     } catch {
       // ignore — scorecard is a bonus view, not required for scoring
@@ -1073,8 +1073,8 @@ function ScorerConsole({ matchId, onMatchComplete }) {
     async function load() {
       try {
         const [sq, lv] = await Promise.all([
-          api(`/api/matches/${matchId}/squads`),
-          api(`/api/matches/${matchId}/live`),
+          api(`/matches/${matchId}/squads`),
+          api(`/matches/${matchId}/live`),
         ]);
         if (cancelled) return;
         setSquads(sq);
@@ -1139,7 +1139,7 @@ function ScorerConsole({ matchId, onMatchComplete }) {
       toastTimerRef.current = setTimeout(() => setToast(null), 1300);
     }
 
-    runAction(`/api/matches/${matchId}/balls`, {
+    runAction(`/matches/${matchId}/balls`, {
       runs, extra_type, extra_runs, is_wicket, wicket_type, dismissed_player_id, fielder_id,
       striker_id, non_striker_id, bowler_id,
     }).catch(() => {}); // error already surfaced via the `error` state above
@@ -1152,7 +1152,7 @@ function ScorerConsole({ matchId, onMatchComplete }) {
     if (result === null) return;
     setBusy(true);
     try {
-      await api(`/api/matches/${matchId}/complete`, { method: "POST", body: JSON.stringify({ result }) });
+      await api(`/matches/${matchId}/complete`, { method: "POST", body: JSON.stringify({ result }) });
       onMatchComplete();
     } catch (err) {
       setError(err.message);
@@ -1172,7 +1172,7 @@ function ScorerConsole({ matchId, onMatchComplete }) {
       (p) => p.name.trim().toLowerCase() === trimmed.toLowerCase()
     );
     if (existing) return existing.id;
-    const result = await api(`/api/matches/${matchId}/squads`, {
+    const result = await api(`/matches/${matchId}/squads`, {
       method: "POST",
       body: JSON.stringify({ [teamKey]: [trimmed] }),
     });
@@ -1190,7 +1190,7 @@ function ScorerConsole({ matchId, onMatchComplete }) {
       <OpeningSelectors
         squads={squads}
         match={live.match}
-        onStart={(payload) => runAction(`/api/matches/${matchId}/start-innings`, payload)}
+        onStart={(payload) => runAction(`/matches/${matchId}/start-innings`, payload)}
         onAddPlayer={addPlayer}
         busy={busy}
       />
@@ -1207,7 +1207,7 @@ function ScorerConsole({ matchId, onMatchComplete }) {
       <PlayerPicker
         title="Who's the new batsman?"
         players={available}
-        onPick={(id) => runAction(`/api/matches/${matchId}/new-batsman`, { player_id: id }).catch(() => {})}
+        onPick={(id) => runAction(`/matches/${matchId}/new-batsman`, { player_id: id }).catch(() => {})}
         onAddNew={(name) => addPlayer(battingKey, name)}
         busy={busy}
       />
@@ -1224,7 +1224,7 @@ function ScorerConsole({ matchId, onMatchComplete }) {
       <PlayerPicker
         title="Who's bowling this over?"
         players={available}
-        onPick={(id) => runAction(`/api/matches/${matchId}/select-bowler`, { bowler_id: id }).catch(() => {})}
+        onPick={(id) => runAction(`/matches/${matchId}/select-bowler`, { bowler_id: id }).catch(() => {})}
         onAddNew={(name) => addPlayer(bowlingKey, name)}
         busy={busy}
       />
@@ -1240,7 +1240,7 @@ function ScorerConsole({ matchId, onMatchComplete }) {
         squads={squads}
         match={live.match}
         recovery
-        onStart={(payload) => runAction(`/api/matches/${matchId}/set-players`, payload)}
+        onStart={(payload) => runAction(`/matches/${matchId}/set-players`, payload)}
         onAddPlayer={addPlayer}
         busy={busy}
       />
@@ -1391,7 +1391,7 @@ function ScorerConsole({ matchId, onMatchComplete }) {
             array by a guessed field (id / timestamp) caused the collapse you
             saw — sorting by the wrong field is worse than not sorting at all.
             If the order is still off, the sequencing bug is on the server:
-            `GET /api/matches/:id/live` should return recent_balls oldest→newest. */}
+            `GET /matches/:id/live` should return recent_balls oldest→newest. */}
         <div className="flex items-center gap-2 flex-wrap">
           {recent_balls.map((raw, i) => {
             const b = classifyBall(raw);
@@ -1508,7 +1508,7 @@ function ScorerConsole({ matchId, onMatchComplete }) {
           </button>
           <button
             disabled={busy}
-            onClick={() => runAction(`/api/matches/${matchId}/balls/undo`).catch(() => {})}
+            onClick={() => runAction(`/matches/${matchId}/balls/undo`).catch(() => {})}
             className={`py-2.5 rounded-xl text-sm font-bold disabled:opacity-40 lst-hover-lift ${BTN_TRANSITION}`}
             style={{ backgroundColor: COLOR.surfaceRaised, color: COLOR.ink, fontFamily: FONT_DISPLAY }}
           >
@@ -2114,8 +2114,8 @@ function FinalScoreboard({ matchId }) {
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      api(`/api/matches/${matchId}/scoreboard`),
-      api(`/api/matches/${matchId}/squads`).catch(() => null), // yet-to-bat is a bonus, don't block the scoreboard on it
+      api(`/matches/${matchId}/scoreboard`),
+      api(`/matches/${matchId}/squads`).catch(() => null), // yet-to-bat is a bonus, don't block the scoreboard on it
     ])
       .then(([sc, sq]) => {
         if (cancelled) return;
