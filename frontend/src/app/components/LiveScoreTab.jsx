@@ -358,12 +358,12 @@ function MatchHome({ user, onScoreNew, onResume, onViewScoreboard }) {
       }
     };
     fetchMatches();
-    // Asynchronous background polling every 3.5s for real-time live scoreboard cards
+    // Background polling every 6s for real-time live scoreboard cards
     const interval = setInterval(() => {
       if (!document.hidden) {
         fetchMatches();
       }
-    }, 3500);
+    }, 6000);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -376,17 +376,17 @@ function MatchHome({ user, onScoreNew, onResume, onViewScoreboard }) {
   return (
     <div className="space-y-6">
       {/* Cricbuzz Header Banner */}
-      <div className="flex items-center justify-between gap-4 p-4 rounded-2xl" style={cardStyle}>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl" style={cardStyle}>
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 cb-live-pulse" />
             <span className="text-xs font-extrabold uppercase tracking-widest text-emerald-400">MatchConnect Live Engine</span>
           </div>
-          <h2 className="text-xl font-extrabold text-white">Google & Cricbuzz Scoreboard</h2>
+          <h2 className="text-lg sm:text-xl font-extrabold text-white">Google & Cricbuzz Scoreboard</h2>
         </div>
         <button
           onClick={onScoreNew}
-          className={`px-4 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider shadow-lg ${BTN_TRANSITION}`}
+          className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider shadow-lg text-center ${BTN_TRANSITION}`}
           style={{ backgroundColor: COLOR.accent, color: "#000" }}
         >
           + New Match
@@ -465,11 +465,11 @@ function MatchHome({ user, onScoreNew, onResume, onViewScoreboard }) {
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                  <span className="text-xs text-slate-400 truncate max-w-[200px]">
+                <div className="pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                  <span className="text-xs text-slate-400 truncate max-w-full sm:max-w-[200px]">
                     vs {m.team2_name}
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                     {isCreator && (
                       <button
                         onClick={async (e) => {
@@ -520,7 +520,7 @@ function MatchHome({ user, onScoreNew, onResume, onViewScoreboard }) {
               <div
                 key={m.id}
                 onClick={() => onViewScoreboard(m.id)}
-                className={`w-full text-left p-4 rounded-2xl flex items-center justify-between gap-4 transition-all hover:bg-slate-800/50 cursor-pointer ${BTN_TRANSITION}`}
+                className={`w-full text-left p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 transition-all hover:bg-slate-800/50 cursor-pointer ${BTN_TRANSITION}`}
                 style={cardStyle}
               >
                 <div>
@@ -530,7 +530,7 @@ function MatchHome({ user, onScoreNew, onResume, onViewScoreboard }) {
                     <span>{m.result || "Match completed"}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
                   {isCreator && (
                     <button
                       onClick={async (e) => {
@@ -635,7 +635,7 @@ function NewMatchForm({ user, matchId, onCreated, onUpdated, onCancel }) {
       {error && <div className="text-xs p-3 rounded-lg bg-red-500/10 text-red-400">{error}</div>}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-bold text-slate-400 block mb-1">Team 1 (Batting first / Home)</label>
             <input
@@ -658,7 +658,7 @@ function NewMatchForm({ user, matchId, onCreated, onUpdated, onCancel }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-bold text-slate-400 block mb-1">Venue / Ground</label>
             <input
@@ -795,7 +795,7 @@ function SquadForm({ matchId, onDone, onBack, onCancel }) {
       {error && <div className="text-xs p-3 rounded-lg bg-red-500/10 text-red-400">{error}</div>}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-bold text-emerald-400 block mb-1">{team1Title} Roster</label>
             <textarea
@@ -1804,7 +1804,7 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
           </div>
 
           {/* Active Batsmen & Bowler Cards (Exactly 2 active crease batters: Striker & Non-Striker) */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
             {batting
               .filter((b) => !b.is_out)
               .slice(0, 2)

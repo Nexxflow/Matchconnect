@@ -9,6 +9,7 @@ router.post("/save-token", authRequired, notificationController.saveFcmToken);
 router.post("/clear-token", authRequired, notificationController.clearFcmToken);
 router.get("/", authRequired, notificationController.getNotifications);
 router.put("/mark-read", authRequired, notificationController.markNotificationsAsRead);
+router.put("/:id/read", authRequired, notificationController.markSingleNotificationAsRead);
 router.delete("/", authRequired, notificationController.clearAllNotifications);
 
 module.exports = router;

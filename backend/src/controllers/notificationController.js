@@ -82,6 +82,25 @@ exports.markNotificationsAsRead = async (req, res) => {
   }
 };
 
+// PUT /api/notifications/:id/read
+// Mark a single notification as read
+exports.markSingleNotificationAsRead = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+    await db.query(
+      `UPDATE in_app_notifications
+       SET is_read = true
+       WHERE id = $1 AND user_id = $2`,
+      [id, userId]
+    );
+    invalidateNotificationCache(userId);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 // DELETE /api/notifications
 // Clear all notifications for current user
 exports.clearAllNotifications = async (req, res) => {

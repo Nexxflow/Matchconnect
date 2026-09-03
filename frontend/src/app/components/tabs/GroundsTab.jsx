@@ -193,7 +193,7 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="col-span-2">
           <label className="text-xs mb-1 block" style={{ color: "#6b7a6b" }}>Ground name</label>
           <input value={form.name} onChange={e => update("name", e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm text-white focus:outline-none" style={{ backgroundColor: "#111", border: "1px solid #2a2a2a" }} placeholder="Green Park Cricket Ground" />
@@ -514,7 +514,7 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
                     )}
                   </div>
                 </div>
-                <div className="flex gap-2 mt-3">
+                <div className="flex flex-wrap gap-2 mt-3">
                   <button disabled={!availableNow} onClick={() => onBook(g)} className="flex-1 py-2 rounded-xl text-xs font-bold transition-colors" style={availableNow ? { backgroundColor: "#22c55e", color: "#000" } : { backgroundColor: "#1e211e", color: "#3a3a3a", cursor: "not-allowed" }}>
                     {availableNow ? "Book Now" : "Unavailable"}
                   </button>
@@ -555,8 +555,8 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
       </section>
 
       {selectedGround && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.75)", backdropFilter: "blur(2px)" }} onClick={() => setSelectedGround(null)}>
-          <div className="w-full max-w-2xl rounded-3xl p-5 relative animate-in fade-in zoom-in-95 duration-150" style={{ backgroundColor: "#141414", border: "1px solid #2a2a2a", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" style={{ backgroundColor: "rgba(0,0,0,0.75)", backdropFilter: "blur(2px)" }} onClick={() => setSelectedGround(null)}>
+          <div className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl sm:rounded-3xl p-4 sm:p-5 relative animate-in fade-in zoom-in-95 duration-150" style={{ backgroundColor: "#141414", border: "1px solid #2a2a2a", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
             <div className="absolute top-4 right-4 flex items-center gap-2">
               <button onClick={() => setShowMap(prev => !prev)} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-colors" style={{ backgroundColor: showMap ? "#14532d" : "#1e211e", color: showMap ? "#bbf7d0" : "#8a978a", border: "1px solid #2a2a2a" }}>
                 <Map className="w-3.5 h-3.5" />

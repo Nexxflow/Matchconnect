@@ -112,17 +112,18 @@ app.use(morgan("dev"));
 // ====================================================
 
 app.use((req, res, next) => {
-  // Skip verbose multi-line dump for polling endpoints to prevent terminal spam
-  if (req.originalUrl === "/health" || (req.method === "GET" && req.originalUrl.startsWith("/api/notifications"))) {
+  // Only log detailed multi-line payload for state-modifying requests (POST, PUT, PATCH, DELETE)
+  // Routine GET requests are already logged in a single concise line by morgan("dev")
+  if (req.method === "GET") {
     return next();
   }
 
-  console.log("📥 Incoming Request");
+  console.log("📥 Incoming Mutation Request");
   console.log("Time:", new Date().toLocaleString());
   console.log("Method:", req.method);
   console.log("URL:", req.originalUrl);
   console.log("Origin:", req.headers.origin);
-  console.log("Authorization:", req.headers.authorization || "None");
+  console.log("Authorization:", req.headers.authorization ? "Present" : "None");
   console.log("Body:", req.body);
 
   next();

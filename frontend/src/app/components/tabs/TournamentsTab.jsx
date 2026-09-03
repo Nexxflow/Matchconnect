@@ -374,14 +374,14 @@ function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegis
         <TeamsRemainingBadge spotsLeft={spotsLeft} maxTeams={t.max_teams} />
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {isMine ? (
-          <div className="flex-1 flex gap-1.5">
+          <div className="flex-1 flex flex-wrap gap-1.5 min-w-[200px]">
             <span
-              className="flex-1 py-2 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1"
+              className="flex-1 py-2 px-3 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1 min-w-[120px]"
               style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}
             >
-              <CheckCircle className="w-3.5 h-3.5" /> {roleLabel}
+              <CheckCircle className="w-3.5 h-3.5 shrink-0" /> {roleLabel}
             </span>
             {(roleLabel === "Organizing" || isOrganizer) && (
               <>
@@ -389,7 +389,7 @@ function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegis
                   type="button"
                   onClick={() => onEdit?.(t)}
                   title="Edit Tournament"
-                  className="px-3.5 py-2 rounded-xl text-xs font-bold transition-colors text-white bg-green-500/10 border border-green-500/20 hover:bg-green-500/20 flex items-center gap-1.5"
+                  className="px-3 py-2 rounded-xl text-xs font-bold transition-colors text-white bg-green-500/10 border border-green-500/20 hover:bg-green-500/20 flex items-center gap-1.5"
                 >
                   <Pencil className="w-3.5 h-3.5" /> Edit
                 </button>
@@ -405,7 +405,7 @@ function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegis
                     }
                   }}
                   title="Delete Tournament"
-                  className="px-3.5 py-2 rounded-xl text-xs font-bold transition-colors text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 flex items-center gap-1.5"
+                  className="px-3 py-2 rounded-xl text-xs font-bold transition-colors text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 flex items-center gap-1.5"
                 >
                   <Trash2 className="w-3.5 h-3.5" /> Delete
                 </button>
@@ -413,12 +413,12 @@ function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegis
             )}
           </div>
         ) : registered ? (
-          <div className="flex-1 flex gap-1.5">
+          <div className="flex-1 flex flex-wrap gap-1.5 min-w-[200px]">
             <span
-              className="flex-1 py-2 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1"
+              className="flex-1 py-2 px-3 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1 min-w-[120px]"
               style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}
             >
-              <CheckCircle className="w-3.5 h-3.5" /> Registered
+              <CheckCircle className="w-3.5 h-3.5 shrink-0" /> Registered
             </span>
             {onUnregister && (
               <button

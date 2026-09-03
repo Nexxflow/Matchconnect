@@ -348,7 +348,7 @@ export default function MyTeamTab({
                           </span>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2 mb-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
                           <a href={`tel:${ac.contact_no}`} className="rounded-xl p-2.5 flex items-center gap-2 transition-colors hover:bg-white/5" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}>
                             <Phone className="w-3.5 h-3.5 text-green-400 shrink-0" />
                             <div className="min-w-0">
@@ -365,11 +365,11 @@ export default function MyTeamTab({
                           </a>
                         </div>
 
-                        <div className="flex gap-2">
-                          <button onClick={() => onOpenChat(ac)} className="flex-1 py-2 rounded-xl bg-green-500 text-black text-xs font-bold hover:bg-green-400 transition-colors flex items-center justify-center gap-1.5">
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <button onClick={() => onOpenChat(ac)} className="flex-1 py-2.5 sm:py-2 rounded-xl bg-green-500 text-black text-xs font-bold hover:bg-green-400 transition-colors flex items-center justify-center gap-1.5 text-center">
                             💬 Chat
                           </button>
-                          <button disabled={cancelling} onClick={() => onCancelChallenge(ac.id)} className="flex-1 py-2 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1.5" style={cancelling ? { opacity: 0.6, cursor: "not-allowed" } : {}}>
+                          <button disabled={cancelling} onClick={() => onCancelChallenge(ac.id)} className="flex-1 py-2.5 sm:py-2 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1.5 text-center" style={cancelling ? { opacity: 0.6, cursor: "not-allowed" } : {}}>
                             <XCircle className="w-3.5 h-3.5" /> {cancelling ? "Cancelling..." : "Cancel Match"}
                           </button>
                         </div>

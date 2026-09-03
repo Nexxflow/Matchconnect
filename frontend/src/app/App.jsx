@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Home, Swords, Radio, MapPin, Users, Trophy } from "lucide-react";
 import AuthScreen from "./components/Auth/AuthScreen.jsx";
 import Navbar from "./components/Navbar.jsx";
 import BookingModal from "./components/BookingModal.jsx";
@@ -58,7 +58,19 @@ function normalizeChallenge(c) {
 
 export default function App() {
   useForceDark();
-  const [activeTab, setActiveTab] = useState("Home");
+  const getInitialTab = () => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get("tab");
+      const validTabs = ["Home", "Find Match", "Grounds", "Umpires", "Live Score", "Tournaments", "My Team"];
+      if (tabParam && validTabs.includes(tabParam)) {
+        return tabParam;
+      }
+    } catch {}
+    return "Home";
+  };
+
+  const [activeTab, setActiveTab] = useState(getInitialTab);
   const [autoOpenChallengeForm, setAutoOpenChallengeForm] = useState(false);
   const [findMatchEntryMode, setFindMatchEntryMode] = useState("browse");
 
@@ -159,6 +171,16 @@ export default function App() {
       const allChallenges = challengesRes.challenges || [];
       setChallenges(allChallenges);
 
+      // Auto-open chat modal if navigated from mobile phone notification with challengeId
+      const searchParams = new URLSearchParams(window.location.search);
+      const targetChallengeId = searchParams.get("challengeId");
+      if (targetChallengeId) {
+        const target = allChallenges.find(c => String(c.id) === String(targetChallengeId));
+        if (target) {
+          setChatChallenge(target);
+        }
+      }
+
       const myPhone = normalizePhone(user?.phone);
       const myActive = myPhone
         ? allChallenges.find(
@@ -202,6 +224,137 @@ export default function App() {
 
   const knownNotifIdsRef = useRef(new Set());
   const lastNotifFetchRef = useRef(0);
+  const challengesRef = useRef(challenges);
+  challengesRef.current = challenges;
+  const authRef = useRef(auth);
+  authRef.current = auth;
+
+  const handleNotificationNavigate = useCallback(async (item) => {
+    if (!item) return;
+
+    // 1. Mark as read immediately in local state & backend
+    if (item.id) {
+      setPushNotifications((prev) =>
+        prev.map((n) => (n.id === item.id ? { ...n, is_read: true } : n))
+      );
+      const currentToken = authRef.current?.token;
+      if (currentToken) {
+        apiRequest(`/notifications/${item.id}/read`, { method: "PUT", token: currentToken }).catch(() => {});
+      }
+    }
+
+    const type = String(item.type || item.data?.type || "").toLowerCase();
+    const title = String(item.title || "").toLowerCase();
+    const body = String(item.body || "").toLowerCase();
+    const full = `${type} ${title} ${body}`.toLowerCase();
+
+    console.log("🔔 [Notification Click] Navigating to target page:", { type, title, full, data: item.data });
+
+    // 1. Chat Message: open chat modal & switch to My Team
+    if (type.includes("chat") || full.includes("message")) {
+      setActiveTab("My Team");
+      const cId = item.data?.challengeId || item.data?.challenge_id || item.challengeId || item.challenge_id;
+      if (cId) {
+        const currentChallenges = challengesRef.current || [];
+        let found = currentChallenges.find((c) => String(c.id) === String(cId));
+        const currentToken = authRef.current?.token;
+        if (!found && currentToken) {
+          try {
+            const res = await apiRequest("/challenges", { token: currentToken });
+            if (res?.challenges) {
+              setChallenges(res.challenges);
+              found = res.challenges.find((c) => String(c.id) === String(cId));
+            }
+          } catch (e) {}
+        }
+        if (found) {
+          setChatChallenge(found);
+        }
+      }
+      return;
+    }
+
+    // 2. Accepted Challenge / Upcoming Match: go to My Team
+    if (
+      type.includes("challenge_accepted") ||
+      type.includes("team_challenge_accepted") ||
+      type.includes("teammate_challenge_accepted") ||
+      (full.includes("challenge") && full.includes("accepted"))
+    ) {
+      setActiveTab("My Team");
+      return;
+    }
+
+    // 3. New Challenge or Open Challenge: go to Find Match
+    if (
+      type.includes("new_challenge") ||
+      type.includes("challenge_cancelled") ||
+      type.includes("challenge") ||
+      full.includes("challenge")
+    ) {
+      setActiveTab("Find Match");
+      setFindMatchEntryMode("browse");
+      return;
+    }
+
+    // 4. Tournaments:
+    // If registration -> My Team
+    if (
+      type.includes("tournament_registration") ||
+      (full.includes("tournament") && (full.includes("registered") || full.includes("registration") || full.includes("confirmed")))
+    ) {
+      setActiveTab("My Team");
+      return;
+    }
+    // If tournament announced / general -> Tournaments tab
+    if (type.includes("tournament") || full.includes("tournament")) {
+      setActiveTab("Tournaments");
+      return;
+    }
+
+    // 5. Grounds & Ground Bookings
+    if (type.includes("ground_booking") || (full.includes("ground") && full.includes("booking"))) {
+      setActiveTab("My Team");
+      return;
+    }
+    if (type.includes("ground") || full.includes("ground") || full.includes("pitch")) {
+      setActiveTab("Grounds");
+      return;
+    }
+
+    // 6. Umpires & Umpire Bookings
+    if (type.includes("umpire_booking") || (full.includes("umpire") && full.includes("booking"))) {
+      setActiveTab("My Team");
+      return;
+    }
+    if (type.includes("umpire") || full.includes("umpire")) {
+      setActiveTab("Umpires");
+      return;
+    }
+
+    // 7. Live Matches & Scores
+    if (
+      type.includes("live") ||
+      type.includes("score") ||
+      type.includes("match") ||
+      full.includes("live score") ||
+      full.includes("match created") ||
+      full.includes("overs") ||
+      full.includes("wicket")
+    ) {
+      setActiveTab("Live Score");
+      return;
+    }
+
+    // 8. Team & Teammates
+    if (type.includes("team") || full.includes("teammate") || full.includes("team")) {
+      setActiveTab("My Team");
+      return;
+    }
+
+    // Fallback default
+    setActiveTab("Home");
+  }, []);
 
   const loadNotifications = useCallback(async (token, force = false) => {
     if (!token) return;
@@ -225,10 +378,14 @@ export default function App() {
             console.log("🔔 [Frontend Notification] Live notification popup:", n.title);
             if ("Notification" in window && Notification.permission === "granted") {
               try {
-                new Notification(n.title, {
+                const notif = new Notification(n.title, {
                   body: n.body,
                   icon: "/logo.png",
                 });
+                notif.onclick = () => {
+                  window.focus();
+                  handleNotificationNavigate(n);
+                };
               } catch (e) {
                 console.warn("Desktop notification popup error:", e);
               }
@@ -262,7 +419,7 @@ export default function App() {
       clearInterval(interval);
       window.removeEventListener("focus", onFocus);
     };
-  }, [auth.token, loadNotifications]);
+  }, [auth.token]);
 
   const handleMarkAllRead = async () => {
     setPushNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
@@ -311,10 +468,14 @@ export default function App() {
         // Browser native Web Notification
         if ("Notification" in window && Notification.permission === "granted") {
           try {
-            new Notification(title, {
+            const notif = new Notification(title, {
               body,
               icon: "/logo.png",
             });
+            notif.onclick = () => {
+              window.focus();
+              handleNotificationNavigate(newNotif);
+            };
             console.log("📱 [Frontend Notification] Browser system notification displayed:", title);
           } catch (e) {
             console.warn("⚠️ [Frontend Notification] Browser Web Notification error:", e);
@@ -325,6 +486,47 @@ export default function App() {
     return () => {
       if (typeof unsubscribe === "function") unsubscribe();
     };
+  }, []);
+
+  // Handle notification click messages from Service Worker (background push notifications)
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const handleSwMessage = (event) => {
+      if (event.data?.type === "NOTIFICATION_CLICK") {
+        const item = event.data.notification || event.data.data;
+        handleNotificationNavigate(item);
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", handleSwMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener("message", handleSwMessage);
+    };
+  }, []);
+
+  // Handle opening directly from notification click URL params (e.g. /?tab=... or /?notifType=...)
+  useEffect(() => {
+    const handleUrlNavigation = () => {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get("tab");
+      const notifType = params.get("notifType");
+      const challengeId = params.get("challengeId");
+
+      const validTabs = ["Home", "Find Match", "Grounds", "Umpires", "Live Score", "Tournaments", "My Team"];
+      if (tabParam && validTabs.includes(tabParam)) {
+        setActiveTab(tabParam);
+      } else if (notifType) {
+        handleNotificationNavigate({ type: notifType, data: { challengeId } });
+      }
+
+      if (challengeId) {
+        const found = challengesRef.current?.find((c) => String(c.id) === String(challengeId));
+        if (found) setChatChallenge(found);
+      }
+    };
+
+    handleUrlNavigation();
+    window.addEventListener("popstate", handleUrlNavigation);
+    return () => window.removeEventListener("popstate", handleUrlNavigation);
   }, []);
 
   useEffect(() => {
@@ -354,7 +556,7 @@ export default function App() {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadNotifications]);
+  }, []);
 
   const handleAuthSuccess = (user, token) => {
     setStoredToken(token);
@@ -594,6 +796,7 @@ export default function App() {
         onOpenNotifications={() => {
           if (auth.token) loadNotifications(auth.token, true);
         }}
+        onNotificationClick={handleNotificationNavigate}
         onUserUpdated={updatedUser => {
           setAuth(prev => ({ ...prev, user: updatedUser }));
           if (auth.token) loadTeammates(auth.token);
@@ -606,9 +809,53 @@ export default function App() {
           </div>
         </div>
       )}
-      <main className="max-w-3xl mx-auto px-4 py-6">
+      <main className="max-w-3xl mx-auto px-3 sm:px-4 py-4 sm:py-6 pb-24 md:pb-8">
         {content[activeTab]}
       </main>
+
+      {/* Mobile Bottom Navigation Bar */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0d0f0d]/95 backdrop-blur-md border-t border-[#242624] px-1 py-1 flex items-center justify-around pb-[max(0.375rem,env(safe-area-inset-bottom))] shadow-2xl">
+        {[
+          { id: "Home", label: "Home", icon: Home },
+          { id: "Find Match", label: "Matches", icon: Swords },
+          { id: "Live Score", label: "Live", icon: Radio, isLive: true },
+          { id: "Grounds", label: "Grounds", icon: MapPin },
+          { id: "Tournaments", label: "Tourneys", icon: Trophy },
+          { id: "My Team", label: "My Team", icon: Users },
+        ].map((item) => {
+          const Icon = item.icon;
+          const isSelected = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => handleNavTabClick(item.id)}
+              className="flex-1 flex flex-col items-center justify-center py-1 relative group transition-all"
+            >
+              {isSelected && (
+                <span className="absolute -top-1 w-6 h-0.5 rounded-full bg-green-500 shadow-sm shadow-green-500/50" />
+              )}
+              <div className="relative">
+                <Icon
+                  className={`w-5 h-5 transition-transform group-active:scale-90 ${
+                    isSelected ? "text-green-400" : "text-[#6b7a6b]"
+                  }`}
+                />
+                {item.isLive && (
+                  <span className="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                )}
+              </div>
+              <span
+                className={`text-[10px] font-semibold mt-1 tracking-tight ${
+                  isSelected ? "text-green-400" : "text-[#6b7a6b]"
+                }`}
+              >
+                {item.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {bookingModal && (
         <BookingModal
           type={bookingModal.type}

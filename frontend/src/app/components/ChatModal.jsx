@@ -54,8 +54,8 @@ export default function ChatModal({ challenge, token, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.7)" }} onClick={onClose}>
-      <div className="w-full md:max-w-sm rounded-t-2xl md:rounded-2xl p-5 flex flex-col" style={{ backgroundColor: "#151715", border: "1px solid #2a2a2a", height: "70vh", maxHeight: 520 }} onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ backgroundColor: "rgba(0,0,0,0.75)" }} onClick={onClose}>
+      <div className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-4 sm:p-5 flex flex-col pb-[max(1.25rem,env(safe-area-inset-bottom))]" style={{ backgroundColor: "#151715", border: "1px solid #2a2a2a", height: "75vh", maxHeight: 560 }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <div>
             <div className="text-sm font-semibold text-white">Match Chat</div>

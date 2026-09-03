@@ -41,8 +41,8 @@ export default function BookingModal({ item, type, token, onClose, onConfirm }) 
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.7)" }} onClick={onClose}>
-      <div className="w-full md:max-w-md rounded-t-2xl md:rounded-2xl p-5 max-h-[88vh] overflow-y-auto" style={{ backgroundColor: "#151715", border: "1px solid #2a2a2a" }} onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ backgroundColor: "rgba(0,0,0,0.75)" }} onClick={onClose}>
+      <div className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-4 sm:p-5 max-h-[88vh] overflow-y-auto pb-[max(1.25rem,env(safe-area-inset-bottom))]" style={{ backgroundColor: "#151715", border: "1px solid #2a2a2a" }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <span className="text-xs font-semibold text-green-400 uppercase tracking-wide">{type === "ground" ? "Book Ground" : "Book Official"}</span>
           <button onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center hover:opacity-80" style={{ backgroundColor: "#222" }}>
@@ -64,7 +64,7 @@ export default function BookingModal({ item, type, token, onClose, onConfirm }) 
           <>
             <div className="mb-4">
               <label className="text-xs mb-2 block font-medium" style={{ color: "#6b7a6b" }}>Select Date</label>
-              <div className="flex gap-2 overflow-x-auto pb-1">
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
                 {days.map((d, i) => (
                   <button key={i} onClick={() => setSelectedDay(i)} className="shrink-0 px-3 py-2 rounded-xl text-center transition-colors" style={{
                     backgroundColor: selectedDay === i ? "rgba(34,197,94,0.15)" : "#1a1a1a",
@@ -78,9 +78,9 @@ export default function BookingModal({ item, type, token, onClose, onConfirm }) 
             </div>
             <div className="mb-5">
               <label className="text-xs mb-2 block font-medium" style={{ color: "#6b7a6b" }}>Select Time Slot</label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {TIME_SLOTS.map(slot => (
-                  <button key={slot} onClick={() => setSelectedSlot(slot)} className="py-2 rounded-xl text-xs font-medium transition-colors" style={{
+                  <button key={slot} onClick={() => setSelectedSlot(slot)} className="py-2.5 sm:py-2 rounded-xl text-xs font-medium transition-colors text-center" style={{
                     backgroundColor: selectedSlot === slot ? "rgba(34,197,94,0.15)" : "#1a1a1a",
                     border: selectedSlot === slot ? "1px solid #22c55e" : "1px solid #2a2a2a",
                     color: selectedSlot === slot ? "#22c55e" : "#c8ccc8"

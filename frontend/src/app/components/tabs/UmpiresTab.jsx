@@ -313,28 +313,34 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                 return (
                   <div
                     key={u.id ?? u.name}
-                    className="flex items-center gap-4 px-4 py-3 bg-[#161616] hover:bg-[#1c1c1c] transition-colors"
+                    className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 bg-[#161616] hover:bg-[#1c1c1c] transition-colors"
                   >
-                    <div
-                      className="w-11 h-11 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
-                      style={{ background: u.grad }}
-                    >
-                      {u.name?.split(" ").map((x) => x[0]).join("")}
-                    </div>
+                    <div className="flex items-center gap-3 w-full sm:w-auto flex-1 min-w-0">
+                      <div
+                        className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center text-white text-xs sm:text-sm font-bold shrink-0 shadow"
+                        style={{ background: u.grad }}
+                      >
+                        {u.name?.split(" ").map((x) => x[0]).join("")}
+                      </div>
 
-                    <div className="min-w-[160px] flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold text-white truncate">{u.name}</span>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${rc.bg} ${rc.text}`}>
-                          {role}
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
-                            u.avail ? "bg-green-900 text-green-300" : "bg-red-900 text-red-300"
-                          }`}
-                        >
-                          {u.avail ? "Available" : "Busy"}
-                        </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-semibold text-white truncate">{u.name}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${rc.bg} ${rc.text}`}>
+                            {role}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
+                              u.avail ? "bg-green-900/60 text-green-300 border border-green-700/50" : "bg-red-900/60 text-red-300 border border-red-700/50"
+                            }`}
+                          >
+                            {u.avail ? "Available" : "Busy"}
+                          </span>
+                        </div>
+                        <div className="sm:hidden text-xs text-gray-400 mt-1 flex items-center gap-3">
+                          <span>📞 {u.mobile}</span>
+                          <span>🏏 {u.exp}</span>
+                        </div>
                       </div>
                     </div>
 
@@ -346,46 +352,46 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                       🏏 {u.exp}
                     </div>
 
-                    <div className="text-green-400 font-bold text-sm w-20 text-right shrink-0">
-                      {u.price}
-                    </div>
+                    <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto pt-2 sm:pt-0 border-t border-[#222] sm:border-0">
+                      <div className="text-green-400 font-bold text-sm sm:w-20 text-left sm:text-right shrink-0">
+                        {u.price}
+                      </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setEditingUmpire(u)}
-                        title="Edit Umpire"
-                        className="p-2 rounded-xl text-xs font-bold transition-colors text-gray-300 hover:text-white bg-[#252525] hover:bg-[#333]"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (!window.confirm(`Delete ${u.name}?`)) return;
-                          try {
-                            await apiRequest(`/umpires/${u.id}`, { method: "DELETE", token });
-                            onDeleted?.(u.id);
-                          } catch (err) {
-                            alert(err.message || "Could not delete umpire.");
-                          }
-                        }}
-                        title="Delete Umpire"
-                        className="p-2 rounded-xl text-xs font-bold transition-colors text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        disabled={!u.avail}
-                        onClick={() => u.avail && onBook(u)}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold shrink-0 transition-colors ${
-                          u.avail
-                            ? "bg-green-500 hover:bg-green-400 text-black"
-                            : "bg-[#252525] text-gray-500 cursor-not-allowed"
-                        }`}
-                      >
-                        {u.avail ? "Book" : "Unavailable"}
-                      </button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setEditingUmpire(u)}
+                          title="Edit Umpire"
+                          className="p-2 rounded-xl text-xs font-bold transition-colors text-gray-300 hover:text-white bg-[#252525] hover:bg-[#333]"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!window.confirm(`Delete ${u.name}?`)) return;
+                            try {
+                              await apiRequest(`/umpires/${u.id}`, { method: "DELETE", token });
+                              onDeleted?.(u.id);
+                            } catch (err) {
+                              alert(err.message || "Could not delete umpire.");
+                            }
+                          }}
+                          title="Delete Umpire"
+                          className="p-2 rounded-xl text-xs font-bold transition-colors text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          disabled={!u.avail}
+                          onClick={() => u.avail && onBook(u)}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                            u.avail ? "bg-green-500 text-black hover:bg-green-400" : "bg-[#252525] text-gray-600 cursor-not-allowed"
+                          }`}
+                        >
+                          {u.avail ? "Book" : "Busy"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );

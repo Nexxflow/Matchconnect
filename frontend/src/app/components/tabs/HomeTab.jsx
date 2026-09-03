@@ -21,41 +21,41 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
           </div>
           <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">Find your next</h1>
           <h1 className="text-2xl md:text-3xl font-bold text-green-400 mb-5">cricket match</h1>
-          <div className="flex flex-wrap gap-3">
-            <button onClick={() => setActiveTab("Find Match")} className="px-5 py-2 rounded-full border-2 border-green-400 text-green-300 text-sm font-semibold hover:bg-green-400/10 transition-colors">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-2.5 sm:gap-3">
+            <button onClick={() => setActiveTab("Find Match")} className="w-full sm:w-auto px-5 py-2.5 rounded-full border-2 border-green-400 text-green-300 text-sm font-semibold hover:bg-green-400/10 transition-colors text-center justify-center">
               🏏 Find a Match
             </button>
-            <button onClick={() => setActiveTab("Grounds")} className="px-5 py-2 rounded-full text-white/80 text-sm font-semibold hover:bg-white/5 transition-colors" style={{ border: "2px solid rgba(255,255,255,0.3)" }}>
+            <button onClick={() => setActiveTab("Grounds")} className="w-full sm:w-auto px-5 py-2.5 rounded-full text-white/80 text-sm font-semibold hover:bg-white/5 transition-colors text-center justify-center" style={{ border: "2px solid rgba(255,255,255,0.3)" }}>
               🏟 Book a Ground
             </button>
-            <button onClick={onCreateChallenge} className="px-5 py-2 rounded-full bg-green-500 text-black text-sm font-semibold hover:bg-green-400 transition-colors">
+            <button onClick={onCreateChallenge} className="w-full sm:w-auto px-5 py-2.5 rounded-full bg-green-500 text-black text-sm font-semibold hover:bg-green-400 transition-colors text-center justify-center">
               ⚡ Create Challenge
             </button>
           </div>
         </div>
-        <div className="absolute right-6 bottom-4 text-7xl opacity-20 select-none">🏏</div>
+        <div className="absolute right-4 bottom-2 sm:right-6 sm:bottom-4 text-6xl sm:text-7xl opacity-20 select-none pointer-events-none">🏏</div>
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
         {[
           { label: "Matches Played", value: String(matchesPlayedCount), color: "#22c55e", icon: "🏏", sub: "Confirmed matches" },
           { label: "Active Teams", value: String(activeTeamsCount), color: "#3b82f6", icon: "👥", sub: "On MatchConnect" },
           { label: "Active Grounds", value: String(grounds.length), color: "#f97316", icon: "🏟", sub: "Bookable now" },
           { label: "Active Tournaments", value: String(tournaments.length), color: "#a855f7", icon: "🏆", sub: "Open or ongoing" }
         ].map(s => (
-          <div key={s.label} className={cn(C, "rounded-2xl p-4")}>
-            <div className="text-2xl mb-2">{s.icon}</div>
-            <div className="text-2xl font-bold font-mono" style={{ color: s.color }}>{s.value}</div>
+          <div key={s.label} className={cn(C, "rounded-2xl p-3.5 sm:p-4")}>
+            <div className="text-xl sm:text-2xl mb-1.5 sm:mb-2">{s.icon}</div>
+            <div className="text-xl sm:text-2xl font-bold font-mono" style={{ color: s.color }}>{s.value}</div>
             <div className="text-xs mt-0.5" style={{ color: "#6b7a6b" }}>{s.label}</div>
-            <div className="text-xs mt-1" style={{ color: "#4a5a4a" }}>{s.sub}</div>
+            <div className="text-[11px] mt-0.5 truncate" style={{ color: "#4a5a4a" }}>{s.sub}</div>
           </div>
         ))}
       </div>
 
       {/* Urgent match requests */}
       <section>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-semibold text-white">Urgent Match Requests</h2>
           <button onClick={() => setActiveTab("Find Match")} className="text-xs text-green-400 hover:text-green-300">View all →</button>
         </div>
@@ -65,14 +65,14 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
             .slice(0, 3)
             .map(req => (
               <div key={req.id} className={cn(C, "rounded-2xl p-4")}>
-                <div className="flex items-start gap-4">
-                  <div className="flex-1 min-w-0">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+                  <div className="flex-1 min-w-0 w-full sm:w-auto">
                     <div className="flex items-center gap-2">
                       <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0" style={{ background: "linear-gradient(135deg,#166534,#14532d)" }}>
                         {req.team.split(" ").map(w => w[0]).slice(0, 2).join("")}
                       </div>
-                      <div>
-                        <div className="text-sm font-semibold text-white">{req.team}</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold text-white truncate">{req.team}</div>
                         {(req.rating > 0 || req.wins > 0 || req.losses > 0) && (
                           <div className="flex items-center gap-1">
                             <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
@@ -82,13 +82,13 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
                       </div>
                     </div>
                   </div>
-                  <div className="w-10 h-10 rounded-full border-2 border-green-500 flex items-center justify-center shrink-0" style={{ backgroundColor: "rgba(34,197,94,0.1)" }}>
-                    <span className="text-green-400 font-bold text-xs">VS</span>
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-green-500 flex items-center justify-center shrink-0 self-center" style={{ backgroundColor: "rgba(34,197,94,0.1)" }}>
+                    <span className="text-green-400 font-bold text-[10px] sm:text-xs">VS</span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="rounded-xl p-3 text-center" style={{ border: "2px dashed #2a2a2a" }}>
+                  <div className="flex-1 min-w-0 w-full sm:w-auto">
+                    <div className="rounded-xl p-2.5 sm:p-3 text-center" style={{ border: "2px dashed #2a2a2a" }}>
                       <div className="text-xs font-medium" style={{ color: "#4a5a4a" }}>Opponent needed</div>
-                      <div className="text-xs mt-0.5" style={{ color: "#6b7a6b" }}>11/11 players</div>
+                      <div className="text-[11px] mt-0.5" style={{ color: "#6b7a6b" }}>11/11 players</div>
                     </div>
                   </div>
                 </div>
@@ -98,11 +98,11 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
                   <Tag color="green">{req.date} {req.time}</Tag>
                 </div>
                 <div className="text-xs mt-2" style={{ color: "#4a5a4a" }}>📍 {req.ground}</div>
-                <div className="flex gap-2 mt-3">
-                  <button onClick={() => setActiveTab("Find Match")} className="flex-1 py-2 rounded-xl bg-green-500 text-black text-xs font-bold hover:bg-green-400 transition-colors">
+                <div className="flex flex-col sm:flex-row gap-2 mt-3">
+                  <button onClick={() => setActiveTab("Find Match")} className="flex-1 py-2 rounded-xl bg-green-500 text-black text-xs font-bold hover:bg-green-400 transition-colors text-center">
                     Accept Challenge
                   </button>
-                  <GhostButton onClick={() => setActiveTab("Find Match")} className="flex-1">View Details</GhostButton>
+                  <GhostButton onClick={() => setActiveTab("Find Match")} className="flex-1 text-center">View Details</GhostButton>
                 </div>
               </div>
             ))}

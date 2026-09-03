@@ -54,18 +54,6 @@ const createChallenge = asyncHandler(async (req, res) => {
     });
   }
 
-  // A team (by phone) can't have two active challenges on the same date
-  const conflict = await pool.query(
-    `SELECT id FROM challenges
-     WHERE (contact_no = $1 OR accepted_by_contact_no = $1)
-       AND match_date = $2
-       AND status IN ('open', 'on_hold', 'accepted')`,
-    [contact_no, match_date]
-  );
-  if (conflict.rows.length > 0) {
-    return res.status(400).json({ error: "Your team already has an active challenge on this date" });
-  }
-
   const { rows } = await pool.query(
     `INSERT INTO challenges
        (team_name, contact_no, format, overs, match_date, time_slot,
@@ -261,19 +249,6 @@ const updateChallenge = asyncHandler(async (req, res) => {
     return res.status(400).json({
       error: "team_name, contact_no, format, match_date and time_slot are required",
     });
-  }
-
-  // Check conflict with other active challenges on same date for this team contact (excluding current challenge)
-  const conflict = await pool.query(
-    `SELECT id FROM challenges
-     WHERE (contact_no = $1 OR accepted_by_contact_no = $1)
-       AND match_date = $2
-       AND status IN ('open', 'on_hold', 'accepted')
-       AND id != $3`,
-    [contact_no, match_date, id]
-  );
-  if (conflict.rows.length > 0) {
-    return res.status(400).json({ error: "Your team already has another active challenge on this date" });
   }
 
   const updated = await pool.query(

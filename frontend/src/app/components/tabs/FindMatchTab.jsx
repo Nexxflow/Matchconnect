@@ -131,8 +131,8 @@ function TimeField({ value, onChange }) {
 
       {open && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-[calc(100%+6px)] z-50 rounded-xl p-3 w-56" style={{ backgroundColor: "#151715", border: "1px solid #2a2a2a", boxShadow: "0 12px 32px rgba(0,0,0,0.5)" }}>
+          <div className="fixed inset-0 z-40 bg-black/50 sm:bg-black/30" onClick={() => setOpen(false)} />
+          <div className="fixed sm:absolute inset-x-4 sm:inset-x-auto sm:left-0 top-1/2 -translate-y-1/2 sm:top-[calc(100%+6px)] sm:translate-y-0 z-50 rounded-2xl p-4 w-auto sm:w-60 max-w-xs mx-auto sm:mx-0" style={{ backgroundColor: "#151715", border: "1px solid #2a2a2a", boxShadow: "0 20px 40px rgba(0,0,0,0.8)" }}>
             <div className="grid grid-cols-3 gap-2 mb-3">
               <div>
                 <label className="text-xs mb-1 block text-center" style={{ color: "#6b7a6b" }}>Hour</label>
@@ -287,8 +287,8 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.75)" }} onClick={() => setOpen(false)}>
-      <form onSubmit={handleSubmit} className={cn(C, "w-full md:max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl p-5 space-y-3")} style={{ backgroundColor: "#151715", border: "1px solid #2a2a2a" }} onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ backgroundColor: "rgba(0,0,0,0.75)" }} onClick={() => setOpen(false)}>
+      <form onSubmit={handleSubmit} className={cn(C, "w-full sm:max-w-lg max-h-[90vh] sm:max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl p-4 sm:p-5 space-y-3 pb-[max(1.25rem,env(safe-area-inset-bottom))]")} style={{ backgroundColor: "#151715", border: "1px solid #2a2a2a" }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between pb-2 border-b border-[#2a2a2a]">
           <span className="text-base font-semibold text-white">Post a Match Challenge</span>
           <button type="button" onClick={() => { setOpen(false); setError(null); }} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors" style={{ backgroundColor: "#222" }}>
@@ -1123,7 +1123,7 @@ export default function FindMatchTab({
   const hasActiveOnDate = targetDate =>
     teamPhoneSet.size > 0 &&
     challenges.some(c => {
-      if (!["open", "on_hold", "accepted"].includes(c.status)) return false;
+      if (c.status !== "accepted") return false;
       const involved =
         teamPhoneSet.has(normalizePhone(c.contact_no)) ||
         teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no));
@@ -1133,13 +1133,9 @@ export default function FindMatchTab({
 
   const activeFilterCount = [dateFilter, timeFilter || null].filter(Boolean).length;
 
-  const myOwnOpenChallenge = challenges.find(
+  const myOwnOpenChallenges = challenges.filter(
     c => (c.status === "open" || c.status === "on_hold") && c.creator_id === user?.id
   );
-
-  const postDisabledReason = myOwnOpenChallenge
-    ? "You already have an active challenge posted. Delete your existing challenge to post a new one."
-    : null;
 
   return (
     <div className="space-y-8">
@@ -1155,7 +1151,7 @@ export default function FindMatchTab({
             token={token}
             user={user}
             onCreated={onChallengeCreated}
-            disabledReason={postDisabledReason}
+            disabledReason={null}
             autoOpen={autoOpenForm}
             onAutoOpenHandled={onAutoOpenHandled}
           />
@@ -1237,15 +1233,23 @@ export default function FindMatchTab({
         );
       })()}
 
-      {myOwnOpenChallenge && (
-        <MyPostedChallengeCard
-          challenge={{
-            ...myOwnOpenChallenge,
-            match_date: formatDateIST(myOwnOpenChallenge.match_date)
-          }}
-          token={token}
-          onDeleted={onChallengeDeleted}
-        />
+      {myOwnOpenChallenges.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-semibold text-white">Your Posted Challenges ({myOwnOpenChallenges.length})</h3>
+          </div>
+          {myOwnOpenChallenges.map(ch => (
+            <MyPostedChallengeCard
+              key={ch.id}
+              challenge={{
+                ...ch,
+                match_date: formatDateIST(ch.match_date)
+              }}
+              token={token}
+              onDeleted={onChallengeDeleted}
+            />
+          ))}
+        </div>
       )}
 
       <section>
@@ -1294,11 +1298,11 @@ export default function FindMatchTab({
                   {t.note && <Tag color="purple">{t.note}</Tag>}
                 </div>
 
-                <div className="flex gap-2 mt-3">
+                <div className="flex flex-col sm:flex-row gap-2 mt-3">
                   <button
                     disabled={blocked}
                     onClick={() => setAcceptTarget(t)}
-                    className="flex-1 py-2 rounded-xl text-xs font-bold transition-colors"
+                    className="flex-1 py-2.5 sm:py-2 rounded-xl text-xs font-bold transition-colors text-center"
                     style={blocked
                       ? { backgroundColor: "#1e211e", color: "#3a3a3a", cursor: "not-allowed" }
                       : { backgroundColor: "#22c55e", color: "#000" }}
@@ -1307,7 +1311,7 @@ export default function FindMatchTab({
                   >
                     {blocked ? "Unavailable" : "Accept Challenge"}
                   </button>
-                  <GhostButton className="flex-1" onClick={() => setDetailsTarget(t)}>View Details</GhostButton>
+                  <GhostButton className="flex-1 text-center py-2.5 sm:py-2" onClick={() => setDetailsTarget(t)}>View Details</GhostButton>
                 </div>
               </div>
             );
@@ -1322,7 +1326,7 @@ export default function FindMatchTab({
           onClick={() => setDetailsTarget(null)}
         >
           <div
-            className="w-full max-w-md rounded-3xl p-5 relative animate-in fade-in zoom-in-95 duration-150"
+            className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl sm:rounded-3xl p-4 sm:p-5 relative animate-in fade-in zoom-in-95 duration-150"
             style={{ backgroundColor: "#141414", border: "1px solid #2a2a2a", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}
             onClick={e => e.stopPropagation()}
           >

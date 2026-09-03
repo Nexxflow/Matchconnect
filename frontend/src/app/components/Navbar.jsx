@@ -14,6 +14,7 @@ export default function Navbar({
   onMarkAllRead,
   onClearNotifications,
   onOpenNotifications,
+  onNotificationClick,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
@@ -30,19 +31,30 @@ export default function Navbar({
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   const handleNotificationClick = (item) => {
-    const type = item.type || item.data?.type || "";
-    if (type.includes("challenge")) {
-      setActive("Find Match");
-    } else if (type.includes("tournament")) {
-      setActive("Tournaments");
-    } else if (type.includes("ground")) {
-      setActive("Grounds");
-    } else if (type.includes("match")) {
-      setActive("Live Score");
-    } else if (type.includes("team")) {
-      setActive("My Team");
-    }
     setBellOpen(false);
+    if (typeof onNotificationClick === "function") {
+      onNotificationClick(item);
+    } else {
+      const type = String(item.type || item.data?.type || "").toLowerCase();
+      const full = `${type} ${item.title || ""} ${item.body || ""}`.toLowerCase();
+      if (full.includes("chat") || full.includes("message") || full.includes("accepted")) {
+        setActive("My Team");
+      } else if (full.includes("challenge")) {
+        setActive("Find Match");
+      } else if (full.includes("tournament")) {
+        setActive("Tournaments");
+      } else if (full.includes("ground")) {
+        setActive("Grounds");
+      } else if (full.includes("match") || full.includes("score") || full.includes("live")) {
+        setActive("Live Score");
+      } else if (full.includes("umpire")) {
+        setActive("Umpires");
+      } else if (full.includes("team")) {
+        setActive("My Team");
+      } else {
+        setActive("Home");
+      }
+    }
   };
 
   const formatNotificationTime = (dateStr) => {
@@ -58,25 +70,43 @@ export default function Navbar({
     return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   };
 
+  const getNotificationActionText = (item) => {
+    const type = String(item.type || item.data?.type || "").toLowerCase();
+    const full = `${type} ${item.title || ""} ${item.body || ""}`.toLowerCase();
+    if (full.includes("chat") || full.includes("message")) return "Open Chat";
+    if (full.includes("accepted") || full.includes("our match")) return "View Match in My Team";
+    if (full.includes("tournament")) return "View Tournaments";
+    if (full.includes("ground")) return "View Grounds";
+    if (full.includes("umpire")) return "View Umpires";
+    if (full.includes("live") || full.includes("score")) return "View Live Score";
+    if (full.includes("challenge")) return "View Challenge";
+    if (full.includes("team")) return "View Team";
+    return "View";
+  };
+
   const getNotificationIcon = (type) => {
     const t = String(type || "").toLowerCase();
     if (t.includes("tournament")) return "🏆";
     if (t.includes("ground")) return "🏟️";
     if (t.includes("accepted")) return "🤝";
+    if (t.includes("chat") || t.includes("message")) return "💬";
     if (t.includes("challenge") || t.includes("match")) return "🏏";
+    if (t.includes("umpire")) return "⚖️";
     return "🔔";
   };
 
   return (
     <nav style={{ backgroundColor: "#0d0f0d" }} className="sticky top-0 z-50 border-b border-[#2a2a2a] backdrop-blur-sm">
-      <div className="max-w-7xl mx-auto px-4 h-14 flex items-center gap-6">
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-green-500 flex items-center justify-center">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between md:justify-start gap-2 sm:gap-6">
+        <div className="flex items-center gap-2 shrink-0 cursor-pointer" onClick={() => setActive("Home")}>
+          <div className="w-8 h-8 rounded-lg bg-green-500 flex items-center justify-center shadow-md shadow-green-500/20">
             <span className="text-black font-black text-sm">MC</span>
           </div>
-          <span className="font-bold text-white text-base tracking-tight">MatchConnect</span>
+          <span className="font-bold text-white text-base tracking-tight hidden xs:inline">MatchConnect</span>
         </div>
-        <div className="flex-1 flex items-center justify-center overflow-x-auto scrollbar-none">
+
+        {/* Desktop / Tablet Navigation Tabs */}
+        <div className="hidden md:flex flex-1 items-center justify-center overflow-x-auto scrollbar-none">
           <div className="flex items-center gap-0.5 min-w-max">
             {tabs.map((tab) => (
               <button
@@ -93,7 +123,9 @@ export default function Navbar({
             ))}
           </div>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+
+        {/* Actions (Notification Bell + Profile) */}
+        <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 ml-auto md:ml-0">
           {/* Notification Bell with Dropdown */}
           <div className="relative">
             <button
@@ -121,9 +153,9 @@ export default function Navbar({
 
             {bellOpen && (
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setBellOpen(false)} />
+                <div className="fixed inset-0 z-40 bg-black/50 sm:bg-transparent" onClick={() => setBellOpen(false)} />
                 <div
-                  className="absolute right-0 top-11 w-80 sm:w-96 rounded-2xl overflow-hidden z-50 shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+                  className="fixed sm:absolute left-3 right-3 sm:left-auto sm:right-0 top-16 sm:top-11 w-auto sm:w-96 max-w-sm mx-auto sm:mx-0 rounded-2xl overflow-hidden z-50 shadow-2xl animate-in fade-in zoom-in-95 duration-150"
                   style={{ backgroundColor: "#151715", border: "1px solid #2a2a2a" }}
                 >
                   {/* Dropdown Header */}
@@ -193,8 +225,8 @@ export default function Navbar({
                             </p>
                             <div className="flex items-center justify-between text-[10px] text-slate-500">
                               <span>{formatNotificationTime(item.created_at)}</span>
-                              <span className="text-green-400 hover:underline flex items-center gap-0.5">
-                                View <ExternalLink className="w-2.5 h-2.5" />
+                              <span className="text-green-400 hover:underline flex items-center gap-0.5 font-medium">
+                                {getNotificationActionText(item)} <ExternalLink className="w-2.5 h-2.5" />
                               </span>
                             </div>
                           </div>

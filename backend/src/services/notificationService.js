@@ -111,6 +111,50 @@ const recordInAppNotifications = async (userIds, title, body, type = "general", 
 };
 
 /**
+ * Calculate deep-link target URL for mobile phone and browser push notifications
+ */
+const getNotificationUrl = (data = {}, title = "", body = "") => {
+  const type = String(data.type || "").toLowerCase();
+  const text = `${type} ${title || ""} ${body || ""}`.toLowerCase();
+
+  let tab = "Home";
+  let extra = "";
+
+  if (text.includes("chat") || text.includes("message")) {
+    tab = "My Team";
+    const cId = data.challengeId || data.challenge_id || "";
+    if (cId) extra = `&challengeId=${encodeURIComponent(cId)}`;
+  } else if (
+    type.includes("challenge_accepted") ||
+    type.includes("team_challenge_accepted") ||
+    type.includes("teammate_challenge_accepted") ||
+    (text.includes("challenge") && text.includes("accepted"))
+  ) {
+    tab = "My Team";
+  } else if (text.includes("challenge")) {
+    tab = "Find Match";
+  } else if (type.includes("tournament_registration") || (text.includes("tournament") && text.includes("register"))) {
+    tab = "My Team";
+  } else if (text.includes("tournament")) {
+    tab = "Tournaments";
+  } else if (type.includes("ground_booking") || (text.includes("ground") && text.includes("booking"))) {
+    tab = "My Team";
+  } else if (text.includes("ground") || text.includes("pitch")) {
+    tab = "Grounds";
+  } else if (type.includes("umpire_booking") || (text.includes("umpire") && text.includes("booking"))) {
+    tab = "My Team";
+  } else if (text.includes("umpire")) {
+    tab = "Umpires";
+  } else if (text.includes("live") || text.includes("score") || text.includes("match")) {
+    tab = "Live Score";
+  } else if (text.includes("team") || text.includes("teammate")) {
+    tab = "My Team";
+  }
+
+  return `/?tab=${encodeURIComponent(tab)}&notifType=${encodeURIComponent(type || "general")}${extra}`;
+};
+
+/**
  * Send Web Push / FCM Notification to a single device token
  */
 const sendNotification = async (token, title, body, data = {}) => {
@@ -126,6 +170,7 @@ const sendNotification = async (token, title, body, data = {}) => {
     const stringData = Object.fromEntries(
       Object.entries(data).map(([k, v]) => [k, String(v)])
     );
+    const targetUrl = getNotificationUrl(data, title, body);
 
     const message = {
       token,
@@ -133,15 +178,26 @@ const sendNotification = async (token, title, body, data = {}) => {
         title,
         body,
       },
-      data: stringData,
+      data: {
+        ...stringData,
+        targetUrl,
+        click_action: targetUrl,
+        url: targetUrl,
+      },
       webpush: {
         notification: {
           icon: "/logo.png",
           badge: "/logo.png",
         },
+        fcm_options: {
+          link: targetUrl,
+        },
       },
       android: {
         priority: "high",
+        notification: {
+          clickAction: targetUrl,
+        },
       },
       apns: {
         headers: {
@@ -181,6 +237,7 @@ const sendMulticastNotification = async (tokens, title, body, data = {}) => {
   const stringData = Object.fromEntries(
     Object.entries(data).map(([k, v]) => [k, String(v)])
   );
+  const targetUrl = getNotificationUrl(data, title, body);
 
   if (typeof syncTimeWithGoogle === "function") await syncTimeWithGoogle();
 
@@ -194,15 +251,26 @@ const sendMulticastNotification = async (tokens, title, body, data = {}) => {
           title,
           body,
         },
-        data: stringData,
+        data: {
+          ...stringData,
+          targetUrl,
+          click_action: targetUrl,
+          url: targetUrl,
+        },
         webpush: {
           notification: {
             icon: "/logo.png",
             badge: "/logo.png",
           },
+          fcm_options: {
+            link: targetUrl,
+          },
         },
         android: {
           priority: "high",
+          notification: {
+            clickAction: targetUrl,
+          },
         },
       });
 
