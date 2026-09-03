@@ -3,6 +3,8 @@ const router = express.Router();
 const {
   listMatches,
   createMatch,
+  updateMatch,
+  deleteMatch,
   addSquads,
   recordToss,
   getSquads,
@@ -17,13 +19,16 @@ const {
   getCurrentLiveMatch,
   setActivePlayers,
 } = require("../controllers/matchController");
-const { authRequired } = require("../middleware/auth");
+const { authRequired, optionalAuth } = require("../middleware/auth");
 
 // Static/specific paths first, so Express doesn't swallow them into "/:matchId/..."
 router.get("/live/current", getCurrentLiveMatch);
 
 router.get("/", listMatches);         // GET  /api/matches
-router.post("/", createMatch);        // POST /api/matches — public for now, no auth required
+router.post("/", optionalAuth, createMatch);        // POST /api/matches — attaches user if logged in
+router.put("/:matchId", updateMatch);
+router.post("/:matchId/update", updateMatch);
+router.delete("/:matchId", optionalAuth, deleteMatch);
 
 router.get("/:matchId/squads", getSquads);
 router.post("/:matchId/squads", addSquads);   // add player names to the two teams

@@ -33,12 +33,25 @@ const app = express();
   try {
     const result = await pool.query("SELECT NOW()");
    
-    console.log("✅ PostgreSQL Connected");
-    console.log(result.rows[0]);
+    console.log("✅ PostgreSQL Connected:", result.rows[0].now);
+
+    // Auto-patch missing columns to guarantee matchController & live score queries never fail
+    await pool.query(`
+      ALTER TABLE matches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+      ALTER TABLE matches ADD COLUMN IF NOT EXISTS result TEXT;
+      ALTER TABLE matches ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE overs ADD COLUMN IF NOT EXISTS is_completed BOOLEAN DEFAULT false;
+      ALTER TABLE overs ADD COLUMN IF NOT EXISTS runs_conceded INT DEFAULT 0;
+      ALTER TABLE overs ADD COLUMN IF NOT EXISTS wickets INT DEFAULT 0;
+      ALTER TABLE batting_stats ADD COLUMN IF NOT EXISTS is_on_strike BOOLEAN DEFAULT false;
+      ALTER TABLE bowling_stats ADD COLUMN IF NOT EXISTS is_current BOOLEAN DEFAULT false;
+      ALTER TABLE players ADD COLUMN IF NOT EXISTS match_id UUID REFERENCES matches(id) ON DELETE CASCADE;
+    `);
+    console.log("✅ Database schema auto-patch completed");
     
   } catch (err) {
     
-    console.error("❌ PostgreSQL Connection Error");
+    console.error("❌ PostgreSQL Connection / Schema Patch Error");
     console.error(err);
     
   }

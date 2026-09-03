@@ -8,8 +8,8 @@ const GROUND_BOOKING_LIMIT_PER_DAY = 2;
 
 async function getTeamProfile(userId) {
   const result = await pool.query(
-    "SELECT team_name, village_name, team_year FROM users WHERE id = $1",
-    [userId]
+    "SELECT team_name, village_name, team_year FROM users WHERE id::text = $1::text",
+    [String(userId)]
   );
   return result.rows[0] || null;
 }
@@ -89,8 +89,8 @@ const createOrder = asyncHandler(async (req, res) => {
        WHERE ground_id = $1
          AND booking_date = $2
          AND payment_status IN ('pending', 'paid')
-         AND user_id = ANY($3::int[])`,
-      [ref_id, booking_date, await getTeamMemberIds(req.user.id)]
+         AND user_id::text = ANY($3::text[])`,
+      [ref_id, booking_date, (await getTeamMemberIds(req.user.id)).map(String)]
     );
     if ((sameTeamBookings.rows[0]?.count || 0) > 0) {
       return res.status(409).json({ error: "Your team already booked this ground for that day" });
@@ -216,10 +216,10 @@ const myBookings = asyncHandler(async (req, res) => {
      FROM bookings b
      LEFT JOIN grounds g ON b.ground_id = g.id
      LEFT JOIN umpires u ON b.umpire_id = u.id
-     LEFT JOIN users booked_by ON booked_by.id = b.user_id
-     WHERE b.user_id = ANY($1::int[])
+     LEFT JOIN users booked_by ON booked_by.id::text = b.user_id::text
+     WHERE b.user_id::text = ANY($1::text[])
      ORDER BY b.created_at DESC`,
-    [teamIds]
+    [teamIds.map(String)]
   );
   res.json({ bookings: result.rows });
 });

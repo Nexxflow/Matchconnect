@@ -20,14 +20,43 @@ async function findOrCreateTeam(client, name) {
   return created.rows[0].id;
 }
 
-async function createPlayers(client, teamId, names) {
+async function createPlayers(client, teamId, names, matchId = null) {
   const ids = [];
-  for (const name of names) {
-    const res = await client.query(
-      `INSERT INTO players (name, team_id) VALUES ($1, $2) RETURNING id`,
-      [name, teamId]
-    );
-    ids.push(res.rows[0].id);
+  const uniqueNames = [];
+  const seen = new Set();
+  for (const raw of names) {
+    const trimmed = raw ? String(raw).trim() : "";
+    if (!trimmed) continue;
+    const lower = trimmed.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      uniqueNames.push(trimmed);
+    }
+  }
+
+  for (const name of uniqueNames) {
+    let existing = null;
+    if (matchId) {
+      existing = await client.query(
+        `SELECT id FROM players WHERE team_id = $1 AND LOWER(TRIM(name)) = LOWER($2) AND match_id = $3`,
+        [teamId, name, matchId]
+      );
+    } else {
+      existing = await client.query(
+        `SELECT id FROM players WHERE team_id = $1 AND LOWER(TRIM(name)) = LOWER($2) AND match_id IS NULL`,
+        [teamId, name]
+      );
+    }
+
+    if (existing && existing.rows.length > 0) {
+      ids.push(existing.rows[0].id);
+    } else {
+      const res = await client.query(
+        `INSERT INTO players (name, team_id, match_id) VALUES ($1, $2, $3) RETURNING id`,
+        [name, teamId, matchId]
+      );
+      ids.push(res.rows[0].id);
+    }
   }
   return ids;
 }
@@ -185,20 +214,64 @@ const createMatch = asyncHandler(async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    const team1Id = await findOrCreateTeam(client, team1_name.trim());
-    const team2Id = await findOrCreateTeam(client, team2_name.trim());
-
-    if (team1_players.length) await createPlayers(client, team1Id, team1_players);
-    if (team2_players.length) await createPlayers(client, team2Id, team2_players);
+    const team1Res = await client.query(`INSERT INTO teams (name) VALUES ($1) RETURNING id`, [team1_name.trim()]);
+    const team2Res = await client.query(`INSERT INTO teams (name) VALUES ($1) RETURNING id`, [team2_name.trim()]);
+    const team1Id = team1Res.rows[0].id;
+    const team2Id = team2Res.rows[0].id;
 
     const matchRes = await client.query(
-      `INSERT INTO matches (team1_id, team2_id, venue, overs_limit, status)
-       VALUES ($1,$2,$3,$4,'not_started') RETURNING id`,
-      [team1Id, team2Id, venue, overs_limit]
+      `INSERT INTO matches (team1_id, team2_id, venue, overs_limit, status, created_by)
+       VALUES ($1,$2,$3,$4,'not_started',$5) RETURNING id`,
+      [team1Id, team2Id, venue, overs_limit, req.user?.id || null]
     );
+    const matchId = matchRes.rows[0].id;
+
+    if (team1_players.length) await createPlayers(client, team1Id, team1_players, matchId);
+    if (team2_players.length) await createPlayers(client, team2Id, team2_players, matchId);
 
     await client.query("COMMIT");
-    res.status(201).json({ match_id: matchRes.rows[0].id });
+    res.status(201).json({ match_id: matchId });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+});
+
+// ============================================================
+// PUT /api/matches/:matchId (or POST /api/matches/:matchId/update)
+// Body: { overs_limit, venue, team1_name, team2_name }
+// Allows editing overs limit, venue, or team names at any stage.
+// ============================================================
+const updateMatch = asyncHandler(async (req, res) => {
+  const { matchId } = req.params;
+  const { overs_limit, venue, team1_name, team2_name } = req.body;
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const matchRes = await client.query(`SELECT * FROM matches WHERE id = $1 FOR UPDATE`, [matchId]);
+    if (matchRes.rows.length === 0) return res.status(404).json({ error: "Match not found" });
+    const match = matchRes.rows[0];
+
+    if (overs_limit != null) {
+      await client.query(`UPDATE matches SET overs_limit = $1, updated_at = now() WHERE id = $2`, [Number(overs_limit), matchId]);
+    }
+    if (venue !== undefined) {
+      await client.query(`UPDATE matches SET venue = $1, updated_at = now() WHERE id = $2`, [venue ? venue.trim() : null, matchId]);
+    }
+    if (team1_name) {
+      await client.query(`UPDATE teams SET name = $1 WHERE id = $2`, [team1_name.trim(), match.team1_id]);
+    }
+    if (team2_name) {
+      await client.query(`UPDATE teams SET name = $1 WHERE id = $2`, [team2_name.trim(), match.team2_id]);
+    }
+
+    await client.query("COMMIT");
+    const live = await buildLiveState(matchId);
+    res.json(live);
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -225,8 +298,12 @@ const addSquads = asyncHandler(async (req, res) => {
     if (matchRes.rows.length === 0) throw new Error("Match not found");
     const { team1_id, team2_id } = matchRes.rows[0];
 
-    if (team1_players.length) await createPlayers(client, team1_id, team1_players);
-    if (team2_players.length) await createPlayers(client, team2_id, team2_players);
+    if (team1_players.length) {
+      await createPlayers(client, team1_id, team1_players, matchId);
+    }
+    if (team2_players.length) {
+      await createPlayers(client, team2_id, team2_players, matchId);
+    }
 
     await client.query("COMMIT");
   } catch (err) {
@@ -236,16 +313,25 @@ const addSquads = asyncHandler(async (req, res) => {
     client.release();
   }
 
-  const [p1, p2] = await Promise.all([
-    pool.query(
-      `SELECT p.id, p.name FROM players p JOIN matches m ON m.team1_id = p.team_id WHERE m.id = $1 ORDER BY p.created_at`,
-      [matchId]
-    ),
-    pool.query(
-      `SELECT p.id, p.name FROM players p JOIN matches m ON m.team2_id = p.team_id WHERE m.id = $1 ORDER BY p.created_at`,
-      [matchId]
-    ),
-  ]);
+  const matchRes = await pool.query(`SELECT team1_id, team2_id FROM matches WHERE id = $1`, [matchId]);
+  const { team1_id, team2_id } = matchRes.rows[0];
+
+  let p1 = await pool.query(
+    `SELECT p.id, p.name FROM players p WHERE p.team_id = $1 AND p.match_id = $2 ORDER BY p.created_at`,
+    [team1_id, matchId]
+  );
+  if (p1.rows.length === 0) {
+    p1 = await pool.query(`SELECT p.id, p.name FROM players p WHERE p.team_id = $1 ORDER BY p.created_at`, [team1_id]);
+  }
+
+  let p2 = await pool.query(
+    `SELECT p.id, p.name FROM players p WHERE p.team_id = $1 AND p.match_id = $2 ORDER BY p.created_at`,
+    [team2_id, matchId]
+  );
+  if (p2.rows.length === 0) {
+    p2 = await pool.query(`SELECT p.id, p.name FROM players p WHERE p.team_id = $1 ORDER BY p.created_at`, [team2_id]);
+  }
+
   const namesRes = await pool.query(
     `SELECT t1.name AS team1_name, t2.name AS team2_name FROM matches m
      JOIN teams t1 ON t1.id = m.team1_id JOIN teams t2 ON t2.id = m.team2_id WHERE m.id = $1`,
@@ -307,10 +393,27 @@ const getSquads = asyncHandler(async (req, res) => {
   if (matchRes.rows.length === 0) return res.status(404).json({ error: "Match not found" });
   const match = matchRes.rows[0];
 
-  const [p1, p2] = await Promise.all([
-    pool.query(`SELECT id, name FROM players WHERE team_id = $1 ORDER BY created_at`, [match.team1_id]),
-    pool.query(`SELECT id, name FROM players WHERE team_id = $1 ORDER BY created_at`, [match.team2_id]),
-  ]);
+  let p1 = await pool.query(
+    `SELECT id, name FROM players WHERE team_id = $1 AND match_id = $2 ORDER BY created_at ASC`,
+    [match.team1_id, matchId]
+  );
+  if (p1.rows.length === 0) {
+    p1 = await pool.query(
+      `SELECT id, name FROM players WHERE team_id = $1 AND match_id IS NULL ORDER BY created_at ASC`,
+      [match.team1_id]
+    );
+  }
+
+  let p2 = await pool.query(
+    `SELECT id, name FROM players WHERE team_id = $1 AND match_id = $2 ORDER BY created_at ASC`,
+    [match.team2_id, matchId]
+  );
+  if (p2.rows.length === 0) {
+    p2 = await pool.query(
+      `SELECT id, name FROM players WHERE team_id = $1 AND match_id IS NULL ORDER BY created_at ASC`,
+      [match.team2_id]
+    );
+  }
 
   res.json({
     team1: { name: match.team1_name, players: p1.rows },
@@ -420,12 +523,12 @@ const recordBall = asyncHandler(async (req, res) => {
          WHERE innings_id = $1 AND is_out = false ORDER BY is_on_strike DESC`,
         [activeInningsId]
       );
-      striker_id ??= battingRes.rows.find((b) => b.is_on_strike)?.player_id;
-      non_striker_id ??= battingRes.rows.find((b) => !b.is_on_strike)?.player_id;
+      striker_id = striker_id || battingRes.rows.find((b) => b.is_on_strike)?.player_id || battingRes.rows[0]?.player_id;
+      non_striker_id = non_striker_id || battingRes.rows.find((b) => !b.is_on_strike)?.player_id || battingRes.rows[1]?.player_id || battingRes.rows[0]?.player_id;
     }
     if (!bowler_id) {
       const bowlingRes = await pool.query(
-        `SELECT player_id FROM bowling_stats WHERE innings_id = $1 AND is_current = true LIMIT 1`,
+        `SELECT player_id FROM bowling_stats WHERE innings_id = $1 ORDER BY is_current DESC LIMIT 1`,
         [activeInningsId]
       );
       bowler_id = bowlingRes.rows[0]?.player_id;
@@ -688,21 +791,51 @@ const undoBall = asyncHandler(async (req, res) => {
     // an unstable/wrong sort for reconstructing what actually happened.
     const allBallsRes = await client.query(
       `SELECT b.*, o.over_number FROM balls b JOIN overs o ON o.id = b.over_id
-       WHERE o.innings_id = $1 ORDER BY b.id`,
+       WHERE o.innings_id = $1 ORDER BY b.created_at ASC, b.ball_number ASC`,
       [innings.id]
     );
     const balls = allBallsRes.rows;
 
     let totalRuns = 0, wickets = 0, legalCountInOver = 0, oversCompleted = 0;
-    const battingTotals = {}; // player_id -> {runs, balls_faced, fours, sixes, is_out, dismissal}
-    const bowlingTotals = {}; // player_id -> {balls, runs, wickets}
+    
+    // Fetch original batting and bowling stats to seed all batters/bowlers who have entered
+    const origBatting = await client.query(
+      `SELECT * FROM batting_stats WHERE innings_id = $1 ORDER BY created_at ASC`,
+      [innings.id]
+    );
+    const origBowling = await client.query(
+      `SELECT * FROM bowling_stats WHERE innings_id = $1 ORDER BY created_at ASC`,
+      [innings.id]
+    );
 
-    // Track who's on strike / who's bowling as we replay, the same way
-    // recordBall() does live: strike rotates on odd runs (incl. byes/legbyes)
-    // and at the end of every completed over; the bowler resets to "none"
-    // at the end of a completed over (a new bowler must be picked, same as live).
-    let onStrikeId = null;
-    let currentBowlerId = null;
+    const battingTotals = {}; // player_id -> {runs, balls_faced, fours, sixes, is_out, dismissal, created_at}
+    const bowlingTotals = {}; // player_id -> {balls, runs, wickets, created_at}
+
+    for (const row of origBatting.rows) {
+      battingTotals[row.player_id] = {
+        runs: 0,
+        balls_faced: 0,
+        fours: 0,
+        sixes: 0,
+        is_out: false,
+        dismissal: null,
+        created_at: row.created_at,
+      };
+    }
+
+    for (const row of origBowling.rows) {
+      bowlingTotals[row.player_id] = {
+        balls: 0,
+        runs: 0,
+        wickets: 0,
+        created_at: row.created_at,
+      };
+    }
+
+    // Re-simulate strike and non-striker tracking across remaining balls
+    let strikerId = origBatting.rows.find((r) => r.is_on_strike)?.player_id || origBatting.rows[0]?.player_id || null;
+    let nonStrikerId = origBatting.rows.find((r) => !r.is_on_strike)?.player_id || origBatting.rows[1]?.player_id || null;
+    let currentBowlerId = origBowling.rows.find((r) => r.is_current)?.player_id || origBowling.rows[0]?.player_id || null;
 
     for (const b of balls) {
       const isLegal = b.extra_type !== "wide" && b.extra_type !== "noball";
@@ -710,25 +843,25 @@ const undoBall = asyncHandler(async (req, res) => {
       totalRuns += Number(b.runs) + Number(b.extra_runs);
       if (b.is_wicket) wickets += 1;
 
-      battingTotals[b.batsman_id] ??= { runs: 0, balls_faced: 0, fours: 0, sixes: 0, is_out: false, dismissal: null };
+      battingTotals[b.batsman_id] ??= { runs: 0, balls_faced: 0, fours: 0, sixes: 0, is_out: false, dismissal: null, created_at: new Date() };
       battingTotals[b.batsman_id].runs += battingCredit;
       if (b.extra_type !== "wide") battingTotals[b.batsman_id].balls_faced += 1;
       if (battingCredit === 4) battingTotals[b.batsman_id].fours += 1;
       if (battingCredit === 6) battingTotals[b.batsman_id].sixes += 1;
+
       if (b.is_wicket && b.dismissed_player_id) {
-        battingTotals[b.dismissed_player_id] ??= { runs: 0, balls_faced: 0, fours: 0, sixes: 0, is_out: false, dismissal: null };
+        battingTotals[b.dismissed_player_id] ??= { runs: 0, balls_faced: 0, fours: 0, sixes: 0, is_out: false, dismissal: null, created_at: new Date() };
         battingTotals[b.dismissed_player_id].is_out = true;
         battingTotals[b.dismissed_player_id].dismissal = b.wicket_type;
       }
 
-      bowlingTotals[b.bowler_id] ??= { balls: 0, runs: 0, wickets: 0 };
+      bowlingTotals[b.bowler_id] ??= { balls: 0, runs: 0, wickets: 0, created_at: new Date() };
       bowlingTotals[b.bowler_id].runs += Number(b.runs) + Number(b.extra_runs);
       if (b.is_wicket) bowlingTotals[b.bowler_id].wickets += 1;
 
-      // Whoever bowled this ball is provisionally "current" until an over
-      // completes, at which point we clear it (mirrors recordBall()).
       currentBowlerId = b.bowler_id;
-      onStrikeId = b.batsman_id;
+      strikerId = b.batsman_id;
+      if (b.non_striker_id) nonStrikerId = b.non_striker_id;
 
       if (isLegal) {
         bowlingTotals[b.bowler_id].balls += 1;
@@ -741,20 +874,18 @@ const undoBall = asyncHandler(async (req, res) => {
       if (isLegal && legalCountInOver === 6) {
         oversCompleted += 1;
         legalCountInOver = 0;
-        flip = !flip;          // strike also rotates at the end of an over
-        currentBowlerId = null; // over just completed — a new bowler must be selected
+        flip = !flip;
+        currentBowlerId = null;
       }
 
       if (flip) {
-        const notOut = Object.keys(battingTotals).filter((id) => !battingTotals[id].is_out);
-        const other = notOut.find((id) => id !== String(onStrikeId));
-        if (other) onStrikeId = other;
+        const temp = strikerId;
+        strikerId = nonStrikerId;
+        nonStrikerId = temp;
       }
     }
 
-    // If the batsman currently "on strike" per the replay has since been
-    // marked out (shouldn't normally happen, but guard anyway), fall back
-    // to any not-out batsman so we never persist a striker who's out.
+    let onStrikeId = strikerId;
     if (onStrikeId != null && battingTotals[onStrikeId]?.is_out) {
       const notOut = Object.keys(battingTotals).find((id) => !battingTotals[id].is_out);
       onStrikeId = notOut ?? null;
@@ -762,23 +893,52 @@ const undoBall = asyncHandler(async (req, res) => {
 
     const oversCompletedDecimal = Number(`${oversCompleted}.${legalCountInOver}`);
 
+    // Determine active batters who actually participated in the replayed balls or initial setup
+    const participatedBatterIds = new Set();
+    // Add opening 2 batters (first 2 created)
+    origBatting.rows.slice(0, 2).forEach((r) => participatedBatterIds.add(String(r.player_id)));
+    // Add all batters who faced a ball or were dismissed in replayed balls
+    for (const b of balls) {
+      if (b.batsman_id) participatedBatterIds.add(String(b.batsman_id));
+      if (b.dismissed_player_id) participatedBatterIds.add(String(b.dismissed_player_id));
+    }
+
     await client.query(`DELETE FROM batting_stats WHERE innings_id = $1`, [innings.id]);
     await client.query(`DELETE FROM bowling_stats WHERE innings_id = $1`, [innings.id]);
 
     for (const [playerId, t] of Object.entries(battingTotals)) {
+      // Only keep batter if they participated in the actual ball history or opening lineup
+      if (!participatedBatterIds.has(String(playerId)) && t.balls_faced === 0 && t.runs === 0 && !t.is_out) {
+        continue;
+      }
       const isOnStrike = !t.is_out && onStrikeId != null && String(playerId) === String(onStrikeId);
       await client.query(
-        `INSERT INTO batting_stats (innings_id, player_id, runs, balls_faced, fours, sixes, is_out, dismissal, is_on_strike)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [innings.id, playerId, t.runs, t.balls_faced, t.fours, t.sixes, t.is_out, t.dismissal, isOnStrike]
+        `INSERT INTO batting_stats (innings_id, player_id, runs, balls_faced, fours, sixes, is_out, dismissal, is_on_strike, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [innings.id, playerId, t.runs, t.balls_faced, t.fours, t.sixes, t.is_out, t.dismissal, isOnStrike, t.created_at || new Date()]
       );
     }
+
+    // Delete mid-match added players who no longer have any balls faced/bowled/wickets
+    await client.query(
+      `DELETE FROM players
+       WHERE match_id = $1
+         AND id NOT IN (
+           SELECT player_id FROM batting_stats WHERE innings_id = $2
+           UNION
+           SELECT player_id FROM bowling_stats WHERE innings_id = $2
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM balls WHERE match_id = $1 AND (striker_id = players.id OR non_striker_id = players.id OR bowler_id = players.id)
+         )`,
+      [matchId, innings.id]
+    ).catch(() => {});
     for (const [playerId, t] of Object.entries(bowlingTotals)) {
       const isCurrent = currentBowlerId != null && String(playerId) === String(currentBowlerId);
       await client.query(
-        `INSERT INTO bowling_stats (innings_id, player_id, overs_bowled, runs_conceded, wickets, is_current)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
-        [innings.id, playerId, Number(`${Math.floor(t.balls / 6)}.${t.balls % 6}`), t.runs, t.wickets, isCurrent]
+        `INSERT INTO bowling_stats (innings_id, player_id, overs_bowled, runs_conceded, wickets, is_current, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [innings.id, playerId, Number(`${Math.floor(t.balls / 6)}.${t.balls % 6}`), t.runs, t.wickets, isCurrent, t.created_at || new Date()]
       );
     }
 
@@ -874,6 +1034,47 @@ const completeMatch = asyncHandler(async (req, res) => {
   res.json({ ok: true });
 });
 
+async function fetchFallOfWickets(inningsId) {
+  try {
+    const fowRes = await pool.query(
+      `SELECT b.id, b.created_at, b.wicket_type, p.name AS player_name
+       FROM balls b
+       JOIN overs o ON o.id = b.over_id
+       LEFT JOIN players p ON p.id = b.dismissed_player_id
+       WHERE o.innings_id = $1 AND b.is_wicket = true
+       ORDER BY b.created_at ASC`,
+      [inningsId]
+    );
+    if (fowRes.rows.length === 0) return [];
+
+    return await Promise.all(
+      fowRes.rows.map(async (w, idx) => {
+        const statsRes = await pool.query(
+          `SELECT COALESCE(SUM(b.runs + b.extra_runs), 0) AS total_score,
+                  COUNT(CASE WHEN b.extra_type IS DISTINCT FROM 'wide' AND b.extra_type IS DISTINCT FROM 'noball' THEN 1 END) AS legal_balls
+           FROM balls b
+           JOIN overs o ON o.id = b.over_id
+           WHERE o.innings_id = $1 AND b.created_at <= $2`,
+          [inningsId, w.created_at]
+        );
+        const { total_score, legal_balls } = statsRes.rows[0];
+        const overs = Math.floor(Number(legal_balls) / 6);
+        const ballsInOver = Number(legal_balls) % 6;
+        return {
+          wicket_num: idx + 1,
+          score: Number(total_score),
+          overs_display: `${overs}.${ballsInOver}`,
+          player_name: w.player_name || "Unknown",
+          wicket_type: w.wicket_type,
+        };
+      })
+    );
+  } catch (err) {
+    console.error("fetchFallOfWickets error:", err);
+    return [];
+  }
+}
+
 // ============================================================
 // GET /api/matches/:matchId/scoreboard
 // ============================================================
@@ -902,7 +1103,7 @@ const getScoreboard = asyncHandler(async (req, res) => {
     inningsRes.rows.map(async (inn) => {
       const battingRes = await pool.query(
         `SELECT bs.*, p.name FROM batting_stats bs JOIN players p ON p.id = bs.player_id
-         WHERE bs.innings_id = $1 ORDER BY bs.created_at`,
+         WHERE bs.innings_id = $1 ORDER BY bs.created_at ASC`,
         [inn.id]
       );
       const bowlingRes = await pool.query(
@@ -910,6 +1111,7 @@ const getScoreboard = asyncHandler(async (req, res) => {
          WHERE bw.innings_id = $1 ORDER BY bw.created_at`,
         [inn.id]
       );
+      const fallOfWickets = await fetchFallOfWickets(inn.id);
       return {
         innings_number: inn.inning_number,
         batting_team_name: inn.batting_team_name,
@@ -919,6 +1121,7 @@ const getScoreboard = asyncHandler(async (req, res) => {
         overs: Number(inn.overs_completed).toFixed(1),
         batting: battingRes.rows,
         bowling: bowlingRes.rows,
+        fall_of_wickets: fallOfWickets,
       };
     })
   );
@@ -957,21 +1160,18 @@ async function buildLiveState(matchId) {
   };
 
   if (!activeInnings) {
-    // Either nothing started, or the previous innings just completed and the
-    // next one hasn't begun — either way the frontend shows OpeningSelectors.
     if (inningsRes.rows.length > 0 && match.status !== "completed") {
       const last = inningsRes.rows[inningsRes.rows.length - 1];
-      // flip batting/bowling for the next innings
       match.batting_team = last.bowling_team_id === match.team1_id ? match.team1_name : match.team2_name;
       match.bowling_team = last.batting_team_id === match.team1_id ? match.team1_name : match.team2_name;
     }
-    return { match, current_innings: null, batting: [], bowling: [], recent_balls: [] };
+    return { match, current_innings: null, batting: [], bowling: [], recent_balls: [], fall_of_wickets: [] };
   }
 
   const battingRes = await pool.query(
     `SELECT bs.*, p.name FROM batting_stats bs JOIN players p ON p.id = bs.player_id
-     WHERE bs.innings_id = $1 AND bs.is_out = false
-     ORDER BY bs.is_on_strike DESC`,
+     WHERE bs.innings_id = $1
+     ORDER BY bs.created_at ASC`,
     [activeInnings.id]
   );
 
@@ -982,19 +1182,15 @@ async function buildLiveState(matchId) {
     [activeInnings.id]
   );
 
-  // FIX (DJ — 24 Jul): "This Over" was rendering out of order. Root cause —
-  // wides/no-balls can share a ball_number with the legal delivery around
-  // them (they don't increment the legal count), so ORDER BY ball_number
-  // ASC hit ties and gave no guaranteed order across those. Ordering by
-  // b.id (insertion order = the true chronological order balls were
-  // recorded in) fixes this.
   const recentBallsRes = await pool.query(
     `SELECT b.* FROM balls b
      JOIN overs o ON o.id = b.over_id
      WHERE o.innings_id = $1 AND o.is_completed = false
-     ORDER BY b.id ASC`,
+     ORDER BY b.created_at ASC, b.ball_number ASC`,
     [activeInnings.id]
   );
+
+  const fallOfWickets = await fetchFallOfWickets(activeInnings.id);
 
   return {
     match,
@@ -1002,6 +1198,7 @@ async function buildLiveState(matchId) {
     batting: battingRes.rows.map((b) => ({ ...b, player_id: b.player_id })),
     bowling: bowlingRes.rows.map((b) => ({ ...b, player_id: b.player_id })),
     recent_balls: recentBallsRes.rows,
+    fall_of_wickets: fallOfWickets,
   };
 }
 
@@ -1123,9 +1320,52 @@ const setActivePlayers = asyncHandler(async (req, res) => {
 
 
 
+// ============================================================
+// DELETE /api/matches/:matchId
+// ============================================================
+const deleteMatch = asyncHandler(async (req, res) => {
+  const { matchId } = req.params;
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const matchRes = await client.query(`SELECT * FROM matches WHERE id = $1 FOR UPDATE`, [matchId]);
+    if (matchRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Match not found" });
+    }
+    const match = matchRes.rows[0];
+
+    if (req.user?.id && match.created_by && String(match.created_by) !== String(req.user.id)) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ error: "Forbidden: Only the match creator can delete this match" });
+    }
+
+    // Orderly cascade deletion in reverse dependency order
+    await client.query(`DELETE FROM balls WHERE over_id IN (SELECT id FROM overs WHERE innings_id IN (SELECT id FROM innings WHERE match_id = $1))`, [matchId]);
+    await client.query(`DELETE FROM overs WHERE innings_id IN (SELECT id FROM innings WHERE match_id = $1)`, [matchId]);
+    await client.query(`DELETE FROM batting_stats WHERE innings_id IN (SELECT id FROM innings WHERE match_id = $1)`, [matchId]);
+    await client.query(`DELETE FROM bowling_stats WHERE innings_id IN (SELECT id FROM innings WHERE match_id = $1)`, [matchId]);
+    await client.query(`DELETE FROM innings WHERE match_id = $1`, [matchId]);
+    await client.query(`DELETE FROM players WHERE match_id = $1`, [matchId]);
+    await client.query(`DELETE FROM matches WHERE id = $1`, [matchId]);
+
+    await client.query("COMMIT");
+    res.json({ ok: true, message: "Match deleted permanently" });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = {
   listMatches,
   createMatch,
+  updateMatch,
+  deleteMatch,
   addSquads,
   recordToss,
   getSquads,

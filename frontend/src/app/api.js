@@ -3,7 +3,8 @@
 // same build can point at localhost in dev and the real deployed backend in
 // production, instead of a hardcoded host. Falls back to localhost so local
 // `npm run dev` keeps working even if a dev hasn't set up a .env yet.
-export const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const rawApiUrl = (import.meta.env.VITE_API_URL || "http://localhost:8000/api").replace(/\/+$/, "");
+export const API_BASE = rawApiUrl.endsWith("/api") ? rawApiUrl : `${rawApiUrl}/api`;
 
 // ─── Auth token persistence ─────────────────────────────────────────────────
 const TOKEN_KEY = "mc_token";
@@ -19,6 +20,13 @@ export function setStoredToken(token) {
 
 export async function apiRequest(path, { method = "GET", body, token } = {}) {
   const authToken = token !== undefined ? token : getStoredToken();
+  const cleanPath = path.startsWith("/api/")
+    ? path.slice(4)
+    : path.startsWith("api/")
+    ? path.slice(3)
+    : path.startsWith("/")
+    ? path
+    : `/${path}`;
 
   const headers = {
     "Content-Type": "application/json",
@@ -29,7 +37,7 @@ export async function apiRequest(path, { method = "GET", body, token } = {}) {
   }
 
   try {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetch(`${API_BASE}${cleanPath}`, {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
