@@ -114,15 +114,7 @@ function formatOvers(oversValue) {
 }
 
 function correctBuggyBowlerOvers(rawOversBowled) {
-  const raw = Number(rawOversBowled) || 0;
-  const balls = Math.round(raw * 4);
-  const overs = Math.floor(balls / 6);
-  const rem = balls % 6;
-  return {
-    display: `${overs}.${rem}`,
-    trueDecimal: balls / 6,
-    balls,
-  };
+  return formatOvers(rawOversBowled);
 }
 
 function teamInitials(name) {
@@ -357,10 +349,25 @@ function MatchHome({ user, onScoreNew, onResume, onViewScoreboard }) {
 
   useEffect(() => {
     let cancelled = false;
-    api("/api/matches")
-      .then((json) => { if (!cancelled) setMatches(json); })
-      .catch((err) => { if (!cancelled) setError(err.message); });
-    return () => { cancelled = true; };
+    const fetchMatches = async () => {
+      try {
+        const json = await api("/api/matches");
+        if (!cancelled) setMatches(json);
+      } catch (err) {
+        if (!cancelled && matches === null) setError(err.message);
+      }
+    };
+    fetchMatches();
+    // Asynchronous background polling every 3.5s for real-time live scoreboard cards
+    const interval = setInterval(() => {
+      if (!document.hidden) {
+        fetchMatches();
+      }
+    }, 3500);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   const inProgress = matches?.filter((m) => m.status !== "completed") || [];
@@ -971,12 +978,26 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
   const [prompts, setPrompts] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [extraPicker, setExtraPicker] = useState(null);
   const [wicketPanelOpen, setWicketPanelOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const [scorecard, setScorecard] = useState(null);
   const [activeTab, setActiveTab] = useState("live"); // live | scorecard | commentary | squads
+  const [editingPlayer, setEditingPlayer] = useState(null); // { id, name }
+  const [newNameInput, setNewNameInput] = useState("");
+  const [isUpdatingName, setIsUpdatingName] = useState(false);
+  const [showBowlerPicker, setShowBowlerPicker] = useState(false);
   const toastTimerRef = useRef(null);
+  const scoringQueueRef = useRef([]);
+  const isProcessingQueueRef = useRef(false);
+
+  const loadSquads = useCallback(async () => {
+    try {
+      const sq = await api(`/api/matches/${matchId}/squads`);
+      setSquads(sq);
+    } catch {}
+  }, [matchId]);
 
   const loadScorecard = useCallback(async () => {
     try {
@@ -984,6 +1005,26 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
       setScorecard(sc);
     } catch {}
   }, [matchId]);
+
+  async function handleSavePlayerName() {
+    if (!editingPlayer || !newNameInput.trim()) return;
+    setIsUpdatingName(true);
+    try {
+      const freshLive = await api(`/api/matches/${matchId}/players/${editingPlayer.id}/update-name`, {
+        method: "POST",
+        body: JSON.stringify({ name: newNameInput.trim() }),
+      });
+      setLive(freshLive);
+      setToast({ text: `Renamed to ${newNameInput.trim()}!`, color: COLOR.accent });
+      setEditingPlayer(null);
+      loadScorecard();
+      loadSquads();
+    } catch (err) {
+      setToast({ text: `Failed to update name: ${err.message}`, color: COLOR.red });
+    } finally {
+      setIsUpdatingName(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -1005,6 +1046,69 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
     return () => { cancelled = true; };
   }, [matchId, loadScorecard]);
 
+  // Determine if the current user is the match creator/scorer
+  const isCreator = !live?.match?.created_by || (user?.id && String(live?.match?.created_by) === String(user.id));
+
+  // Real-time asynchronous polling: ONLY for viewers (creators receive instant state via action responses)
+  useEffect(() => {
+    if (isCreator) return;
+    const timer = setInterval(async () => {
+      if (
+        !document.hidden &&
+        scoringQueueRef.current.length === 0 &&
+        !isProcessingQueueRef.current
+      ) {
+        try {
+          const fresh = await api(`/api/matches/${matchId}/live`);
+          if (scoringQueueRef.current.length === 0) {
+            setLive(fresh);
+            if (fresh?.prompts) setPrompts(fresh.prompts);
+          }
+        } catch {}
+      }
+    }, 2500);
+    return () => clearInterval(timer);
+  }, [matchId, isCreator]);
+
+  const processScoringQueue = useCallback(async () => {
+    if (isProcessingQueueRef.current) return;
+    isProcessingQueueRef.current = true;
+    setIsSyncing(true);
+
+    try {
+      while (scoringQueueRef.current.length > 0) {
+        const nextAction = scoringQueueRef.current.shift();
+        try {
+          const json = await api(nextAction.path, {
+            method: "POST",
+            body: JSON.stringify(nextAction.body),
+          });
+          // Reconcile canonical state when queue is cleared
+          if (scoringQueueRef.current.length === 0) {
+            setLive(json);
+            if (json.prompts) setPrompts(json.prompts);
+            loadScorecard();
+          }
+        } catch (err) {
+          console.error("Scoring sync error:", err);
+          setError(err.message);
+          setToast({ text: `Sync error: ${err.message}`, color: COLOR.red });
+          // Resync from server on failure
+          try {
+            const freshLive = await api(`/api/matches/${matchId}/live`);
+            setLive(freshLive);
+            if (freshLive.prompts) setPrompts(freshLive.prompts);
+            loadScorecard();
+          } catch {}
+          break;
+        }
+      }
+    } finally {
+      isProcessingQueueRef.current = false;
+      setIsSyncing(false);
+    }
+  }, [matchId, loadScorecard]);
+
   async function runAction(path, body) {
     setBusy(true);
     setError(null);
@@ -1012,7 +1116,6 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
       const json = await api(path, { method: "POST", body: body ? JSON.stringify(body) : undefined });
       setLive(json);
       setPrompts(json.prompts || null);
-      // Non-blocking background sync for scorecard & squads so scoring responds instantly (0ms delay)
       setTimeout(() => {
         loadScorecard();
       }, 0);
@@ -1025,67 +1128,249 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
     }
   }
 
-  function recordBall({ runs = 0, extra_type = null, extra_runs = 0, is_wicket = false, wicket_type = null, dismissed_player_id = null, fielder_id = null }) {
-    const activeBatters = live?.batting?.filter((b) => !b.is_out) || [];
-    const striker_id = activeBatters.find((b) => b.is_on_strike)?.player_id || activeBatters[0]?.player_id;
-    const non_striker_id = activeBatters.find((b) => !b.is_on_strike)?.player_id || activeBatters[1]?.player_id || activeBatters[0]?.player_id;
-    const bowler_id = live?.bowling?.find((b) => b.is_current)?.player_id || live?.bowling?.[0]?.player_id;
+  function recordBall({
+    runs = 0,
+    extra_type = null,
+    extra_runs = 0,
+    is_wicket = false,
+    wicket_type = null,
+    dismissed_player_id = null,
+    fielder_id = null,
+  }) {
+    if (!live || !live.current_innings) return;
 
+    const activeBatters = live.batting?.filter((b) => !b.is_out) || [];
+    const striker = activeBatters.find((b) => b.is_on_strike) || activeBatters[0];
+    const nonStriker =
+      activeBatters.find((b) => !b.is_on_strike && b.player_id !== striker?.player_id) ||
+      activeBatters.find((b) => b.player_id !== striker?.player_id);
+    const striker_id = striker?.player_id;
+    const non_striker_id = nonStriker?.player_id;
+    const currentBowler = live.bowling?.find((b) => b.is_current);
+    const bowler_id = currentBowler?.player_id;
+
+    if (!striker_id || !non_striker_id || striker_id === non_striker_id) {
+      setPrompts((prev) => ({ ...prev, needs_new_batsman: true }));
+      return;
+    }
+
+    const isOverBoundary = !currentBowler && Number(live.current_innings?.overs_completed || 0) > 0;
+    if (!bowler_id || isOverBoundary) {
+      setShowBowlerPicker(true);
+      setToast({ text: "Please click 'Start Next Over' to select a bowler", color: COLOR.sky });
+      return;
+    }
+
+    const runsNum = Number(runs || 0);
+    const extraR = Number(extra_runs || 0);
+    const totalR = runsNum + extraR;
+    const isLegal = extra_type !== "wide" && extra_type !== "noball";
+    const battingCredit = ["bye", "legbye", "wide"].includes(extra_type) ? 0 : runsNum;
+    const countsAsFaced = extra_type !== "wide";
+
+    // Toast alert for boundaries / wickets
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     let toastMsg = null;
     if (is_wicket) toastMsg = { text: "WICKET!", color: COLOR.red };
-    else if (Number(runs) === 6) toastMsg = { text: "SIX!", color: COLOR.purple };
-    else if (Number(runs) === 4) toastMsg = { text: "FOUR!", color: COLOR.accent };
+    else if (runsNum === 6) toastMsg = { text: "SIX!", color: COLOR.purple };
+    else if (runsNum === 4) toastMsg = { text: "FOUR!", color: COLOR.accent };
 
     if (toastMsg) {
       setToast(toastMsg);
       toastTimerRef.current = setTimeout(() => setToast(null), 1400);
     }
 
-    // Optimistic UI update for instant click feedback
-    if (live && live.current_innings) {
-      const extraR = Number(extra_runs || 0);
-      const totalR = Number(runs) + extraR;
-      const isLegal = extra_type !== "wide" && extra_type !== "noball";
+    // 1. Calculate new overs
+    const currentOversNum = Number(live.current_innings.overs_completed || 0);
+    const wholeOvers = Math.floor(currentOversNum);
+    const ballsInOver = Math.round((currentOversNum - wholeOvers) * 10);
+    const totalLegalBalls = wholeOvers * 6 + ballsInOver + (isLegal ? 1 : 0);
+    const newWholeOvers = Math.floor(totalLegalBalls / 6);
+    const newRemBalls = totalLegalBalls % 6;
+    const newOversCompleted = Number(`${newWholeOvers}.${newRemBalls}`);
+    const isOverComplete = isLegal && newRemBalls === 0;
 
-      setLive((prev) => {
-        if (!prev || !prev.current_innings) return prev;
-        const currentBatters = prev.batting || [];
-        const currentBowlers = prev.bowling || [];
+    // 2. Strike rotation: odd runs off bat or odd bye/legbye rotates strike; flips again at over end
+    const runsThatRotate = ["bye", "legbye"].includes(extra_type) ? extraR : runsNum;
+    let flipStrike = !is_wicket && (runsThatRotate % 2 === 1);
+    if (isOverComplete) {
+      flipStrike = !flipStrike;
+    }
 
-        const updatedBatters = currentBatters.map((b) => {
-          if (b.player_id === striker_id) {
-            const isWide = extra_type === "wide";
-            const addRuns = ["bye", "legbye", "wide"].includes(extra_type) ? 0 : Number(runs);
-            return {
-              ...b,
-              runs: b.runs + addRuns,
-              balls_faced: isWide ? b.balls_faced : b.balls_faced + 1,
-              fours: addRuns === 4 ? b.fours + 1 : b.fours,
-              sixes: addRuns === 6 ? b.sixes + 1 : b.sixes,
-            };
-          }
-          return b;
-        });
+    // 3. Batting stats update
+    const outPlayerId = is_wicket ? (dismissed_player_id || striker_id) : null;
+    const updatedBatters = (live.batting || []).map((b) => {
+      let isOut = b.is_out;
+      let dismissal = b.dismissal;
+      let r = Number(b.runs || 0);
+      let bf = Number(b.balls_faced || 0);
+      let f = Number(b.fours || 0);
+      let s = Number(b.sixes || 0);
+      let onStrike = b.is_on_strike;
 
+      if (b.player_id === striker_id) {
+        r += battingCredit;
+        if (countsAsFaced) bf += 1;
+        if (battingCredit === 4) f += 1;
+        if (battingCredit === 6) s += 1;
+      }
+
+      if (is_wicket && b.player_id === outPlayerId) {
+        isOut = true;
+        dismissal = wicket_type || "out";
+        onStrike = false;
+      } else if (flipStrike && !isOut) {
+        if (b.player_id === striker_id || b.player_id === non_striker_id) {
+          onStrike = !onStrike;
+        }
+      }
+
+      return {
+        ...b,
+        runs: r,
+        balls_faced: bf,
+        fours: f,
+        sixes: s,
+        is_out: isOut,
+        dismissal,
+        is_on_strike: onStrike,
+      };
+    });
+
+    // 4. Bowling stats update
+    const updatedBowlers = (live.bowling || []).map((bw) => {
+      if (bw.player_id === bowler_id) {
+        const rawBowlerBalls = Math.floor(Number(bw.overs_bowled || 0)) * 6 + Math.round((Number(bw.overs_bowled || 0) % 1) * 10) + (isLegal ? 1 : 0);
+        const bWhole = Math.floor(rawBowlerBalls / 6);
+        const bRem = rawBowlerBalls % 6;
         return {
-          ...prev,
-          current_innings: {
-            ...prev.current_innings,
-            total_runs: prev.current_innings.total_runs + totalR,
-            wickets: prev.current_innings.wickets + (is_wicket ? 1 : 0),
-          },
-          batting: updatedBatters,
+          ...bw,
+          runs_conceded: Number(bw.runs_conceded || 0) + totalR,
+          wickets: Number(bw.wickets || 0) + (is_wicket ? 1 : 0),
+          overs_bowled: Number(`${bWhole}.${bRem}`),
+          is_current: isOverComplete ? false : true,
         };
+      }
+      return bw;
+    });
+
+    // 5. Recent balls update
+    const newBallRecord = {
+      id: `opt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      runs: runsNum,
+      extra_type,
+      extra_runs: extraR,
+      is_wicket: !!is_wicket,
+      wicket_type,
+    };
+    const updatedRecentBalls = [...(live.recent_balls || []), newBallRecord];
+
+    // 6. Innings summary update
+    const updatedInnings = {
+      ...live.current_innings,
+      total_runs: Number(live.current_innings.total_runs || 0) + totalR,
+      wickets: Number(live.current_innings.wickets || 0) + (is_wicket ? 1 : 0),
+      overs_completed: newOversCompleted,
+    };
+
+    // Apply optimistic updates to live state immediately (0ms delay)
+    setLive((prev) => ({
+      ...prev,
+      current_innings: updatedInnings,
+      batting: updatedBatters,
+      bowling: updatedBowlers,
+      recent_balls: updatedRecentBalls,
+    }));
+
+    // Concurrently update full scorecard state so scorecard tab has 0ms delay
+    setScorecard((prev) => {
+      if (!prev || !prev.innings) return prev;
+      const inningsIndex = prev.innings.findIndex(
+        (i) => i.innings_number === live.current_innings.inning_number
+      );
+      if (inningsIndex === -1) return prev;
+      const updatedInningsList = [...prev.innings];
+      updatedInningsList[inningsIndex] = {
+        ...updatedInningsList[inningsIndex],
+        total_runs: updatedInnings.total_runs,
+        wickets: updatedInnings.wickets,
+        overs: formatOvers(newOversCompleted).display,
+        batting: updatedBatters,
+        bowling: updatedBowlers,
+      };
+      return { ...prev, innings: updatedInningsList };
+    });
+
+    setExtraPicker(null);
+    setWicketPanelOpen(false);
+
+    if (is_wicket && isOverComplete) {
+      const dismissedBatter = live.batting?.find((b) => b.player_id === outPlayerId);
+      const isStrikerOut = outPlayerId === striker_id;
+      setPrompts({
+        needs_new_batsman: true,
+        needs_new_bowler: true,
+        last_bowler_id: bowler_id,
+        replaced_position: isStrikerOut ? "striker" : "non_striker",
+        dismissed_name: dismissedBatter?.name || (isStrikerOut ? "Striker" : "Non-Striker"),
+        dismissed_player_id: outPlayerId,
+      });
+    } else if (is_wicket) {
+      const dismissedBatter = live.batting?.find((b) => b.player_id === outPlayerId);
+      const isStrikerOut = outPlayerId === striker_id;
+      setPrompts({
+        needs_new_batsman: true,
+        replaced_position: isStrikerOut ? "striker" : "non_striker",
+        dismissed_name: dismissedBatter?.name || (isStrikerOut ? "Striker" : "Non-Striker"),
+        dismissed_player_id: outPlayerId,
+      });
+    } else if (isOverComplete) {
+      setPrompts({
+        needs_new_bowler: false,
+        is_over_ended: true,
+        last_bowler_id: bowler_id,
       });
     }
 
-    runAction(`/api/matches/${matchId}/balls`, {
-      runs, extra_type, extra_runs, is_wicket, wicket_type, dismissed_player_id, fielder_id,
-      striker_id, non_striker_id, bowler_id,
-    }).catch(() => {});
-    setExtraPicker(null);
-    setWicketPanelOpen(false);
+    // Enqueue background action for asynchronous non-blocking sync
+    scoringQueueRef.current.push({
+      path: `/api/matches/${matchId}/balls`,
+      body: {
+        runs: runsNum,
+        extra_type,
+        extra_runs: extraR,
+        is_wicket,
+        wicket_type,
+        dismissed_player_id: outPlayerId,
+        fielder_id,
+        striker_id,
+        non_striker_id,
+        bowler_id,
+      },
+    });
+
+    processScoringQueue();
+  }
+
+  async function handleUndo() {
+    if (scoringQueueRef.current.length > 0) {
+      setToast({ text: "Completing pending balls...", color: COLOR.amber });
+      return;
+    }
+    setIsSyncing(true);
+    setError(null);
+    setShowBowlerPicker(false);
+    try {
+      const json = await api(`/api/matches/${matchId}/balls/undo`, { method: "POST" });
+      setLive(json);
+      setPrompts(json.prompts || null);
+      setShowBowlerPicker(false);
+      loadScorecard();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsSyncing(false);
+    }
   }
 
   async function completeMatch() {
@@ -1116,7 +1401,10 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
     });
     setSquads(result);
     const teamObj = teamKey === "team1_players" ? result.team1 : result.team2;
-    return teamObj.players[teamObj.players.length - 1]?.id || null;
+    const addedPlayer = teamObj?.players?.find(
+      (p) => p.name.trim().toLowerCase() === trimmed.toLowerCase()
+    ) || teamObj?.players?.[teamObj.players.length - 1];
+    return addedPlayer?.id || null;
   }
 
   if (error) return <div className="text-xs p-4 bg-red-500/10 text-red-400 rounded-xl">Error: {error}</div>;
@@ -1124,10 +1412,61 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
 
   const { match, current_innings, batting, bowling, recent_balls } = live;
 
-  // Determine if the current logged in user is the owner/creator of this match
-  const isCreator = !match?.created_by || (user?.id && String(match?.created_by) === String(user.id));
-
   if (!live.current_innings) {
+    if (live.match?.status === "completed") {
+      return (
+        <div className="p-6 rounded-2xl text-center space-y-3" style={cardStyle}>
+          <div className="text-3xl">🏆</div>
+          <div className="text-base font-bold text-white">Match Completed</div>
+          <p className="text-xs text-emerald-400 font-semibold">{live.match.result || "Match finished"}</p>
+          <button
+            onClick={() => setActiveTab("scorecard")}
+            className={`px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 text-black ${BTN_TRANSITION}`}
+          >
+            View Full Scorecard ➔
+          </button>
+        </div>
+      );
+    }
+    if (live.first_innings) {
+      return (
+        <div className="p-6 rounded-2xl space-y-4" style={cardStyle}>
+          <div className="text-center space-y-2 border-b border-slate-800 pb-4">
+            <span className="text-4xl">🏏</span>
+            <h3 className="text-lg font-black text-white">Innings 1 Completed — Innings Break</h3>
+            <p className="text-xs text-slate-300">
+              <strong className="text-emerald-400">{live.first_innings.batting_team}</strong> scored{" "}
+              <strong className="text-white text-sm">{live.first_innings.total_runs}/{live.first_innings.wickets}</strong> in{" "}
+              <span className="font-mono text-slate-300">{live.first_innings.overs_completed}</span> overs
+            </p>
+            <div className="inline-block px-4 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-black">
+              Target for {live.match.batting_team}: {live.first_innings.target} Runs ({live.match.overs_limit} ov)
+            </div>
+          </div>
+
+          {isCreator ? (
+            <div className="space-y-3">
+              <p className="text-xs text-slate-400 text-center">
+                Select opening batters for <strong className="text-emerald-400">{live.match.batting_team}</strong> and opening bowler for <strong className="text-sky-400">{live.match.bowling_team}</strong> to begin the 2nd innings chase.
+              </p>
+              <OpeningSelectors
+                squads={squads}
+                match={live.match}
+                inningsNumber={2}
+                onStart={(payload) => runAction(`/api/matches/${matchId}/start-innings`, { ...payload, innings_number: 2 })}
+                onAddPlayer={addPlayer}
+                busy={busy}
+              />
+            </div>
+          ) : (
+            <div className="text-center py-4 text-xs text-slate-400">
+              Waiting for the match scorer to start the 2nd innings...
+            </div>
+          )}
+        </div>
+      );
+    }
+
     if (!isCreator) {
       return (
         <div className="p-6 rounded-2xl text-center space-y-2" style={cardStyle}>
@@ -1141,6 +1480,7 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
       <OpeningSelectors
         squads={squads}
         match={live.match}
+        inningsNumber={1}
         onStart={(payload) => runAction(`/api/matches/${matchId}/start-innings`, payload)}
         onAddPlayer={addPlayer}
         busy={busy}
@@ -1161,20 +1501,70 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
     const battingIsTeam1 = live.match.batting_team === live.match.team1_name;
     const battingSquad = battingIsTeam1 ? squads.team1 : squads.team2;
     const battingKey = battingIsTeam1 ? "team1_players" : "team2_players";
-    const onCrease = new Set(live.batting.map((b) => b.player_id));
-    const available = (battingSquad?.players || []).filter((p) => !onCrease.has(p.id));
+
+    // Remaining partner at the crease who is not out
+    const remainingBatter = live.batting?.find((b) => !b.is_out);
+
+    // Determine which position got out (striker or non-striker)
+    const isStrikerOut = prompts.replaced_position
+      ? prompts.replaced_position === "striker"
+      : !remainingBatter?.is_on_strike;
+    const positionLabel = isStrikerOut ? "Striker (On Strike)" : "Non-Striker";
+    const dismissedName = prompts.dismissed_name || (isStrikerOut ? "Striker" : "Non-Striker");
+    const currentBowler = live.bowling?.find((b) => b.is_current) || live.bowling?.[0];
+
+    // Players from squad who haven't batted yet
+    const alreadyBatted = new Set(live.batting?.map((b) => b.player_id));
+    const available = (battingSquad?.players || []).filter((p) => !alreadyBatted.has(p.id));
+
     return (
-      <PlayerPicker
-        title="Select Next Batter"
-        players={available}
-        onPick={(id) => runAction(`/api/matches/${matchId}/new-batsman`, { player_id: id }).catch(() => {})}
-        onAddNew={(name) => addPlayer(battingKey, name)}
-        busy={busy}
-      />
+      <div className="space-y-3">
+        {/* Context banner showing the exact dismissed player, remaining partner, and bowler */}
+        <div className="p-4 rounded-xl bg-slate-900 border border-red-500/30 flex items-center justify-between">
+          <div>
+            <div className="text-xs font-black uppercase tracking-wider text-red-400 flex items-center gap-1.5">
+              <span>🔴 Wicket Fallen</span>
+              <span className="text-slate-300 font-bold">— {dismissedName} ({isStrikerOut ? "Striker" : "Non-Striker"}) is Out</span>
+            </div>
+            <div className="text-xs text-slate-300 mt-1 flex items-center gap-2">
+              <span>Partner at Crease: <strong className="text-emerald-400">{remainingBatter?.name || "Partner"}</strong></span>
+              {currentBowler && (
+                <span className="text-slate-400 font-mono text-[11px] border-l border-slate-700 pl-2">
+                  Bowler: <strong className="text-sky-400">{currentBowler.name}</strong>
+                </span>
+              )}
+            </div>
+          </div>
+          <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/30">
+            Replacing {positionLabel}
+          </span>
+        </div>
+
+        <PlayerPicker
+          title={`Select New Batter (Replacing ${positionLabel})`}
+          players={available}
+          onPick={(id) => {
+            runAction(`/api/matches/${matchId}/new-batsman`, {
+              player_id: id,
+              replaces_position: isStrikerOut ? "striker" : "non_striker",
+            }).catch(() => {});
+          }}
+          onAddNew={(name) => addPlayer(battingKey, name)}
+          busy={busy}
+        />
+      </div>
     );
   }
 
-  if (prompts?.needs_new_bowler) {
+  const currentBowler = live.bowling?.find((b) => b.is_current);
+  const isOverEnded = Boolean(
+    !currentBowler &&
+    Number(current_innings?.overs_completed || 0) > 0 &&
+    !current_innings?.is_completed &&
+    live.match?.status !== "completed"
+  );
+
+  if (showBowlerPicker) {
     if (!isCreator) {
       return (
         <div className="p-6 rounded-2xl text-center space-y-2" style={cardStyle}>
@@ -1187,16 +1577,61 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
     const bowlingIsTeam1 = live.match.bowling_team === live.match.team1_name;
     const bowlingSquad = bowlingIsTeam1 ? squads.team1 : squads.team2;
     const bowlingKey = bowlingIsTeam1 ? "team1_players" : "team2_players";
-    const lastBowlerId = live.bowling.find((b) => b.is_current)?.player_id;
-    const available = (bowlingSquad?.players || []).filter((p) => p.id !== lastBowlerId);
+    const lastBowlerId = prompts?.last_bowler_id || live.last_bowler_id;
+    const available = (bowlingSquad?.players || []).filter((p) => String(p.id) !== String(lastBowlerId));
+    const lastBowler = bowlingSquad?.players?.find((p) => String(p.id) === String(lastBowlerId)) || (lastBowlerId ? { name: live.last_bowler_name || "Previous bowler" } : null);
+
     return (
-      <PlayerPicker
-        title="Select Bowler for Next Over"
-        players={available}
-        onPick={(id) => runAction(`/api/matches/${matchId}/select-bowler`, { bowler_id: id }).catch(() => {})}
-        onAddNew={(name) => addPlayer(bowlingKey, name)}
-        busy={busy}
-      />
+      <div className="space-y-3">
+        <div className="p-3.5 rounded-xl bg-slate-900 border border-sky-500/30 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-base">⚾</span>
+            <div className="text-slate-300">
+              {lastBowler ? (
+                <span><strong className="text-white">{lastBowler.name}</strong> completed the previous over</span>
+              ) : (
+                <span>Select bowler for the next over</span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {lastBowler && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                Cannot bowl consecutive overs
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowBowlerPicker(false)}
+              className="text-xs px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+            >
+              ✕ Back to Scorecard
+            </button>
+          </div>
+        </div>
+
+        <PlayerPicker
+          title={`Select Bowler for Over ${Math.floor(Number(current_innings.overs_completed || 0)) + 1}`}
+          players={available}
+          onPick={async (id) => {
+            try {
+              await runAction(`/api/matches/${matchId}/select-bowler`, { bowler_id: id });
+              setShowBowlerPicker(false);
+            } catch {}
+          }}
+          onAddNew={async (name) => {
+            const newId = await addPlayer(bowlingKey, name);
+            if (newId) {
+              try {
+                await runAction(`/api/matches/${matchId}/select-bowler`, { bowler_id: newId });
+                setShowBowlerPicker(false);
+              } catch {}
+            }
+            return newId;
+          }}
+          busy={busy}
+        />
+      </div>
     );
   }
 
@@ -1204,8 +1639,6 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
   const crr = inningsOvers.trueDecimal > 0
     ? (current_innings.total_runs / inningsOvers.trueDecimal).toFixed(2)
     : "0.00";
-
-  const currentBowler = bowling.find((b) => b.is_current);
 
   return (
     <div className="space-y-4">
@@ -1230,7 +1663,18 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
             </span>
             <span className="font-semibold text-slate-300">{match.venue || "Stadium"}</span>
           </div>
-          <span className="font-mono text-slate-400">{match.overs_limit} Overs Match</span>
+          <div className="flex items-center gap-2">
+            {isSyncing ? (
+              <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold flex items-center gap-1 font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" /> Syncing...
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-bold flex items-center gap-1 font-mono">
+                ⚡ Real-time
+              </span>
+            )}
+            <span className="font-mono text-slate-400">{match.overs_limit} Overs Match</span>
+          </div>
         </div>
 
         {/* Score & Teams */}
@@ -1258,6 +1702,30 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
             </div>
           </div>
         </div>
+
+        {/* 2nd Innings Target & RRR Chase Banner */}
+        {live.chase && (
+          <div className="p-3.5 rounded-xl bg-slate-900/90 border border-amber-500/40 space-y-1.5 shadow-inner">
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                <span className="text-sm">🎯</span> Target: <span className="font-mono text-white text-sm font-black">{live.chase.target}</span>
+              </div>
+              <div className="font-mono text-xs text-slate-300">
+                RRR: <span className="font-bold text-amber-400">{live.chase.required_run_rate}</span>
+              </div>
+            </div>
+            <div className="text-xs font-semibold text-slate-200 flex items-center justify-between">
+              <span>
+                {live.chase.runs_needed > 0
+                  ? `${match.batting_team} need ${live.chase.runs_needed} runs from ${live.chase.balls_remaining} balls`
+                  : `🏆 ${match.batting_team} achieved the target!`}
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">
+                CRR: {crr}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Mode Indicator Banner & Quick Setup Editors */}
         <div className="text-[11px] font-semibold text-slate-400 pt-1 flex items-center justify-between border-t border-slate-700/40">
@@ -1353,8 +1821,21 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-bold text-white truncate flex items-center gap-1.5">
-                      {b.is_on_strike && <span className="w-2 h-2 rounded-full bg-emerald-500" />}
-                      {b.name}
+                      {b.is_on_strike && <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />}
+                      <span className="truncate">{b.name}</span>
+                      {isCreator && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingPlayer({ id: b.player_id, name: b.name });
+                            setNewNameInput(b.name);
+                          }}
+                          title="Rename batsman"
+                          className="text-slate-400 hover:text-emerald-400 p-0.5 rounded text-[11px] transition-colors shrink-0"
+                        >
+                          ✎
+                        </button>
+                      )}
                     </span>
                     {b.is_on_strike ? (
                       <span className="text-[9px] font-black text-emerald-400 uppercase">STRIKE</span>
@@ -1375,7 +1856,24 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
               const er = bOvers.trueDecimal > 0 ? (b.runs_conceded / bOvers.trueDecimal).toFixed(2) : "0.00";
               return (
                 <div key={b.player_id} className="p-3.5 rounded-2xl border border-sky-500/40 bg-slate-900 col-span-2">
-                  <div className="text-xs font-bold text-sky-400 mb-1">Current Bowler: {b.name}</div>
+                  <div className="text-xs font-bold text-sky-400 mb-1 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span>Current Bowler: {b.name}</span>
+                      {isCreator && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingPlayer({ id: b.player_id, name: b.name });
+                            setNewNameInput(b.name);
+                          }}
+                          title="Rename bowler"
+                          className="text-slate-400 hover:text-sky-400 p-0.5 rounded text-[11px] transition-colors"
+                        >
+                          ✎
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   <div className="flex items-center justify-between text-xs font-mono text-slate-300">
                     <span>{bOvers.display} Overs</span>
                     <span>{b.wickets} Wkts</span>
@@ -1385,7 +1883,22 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
                 </div>
               );
             })}
+
+            {!currentBowler && live.last_bowler_name && (
+              <div className="p-3 rounded-2xl border border-slate-700 bg-slate-900/60 col-span-2 flex items-center justify-between text-xs text-slate-300">
+                <span className="text-slate-400">Previous Bowler: <strong className="text-white">{live.last_bowler_name}</strong></span>
+                <span className="text-amber-400/80 font-mono text-[11px] px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
+                  Cannot bowl consecutive overs
+                </span>
+              </div>
+            )}
           </div>
+
+          {!isCreator && isOverEnded && !currentBowler && (
+            <div className="p-3.5 rounded-2xl bg-slate-900 border border-sky-500/30 text-center text-xs text-slate-300">
+              ⚾ Over {formatOvers(current_innings.overs_completed).display} Completed. Waiting for next over to begin...
+            </div>
+          )}
 
           {/* INTERIOR SCORER CONTROL PANEL (ONLY VISIBLE TO MATCH CREATOR) */}
           {isCreator && (
@@ -1393,54 +1906,78 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
               <div className="flex items-center justify-between">
                 <span className="text-xs font-extrabold uppercase tracking-widest text-emerald-400">Scorer Controls</span>
                 <button
-                  onClick={() => runAction(`/api/matches/${matchId}/balls/undo`).catch(() => {})}
-                  disabled={busy}
+                  onClick={handleUndo}
+                  disabled={isSyncing && scoringQueueRef.current.length > 0}
                   className={`px-3 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 ${BTN_TRANSITION}`}
                 >
                   ↩ Undo Ball
                 </button>
               </div>
 
-              {/* Run Buttons */}
-              <div className="grid grid-cols-6 gap-2">
-                {[0, 1, 2, 3, 4, 6].map((r) => (
+              {isOverEnded && !currentBowler ? (
+                <div className="p-4 rounded-xl bg-gradient-to-r from-sky-950/70 to-slate-900 border border-sky-500/40 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
+                  <div className="flex items-center gap-2.5 text-xs text-slate-200">
+                    <span className="text-2xl">⚾</span>
+                    <div>
+                      <div className="font-bold text-white text-sm">
+                        Over {formatOvers(current_innings.overs_completed).display} Completed
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        {live.last_bowler_name
+                          ? `${live.last_bowler_name} bowled the last over.`
+                          : "Review previous deliveries or proceed to the next over."}
+                      </div>
+                    </div>
+                  </div>
                   <button
-                    key={r}
-                    disabled={busy}
-                    onClick={() => recordBall({ runs: r })}
-                    className={`py-3 rounded-xl font-black text-sm font-mono shadow ${BTN_TRANSITION}`}
-                    style={{
-                      backgroundColor: r === 6 ? COLOR.purple : r === 4 ? COLOR.accent : COLOR.surfaceRaised,
-                      color: r === 6 || r === 4 ? "#ffffff" : COLOR.ink,
-                    }}
+                    type="button"
+                    onClick={() => setShowBowlerPicker(true)}
+                    className="w-full sm:w-auto px-5 py-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 transition active:scale-95"
                   >
-                    {r}
+                    <span>Start Next Over (Choose Bowler) ➔</span>
                   </button>
-                ))}
-              </div>
+                </div>
+              ) : (
+                <>
+                  {/* Run Buttons — 0ms Instant Click with Background Sync */}
+                  <div className="grid grid-cols-6 gap-2">
+                    {[0, 1, 2, 3, 4, 6].map((r) => (
+                      <button
+                        key={r}
+                        onClick={() => recordBall({ runs: r })}
+                        className={`py-3 rounded-xl font-black text-sm font-mono shadow ${BTN_TRANSITION}`}
+                        style={{
+                          backgroundColor: r === 6 ? COLOR.purple : r === 4 ? COLOR.accent : COLOR.surfaceRaised,
+                          color: r === 6 || r === 4 ? "#ffffff" : COLOR.ink,
+                        }}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
 
-              {/* Extras Buttons */}
-              <div className="grid grid-cols-4 gap-2">
-                {["wide", "noball", "bye", "legbye"].map((t) => (
+                  {/* Extras Buttons */}
+                  <div className="grid grid-cols-4 gap-2">
+                    {["wide", "noball", "bye", "legbye"].map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => setExtraPicker(t)}
+                        className={`py-2 rounded-xl text-xs font-bold border border-amber-500/40 text-amber-400 bg-amber-500/10 ${BTN_TRANSITION}`}
+                      >
+                        {t === "noball" ? "No Ball" : t === "legbye" ? "Leg Bye" : t.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Wicket Button */}
                   <button
-                    key={t}
-                    disabled={busy}
-                    onClick={() => setExtraPicker(t)}
-                    className={`py-2 rounded-xl text-xs font-bold border border-amber-500/40 text-amber-400 bg-amber-500/10 ${BTN_TRANSITION}`}
+                    onClick={() => setWicketPanelOpen(true)}
+                    className={`w-full py-3 rounded-xl font-extrabold text-sm bg-red-500 text-white shadow-lg ${BTN_TRANSITION}`}
                   >
-                    {t === "noball" ? "No Ball" : t === "legbye" ? "Leg Bye" : t.toUpperCase()}
+                    OUT / WICKET 🔴
                   </button>
-                ))}
-              </div>
-
-              {/* Wicket Button */}
-              <button
-                disabled={busy}
-                onClick={() => setWicketPanelOpen(true)}
-                className={`w-full py-3 rounded-xl font-extrabold text-sm bg-red-500 text-white shadow-lg ${BTN_TRANSITION}`}
-              >
-                OUT / WICKET 🔴
-              </button>
+                </>
+              )}
 
               {extraPicker && (
                 <ExtraRunsPicker
@@ -1473,29 +2010,74 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
       {/* TAB 3: BALL-BY-BALL COMMENTARY */}
       {activeTab === "commentary" && (
         <div className="p-4 rounded-2xl space-y-3" style={cardStyle}>
-          <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Live Delivery Log</h4>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {recent_balls.slice().reverse().map((b, idx) => {
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
+              Ball-by-Ball Delivery Log ({match.batting_team})
+            </h4>
+            <span className="text-[10px] text-slate-500 font-mono">Latest to Earliest</span>
+          </div>
+          <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
+            {(live.commentary_balls && live.commentary_balls.length > 0 ? live.commentary_balls : recent_balls.slice().reverse()).map((b, idx) => {
               const ballClass = classifyBall(b);
               const badge = BALL_COLORS[ballClass.type] || BALL_COLORS.single;
+              const overDeliveryText = b.over_number != null ? `${b.over_number - 1}.${b.ball_number} over` : `Ball ${b.ball_number || idx + 1}`;
+
+              let eventDesc = `${b.runs} run${b.runs === 1 ? "" : "s"}`;
+              if (b.is_wicket) {
+                eventDesc = `WICKET! (${(b.wicket_type || "Out").replace(/_/g, " ").toUpperCase()})`;
+              } else if (b.extra_type) {
+                eventDesc = `Extra: ${b.extra_type.toUpperCase()} (+${Number(b.extra_runs || 0) + Number(b.runs || 0)} run${(Number(b.extra_runs || 0) + Number(b.runs || 0)) === 1 ? "" : "s"})`;
+              } else if (b.runs === 0) {
+                eventDesc = "0 run (Dot ball)";
+              } else if (b.runs === 4) {
+                eventDesc = "4 runs (FOUR!)";
+              } else if (b.runs === 6) {
+                eventDesc = "6 runs (SIX!)";
+              }
+
+              const matchup = b.bowler_name && b.batsman_name
+                ? `${b.bowler_name} to ${b.batsman_name}`
+                : b.batsman_name ? `Batter: ${b.batsman_name}` : null;
+
               return (
-                <div key={b.id || idx} className="p-3 rounded-xl bg-slate-900 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-3">
+                <div
+                  key={b.id || idx}
+                  className="p-3 rounded-xl bg-slate-900/90 border border-slate-800/80 flex items-start gap-3 text-xs hover:border-slate-700 transition-colors"
+                >
+                  <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5">
                     <span
-                      className="w-7 h-7 rounded-full font-bold flex items-center justify-center font-mono"
+                      className="w-8 h-8 rounded-full font-bold flex items-center justify-center font-mono text-xs shadow-md"
                       style={{ backgroundColor: badge.bg, color: badge.fg }}
                     >
                       {ballClass.val}
                     </span>
-                    <span className="text-slate-300 font-mono">
-                      {b.extra_type ? `Extra (${b.extra_type})` : b.is_wicket ? `Wicket (${b.wicket_type || "Out"})` : `${b.runs} runs scored`}
+                    <span className="text-[10px] font-mono font-bold text-slate-400">
+                      {overDeliveryText.replace(" over", " ov")}
                     </span>
+                  </div>
+
+                  <div className="flex-1 min-w-0 space-y-0.5">
+                    <div className="flex items-center justify-between">
+                      <span className={`font-bold ${b.is_wicket ? "text-red-400" : b.runs === 4 ? "text-emerald-400" : b.runs === 6 ? "text-purple-400" : "text-white"}`}>
+                        {overDeliveryText} {eventDesc}
+                      </span>
+                      {b.extra_type && (
+                        <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                          {b.extra_type}
+                        </span>
+                      )}
+                    </div>
+                    {matchup && (
+                      <p className="text-[11px] text-slate-400 truncate">
+                        {matchup}
+                      </p>
+                    )}
                   </div>
                 </div>
               );
             })}
-            {recent_balls.length === 0 && (
-              <div className="text-xs text-slate-500 py-4 text-center">No commentary available for this over.</div>
+            {(!live.commentary_balls || live.commentary_balls.length === 0) && recent_balls.length === 0 && (
+              <div className="text-xs text-slate-500 py-8 text-center">No deliveries bowled yet in this innings.</div>
             )}
           </div>
         </div>
@@ -1508,15 +2090,81 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
         </div>
       )}
 
-      {/* Complete Match Button (ONLY VISIBLE TO CREATOR) */}
+      {/* Complete Match & End Innings Controls (ONLY VISIBLE TO CREATOR) */}
       {isCreator && (
-        <button
-          onClick={completeMatch}
-          disabled={busy}
-          className={`w-full py-3 rounded-xl font-extrabold text-xs uppercase tracking-wider bg-slate-800 text-slate-300 hover:bg-slate-700 ${BTN_TRANSITION}`}
-        >
-          Finish & Complete Match
-        </button>
+        <div className="grid grid-cols-2 gap-2 pt-2">
+          {current_innings?.inning_number === 1 && (
+            <button
+              onClick={async () => {
+                if (window.confirm("Are you sure you want to end the 1st innings now and set the target for 2nd innings?")) {
+                  await runAction(`/api/matches/${matchId}/end-innings`);
+                }
+              }}
+              disabled={busy}
+              className={`py-3 px-2 rounded-xl font-extrabold text-xs uppercase tracking-wider bg-amber-600/30 text-amber-300 border border-amber-500/40 hover:bg-amber-600/50 ${BTN_TRANSITION}`}
+            >
+              End 1st Innings ➔
+            </button>
+          )}
+          <button
+            onClick={completeMatch}
+            disabled={busy}
+            className={`${current_innings?.inning_number === 1 ? "" : "col-span-2"} py-3 rounded-xl font-extrabold text-xs uppercase tracking-wider bg-slate-800 text-slate-300 hover:bg-slate-700 ${BTN_TRANSITION}`}
+          >
+            Finish & Complete Match
+          </button>
+        </div>
+      )}
+
+      {/* Edit Player Name Modal */}
+      {editingPlayer && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                <span>✏️</span> Edit Player Name
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingPlayer(null)}
+                className="text-slate-400 hover:text-white text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-xs text-slate-400">
+              Update player name in the live scoreboard, scorecard, and database:
+            </p>
+            <input
+              type="text"
+              value={newNameInput}
+              onChange={(e) => setNewNameInput(e.target.value)}
+              placeholder="Enter player name"
+              autoFocus
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-600 text-sm font-bold text-white focus:outline-none focus:border-emerald-500"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSavePlayerName();
+              }}
+            />
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setEditingPlayer(null)}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!newNameInput.trim() || isUpdatingName}
+                onClick={handleSavePlayerName}
+                className="flex-1 py-2.5 rounded-xl text-xs font-black uppercase bg-emerald-500 text-black hover:bg-emerald-400 disabled:opacity-50"
+              >
+                {isUpdatingName ? "Saving..." : "Save Name"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1762,7 +2410,7 @@ function dedupePlayers(list = []) {
   });
 }
 
-function OpeningSelectors({ squads, match, onStart, onAddPlayer, busy }) {
+function OpeningSelectors({ squads, match, onStart, onAddPlayer, busy, inningsNumber = 1 }) {
   const battingIsTeam1 = match?.batting_team === match?.team1_name;
   const rawBattingTeam = battingIsTeam1 ? squads.team1 : squads.team2;
   const rawBowlingTeam = battingIsTeam1 ? squads.team2 : squads.team1;
@@ -1810,7 +2458,7 @@ function OpeningSelectors({ squads, match, onStart, onAddPlayer, busy }) {
         resolveId(bowler, bowlerName, battingIsTeam1 ? "team2_players" : "team1_players"),
       ]);
       await onStart({
-        innings_number: 1,
+        innings_number: inningsNumber,
         batting_team: match.batting_team,
         striker_id: strikerId,
         non_striker_id: nonStrikerId,
@@ -1825,19 +2473,19 @@ function OpeningSelectors({ squads, match, onStart, onAddPlayer, busy }) {
 
   return (
     <div className="p-5 rounded-2xl space-y-5 animate-fadeIn" style={cardStyle}>
-      <SetupProgress step={4} />
+      {inningsNumber === 1 && <SetupProgress step={4} />}
 
       <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
         <div>
           <h3 className="text-base font-extrabold text-white flex items-center gap-2">
-            <span>🏏</span> Opening Lineup Setup
+            <span>🏏</span> {inningsNumber === 2 ? "2nd Innings Setup (Chase)" : "Opening Lineup Setup"}
           </h3>
           <p className="text-xs text-slate-400 mt-0.5">
             Select opening batters for <span className="text-emerald-400 font-semibold">{rawBattingTeam?.name}</span> and bowler for <span className="text-sky-400 font-semibold">{rawBowlingTeam?.name}</span>
           </p>
         </div>
         <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-bold text-emerald-400">
-          <span>⚡ Live Ready</span>
+          <span>{inningsNumber === 2 ? "🎯 Chase Mode" : "⚡ Live Ready"}</span>
         </div>
       </div>
 

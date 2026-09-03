@@ -6,6 +6,11 @@ const {
   notifyChallengeCancelled,
 } = require("../services/notificationService");
 
+// Ensure non_striker_id exists on balls table
+pool.query(`ALTER TABLE balls ADD COLUMN IF NOT EXISTS non_striker_id UUID REFERENCES players(id);`).catch((err) => {
+  console.error("Migration error (non_striker_id on balls):", err.message);
+});
+
 // ============================================================
 // Helpers
 // ============================================================
@@ -155,42 +160,42 @@ const cancelChallenge = asyncHandler(async (req, res) => {
 // ============================================================
 const listMatches = asyncHandler(async (req, res) => {
   const matchesRes = await pool.query(
-    `SELECT m.*, t1.name AS team1_name, t2.name AS team2_name
+    `SELECT
+       m.*,
+       t1.name AS team1_name,
+       t2.name AS team2_name,
+       CASE
+         WHEN m.status = 'not_started' THEN NULL
+         ELSE inn.summary
+       END AS current_innings_summary,
+       CASE
+         WHEN m.status = 'not_started' THEN
+           (COALESCE(sq.t1_count, 0) < 2 OR COALESCE(sq.t2_count, 0) < 2)
+         ELSE false
+       END AS needs_squads
      FROM matches m
      JOIN teams t1 ON t1.id = m.team1_id
      JOIN teams t2 ON t2.id = m.team2_id
+     LEFT JOIN LATERAL (
+       SELECT json_build_object(
+         'total_runs', i.total_runs,
+         'wickets', i.wickets,
+         'overs_completed', i.overs_completed
+       ) AS summary
+       FROM innings i
+       WHERE i.match_id = m.id
+       ORDER BY i.inning_number DESC
+       LIMIT 1
+     ) inn ON true
+     LEFT JOIN LATERAL (
+       SELECT
+         (SELECT COUNT(*)::int FROM players WHERE team_id = m.team1_id) AS t1_count,
+         (SELECT COUNT(*)::int FROM players WHERE team_id = m.team2_id) AS t2_count
+     ) sq ON m.status = 'not_started'
      ORDER BY m.updated_at DESC NULLS LAST, m.created_at DESC`
   );
 
-  const matches = await Promise.all(
-    matchesRes.rows.map(async (m) => {
-      if (m.status === "not_started") {
-        const countsRes = await pool.query(
-          `SELECT
-             (SELECT COUNT(*)::int FROM players WHERE team_id = $1) AS t1_count,
-             (SELECT COUNT(*)::int FROM players WHERE team_id = $2) AS t2_count`,
-          [m.team1_id, m.team2_id]
-        );
-        const { t1_count, t2_count } = countsRes.rows[0];
-        return {
-          ...m,
-          current_innings_summary: null,
-          needs_squads: t1_count < 2 || t2_count < 2,
-        };
-      }
-      const inningsRes = await pool.query(
-        `SELECT total_runs, wickets, overs_completed FROM innings
-         WHERE match_id = $1 ORDER BY inning_number DESC LIMIT 1`,
-        [m.id]
-      );
-      return {
-        ...m,
-        current_innings_summary: inningsRes.rows[0] || null,
-      };
-    })
-  );
-
-  res.json(matches);
+  res.json(matchesRes.rows);
 });
 
 // ============================================================
@@ -565,6 +570,18 @@ const recordBall = asyncHandler(async (req, res) => {
     let currentOver;
     if (overRes.rows.length === 0) {
       const nextOverNumber = Math.floor(Number(innings.overs_completed)) + 1;
+      // Consecutive overs check: Bowler cannot bowl two consecutive overs
+      const prevOverRes = await client.query(
+        `SELECT bowler_id, p.name as bowler_name
+         FROM overs o
+         LEFT JOIN players p ON p.id = o.bowler_id
+         WHERE o.innings_id = $1 AND o.is_completed = true
+         ORDER BY o.over_number DESC LIMIT 1`,
+        [innings.id]
+      );
+      if (prevOverRes.rows.length > 0 && String(prevOverRes.rows[0].bowler_id) === String(bowler_id)) {
+        throw new Error(`${prevOverRes.rows[0].bowler_name || "The bowler"} cannot bowl two consecutive overs!`);
+      }
       const created = await client.query(
         `INSERT INTO overs (innings_id, over_number, bowler_id) VALUES ($1,$2,$3) RETURNING *`,
         [innings.id, nextOverNumber, bowler_id]
@@ -590,10 +607,10 @@ const recordBall = asyncHandler(async (req, res) => {
     const countsAsFaced = extra_type !== "wide";
 
     await client.query(
-      `INSERT INTO balls (over_id, ball_number, batsman_id, bowler_id, fielder_id, runs, extra_type, extra_runs,
+      `INSERT INTO balls (over_id, ball_number, batsman_id, non_striker_id, bowler_id, fielder_id, runs, extra_type, extra_runs,
                            is_wicket, wicket_type, dismissed_player_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-      [currentOver.id, ballNumber, striker_id, bowler_id, fielder_id, runs, extra_type, extra_runs,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [currentOver.id, ballNumber, striker_id, non_striker_id, bowler_id, fielder_id, runs, extra_type, extra_runs,
        is_wicket, wicket_type, dismissed_player_id]
     );
 
@@ -648,15 +665,32 @@ const recordBall = asyncHandler(async (req, res) => {
       );
     }
 
+    // Accurately compute bowler's legal balls & overs_bowled in cricket notation
+    const existingBowlerRes = await client.query(
+      `SELECT overs_bowled, runs_conceded, wickets FROM bowling_stats WHERE innings_id = $1 AND player_id = $2`,
+      [innings.id, bowler_id]
+    );
+    const existingBowler = existingBowlerRes.rows[0];
+    const prevBowlerOvers = Number(existingBowler?.overs_bowled || 0);
+    const prevBowlerWhole = Math.floor(prevBowlerOvers);
+    const prevBowlerRem = Math.round((prevBowlerOvers - prevBowlerWhole) * 10);
+    const prevBowlerLegalBalls = prevBowlerWhole * 6 + prevBowlerRem;
+    const newBowlerLegalBalls = prevBowlerLegalBalls + (isLegalDelivery ? 1 : 0);
+    const newBowlerWhole = Math.floor(newBowlerLegalBalls / 6);
+    const newBowlerRem = newBowlerLegalBalls % 6;
+    const newBowlerOvers = Number(`${newBowlerWhole}.${newBowlerRem}`);
+    const newBowlerRuns = Number(existingBowler?.runs_conceded || 0) + totalRunsThisBall;
+    const newBowlerWickets = Number(existingBowler?.wickets || 0) + (is_wicket ? 1 : 0);
+
     await client.query(
       `INSERT INTO bowling_stats (innings_id, player_id, overs_bowled, runs_conceded, wickets, is_current)
-       VALUES ($1,$2,$3,$4,$5,true)
+       VALUES ($1,$2,$3,$4,$5,$6)
        ON CONFLICT (innings_id, player_id) DO UPDATE SET
-         overs_bowled  = bowling_stats.overs_bowled + EXCLUDED.overs_bowled,
-         runs_conceded = bowling_stats.runs_conceded + EXCLUDED.runs_conceded,
-         wickets       = bowling_stats.wickets + EXCLUDED.wickets,
-         is_current    = true`,
-      [innings.id, bowler_id, isOverComplete ? 1 : (isLegalDelivery ? 0.1 : 0), totalRunsThisBall, is_wicket ? 1 : 0]
+         overs_bowled  = EXCLUDED.overs_bowled,
+         runs_conceded = EXCLUDED.runs_conceded,
+         wickets       = EXCLUDED.wickets,
+         is_current    = EXCLUDED.is_current`,
+      [innings.id, bowler_id, newBowlerOvers, newBowlerRuns, newBowlerWickets, !isOverComplete]
     );
 
     // Strike rotation: odd runs off the bat, or odd bye/legbye runs, flips ends.
@@ -675,14 +709,16 @@ const recordBall = asyncHandler(async (req, res) => {
       await client.query(`UPDATE bowling_stats SET is_current = false WHERE innings_id = $1`, [innings.id]);
     }
 
-    // How many batsmen has this team got available (squad size for the batting team)?
+    // How many batsmen has this team got available (standard cricket innings = 10 wickets for all-out)
     const squadSizeRes = await client.query(
       `SELECT COUNT(*)::int AS n FROM players WHERE team_id = $1`,
       [innings.batting_team_id]
     );
     const squadSize = squadSizeRes.rows[0].n || 11;
 
-    const allOut = newWickets >= (squadSize - 1);
+    // Do not mark all-out prematurely if squad only had a few initial players entered (user adds them as wickets fall)
+    const maxWickets = Math.max(10, squadSize - 1);
+    const allOut = newWickets >= maxWickets;
     const oversUp = newOversCompleted >= Number(match.overs_limit);
     let inningsComplete = allOut || oversUp;
 
@@ -711,6 +747,14 @@ const recordBall = asyncHandler(async (req, res) => {
       await client.query(`UPDATE matches SET updated_at = now() WHERE id = $1`, [matchId]);
     }
 
+    const isStrikerOut = dismissed_player_id ? String(dismissed_player_id) === String(striker_id) : true;
+    const replacedPosition = isStrikerOut ? "striker" : "non_striker";
+    let dismissedName = null;
+    if (is_wicket && dismissed_player_id) {
+      const pRes = await client.query(`SELECT name FROM players WHERE id = $1`, [dismissed_player_id]);
+      dismissedName = pRes.rows[0]?.name || null;
+    }
+
     await client.query("COMMIT");
 
     const live = await buildLiveState(matchId);
@@ -718,9 +762,14 @@ const recordBall = asyncHandler(async (req, res) => {
       ...live,
       prompts: {
         needs_new_batsman: is_wicket && !inningsComplete,
-        needs_new_bowler: isOverComplete && !inningsComplete,
+        needs_new_bowler: false,
+        is_over_ended: isOverComplete && !inningsComplete,
+        last_bowler_id: isOverComplete ? bowler_id : null,
         innings_complete: inningsComplete,
         match_complete: matchComplete,
+        replaced_position: replacedPosition,
+        dismissed_player_id: dismissed_player_id || null,
+        dismissed_name: dismissedName,
       },
     });
   } catch (err) {
@@ -784,14 +833,10 @@ const undoBall = asyncHandler(async (req, res) => {
       );
     }
 
-    // Recompute the whole innings from remaining balls (simplest correct approach).
-    // IMPORTANT: ordered by b.id (insertion order) rather than
-    // (over_number, ball_number) — wides/no-balls can share a ball_number
-    // with the legal delivery around them, which made ORDER BY ball_number
-    // an unstable/wrong sort for reconstructing what actually happened.
+    // Recompute the whole innings from remaining balls in chronological order
     const allBallsRes = await client.query(
       `SELECT b.*, o.over_number FROM balls b JOIN overs o ON o.id = b.over_id
-       WHERE o.innings_id = $1 ORDER BY b.created_at ASC, b.ball_number ASC`,
+       WHERE o.innings_id = $1 ORDER BY b.created_at ASC, b.ball_number ASC, b.id ASC`,
       [innings.id]
     );
     const balls = allBallsRes.rows;
@@ -832,11 +877,6 @@ const undoBall = asyncHandler(async (req, res) => {
       };
     }
 
-    // Re-simulate strike and non-striker tracking across remaining balls
-    let strikerId = origBatting.rows.find((r) => r.is_on_strike)?.player_id || origBatting.rows[0]?.player_id || null;
-    let nonStrikerId = origBatting.rows.find((r) => !r.is_on_strike)?.player_id || origBatting.rows[1]?.player_id || null;
-    let currentBowlerId = origBowling.rows.find((r) => r.is_current)?.player_id || origBowling.rows[0]?.player_id || null;
-
     for (const b of balls) {
       const isLegal = b.extra_type !== "wide" && b.extra_type !== "noball";
       const battingCredit = ["bye", "legbye", "wide"].includes(b.extra_type) ? 0 : Number(b.runs);
@@ -859,59 +899,88 @@ const undoBall = asyncHandler(async (req, res) => {
       bowlingTotals[b.bowler_id].runs += Number(b.runs) + Number(b.extra_runs);
       if (b.is_wicket) bowlingTotals[b.bowler_id].wickets += 1;
 
-      currentBowlerId = b.bowler_id;
-      strikerId = b.batsman_id;
-      if (b.non_striker_id) nonStrikerId = b.non_striker_id;
-
       if (isLegal) {
         bowlingTotals[b.bowler_id].balls += 1;
         legalCountInOver += 1;
       }
 
-      const runsThatRotate = ["bye", "legbye"].includes(b.extra_type) ? Number(b.extra_runs) : Number(b.runs);
-      let flip = !b.is_wicket && runsThatRotate % 2 === 1;
-
       if (isLegal && legalCountInOver === 6) {
         oversCompleted += 1;
         legalCountInOver = 0;
-        flip = !flip;
-        currentBowlerId = null;
       }
-
-      if (flip) {
-        const temp = strikerId;
-        strikerId = nonStrikerId;
-        nonStrikerId = temp;
-      }
-    }
-
-    let onStrikeId = strikerId;
-    if (onStrikeId != null && battingTotals[onStrikeId]?.is_out) {
-      const notOut = Object.keys(battingTotals).find((id) => !battingTotals[id].is_out);
-      onStrikeId = notOut ?? null;
     }
 
     const oversCompletedDecimal = Number(`${oversCompleted}.${legalCountInOver}`);
 
-    // Determine active batters who actually participated in the replayed balls or initial setup
-    const participatedBatterIds = new Set();
-    // Add opening 2 batters (first 2 created)
-    origBatting.rows.slice(0, 2).forEach((r) => participatedBatterIds.add(String(r.player_id)));
-    // Add all batters who faced a ball or were dismissed in replayed balls
-    for (const b of balls) {
-      if (b.batsman_id) participatedBatterIds.add(String(b.batsman_id));
-      if (b.dismissed_player_id) participatedBatterIds.add(String(b.dismissed_player_id));
+    let strikerId = null;
+    let nonStrikerId = null;
+    let bowlerId = lastBall.bowler_id;
+    let needsNewBatsman = false;
+    let needsNewBowler = false;
+    let replacedPos = null;
+    let dismissedName = null;
+
+    if (lastBall.is_wicket) {
+      // 1. Undone ball was a wicket: restore the dismissed player to NOT OUT
+      const restoredPlayerId = lastBall.dismissed_player_id || lastBall.batsman_id;
+      if (battingTotals[restoredPlayerId]) {
+        battingTotals[restoredPlayerId].is_out = false;
+        battingTotals[restoredPlayerId].dismissal = null;
+      }
+
+      // 2. Right before that wicket ball, the two batters were lastBall.batsman_id and lastBall.non_striker_id
+      strikerId = lastBall.batsman_id;
+      nonStrikerId = lastBall.non_striker_id || origBatting.rows.find((r) => r.player_id !== strikerId)?.player_id;
+
+      // 3. Remove any replacement batter who had entered after this wicket (0 balls faced, 0 runs, not out)
+      for (const [pid, stat] of Object.entries(battingTotals)) {
+        if (pid !== strikerId && pid !== nonStrikerId && !stat.is_out && stat.balls_faced === 0 && stat.runs === 0) {
+          delete battingTotals[pid];
+        }
+      }
+
+      needsNewBatsman = false;
+    } else {
+      // Undone ball was a regular delivery (runs, dots, extras)
+      // Right before this ball was bowled, lastBall.batsman_id was on strike, lastBall.non_striker_id was non-striker
+      strikerId = lastBall.batsman_id;
+      nonStrikerId = lastBall.non_striker_id || origBatting.rows.find((r) => r.player_id !== strikerId && !battingTotals[r.player_id]?.is_out)?.player_id;
+
+      // Ensure both crease batters are preserved in battingTotals so neither disappears
+      if (strikerId) {
+        battingTotals[strikerId] ??= { runs: 0, balls_faced: 0, fours: 0, sixes: 0, is_out: false, dismissal: null, created_at: new Date() };
+        battingTotals[strikerId].is_out = false;
+      }
+      if (nonStrikerId) {
+        battingTotals[nonStrikerId] ??= { runs: 0, balls_faced: 0, fours: 0, sixes: 0, is_out: false, dismissal: null, created_at: new Date() };
+        battingTotals[nonStrikerId].is_out = false;
+      }
+
+      // Check if previous remaining ball was a wicket that still needs a replacement batter
+      const prevBall = balls[balls.length - 1];
+      if (prevBall && prevBall.is_wicket) {
+        const notOutBatters = Object.keys(battingTotals).filter((id) => !battingTotals[id].is_out);
+        if (notOutBatters.length < 2) {
+          needsNewBatsman = true;
+          const wasStriker = prevBall.dismissed_player_id === prevBall.batsman_id;
+          replacedPos = wasStriker ? "striker" : "non_striker";
+          const pRes = await client.query(`SELECT name FROM players WHERE id = $1`, [prevBall.dismissed_player_id]);
+          dismissedName = pRes.rows[0]?.name || null;
+        }
+      }
+    }
+
+    // Check if an over completed in remaining balls
+    if (balls.length > 0 && legalCountInOver === 0) {
+      needsNewBowler = true;
+      bowlerId = null;
     }
 
     await client.query(`DELETE FROM batting_stats WHERE innings_id = $1`, [innings.id]);
     await client.query(`DELETE FROM bowling_stats WHERE innings_id = $1`, [innings.id]);
 
     for (const [playerId, t] of Object.entries(battingTotals)) {
-      // Only keep batter if they participated in the actual ball history or opening lineup
-      if (!participatedBatterIds.has(String(playerId)) && t.balls_faced === 0 && t.runs === 0 && !t.is_out) {
-        continue;
-      }
-      const isOnStrike = !t.is_out && onStrikeId != null && String(playerId) === String(onStrikeId);
+      const isOnStrike = !t.is_out && strikerId != null && String(playerId) === String(strikerId);
       await client.query(
         `INSERT INTO batting_stats (innings_id, player_id, runs, balls_faced, fours, sixes, is_out, dismissal, is_on_strike, created_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
@@ -919,22 +988,8 @@ const undoBall = asyncHandler(async (req, res) => {
       );
     }
 
-    // Delete mid-match added players who no longer have any balls faced/bowled/wickets
-    await client.query(
-      `DELETE FROM players
-       WHERE match_id = $1
-         AND id NOT IN (
-           SELECT player_id FROM batting_stats WHERE innings_id = $2
-           UNION
-           SELECT player_id FROM bowling_stats WHERE innings_id = $2
-         )
-         AND NOT EXISTS (
-           SELECT 1 FROM balls WHERE match_id = $1 AND (striker_id = players.id OR non_striker_id = players.id OR bowler_id = players.id)
-         )`,
-      [matchId, innings.id]
-    ).catch(() => {});
     for (const [playerId, t] of Object.entries(bowlingTotals)) {
-      const isCurrent = currentBowlerId != null && String(playerId) === String(currentBowlerId);
+      const isCurrent = bowlerId != null && String(playerId) === String(bowlerId);
       await client.query(
         `INSERT INTO bowling_stats (innings_id, player_id, overs_bowled, runs_conceded, wickets, is_current, created_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7)`,
@@ -949,20 +1004,28 @@ const undoBall = asyncHandler(async (req, res) => {
     await client.query(`UPDATE matches SET status = 'live', updated_at = now() WHERE id = $1`, [matchId]);
 
     await client.query("COMMIT");
+
+    const live = await buildLiveState(matchId);
+    res.json({
+      ...live,
+      prompts: {
+        needs_new_batsman: needsNewBatsman,
+        needs_new_bowler: false,
+        is_over_ended: live.is_over_ended,
+        last_bowler_id: live.last_bowler_id,
+        last_bowler_name: live.last_bowler_name,
+        innings_complete: false,
+        match_complete: false,
+        replaced_position: replacedPos,
+        dismissed_name: dismissedName,
+      },
+    });
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
   } finally {
     client.release();
   }
-
-  // NOTE: after an undo, striker/non-striker/current-bowler are now carried
-  // forward correctly from the replay above. The one case where the frontend
-  // will still (correctly) ask to reselect is when the undone ball was the
-  // over's 6th legal delivery — in that case a bowler genuinely needs to be
-  // picked again, same as it would live.
-  const live = await buildLiveState(matchId);
-  res.json(live);
 });
 
 // ============================================================
@@ -980,6 +1043,22 @@ const selectBowler = asyncHandler(async (req, res) => {
   if (inningsRes.rows.length === 0) return res.status(400).json({ error: "No active innings" });
   const inningsId = inningsRes.rows[0].id;
 
+  // The same bowler cannot bowl two consecutive overs
+  const lastOverRes = await pool.query(
+    `SELECT o.bowler_id, p.name as bowler_name
+     FROM overs o
+     LEFT JOIN players p ON p.id = o.bowler_id
+     WHERE o.innings_id = $1 AND o.is_completed = true
+     ORDER BY o.over_number DESC LIMIT 1`,
+    [inningsId]
+  );
+  if (lastOverRes.rows.length > 0 && String(lastOverRes.rows[0].bowler_id) === String(bowler_id)) {
+    return res.status(400).json({
+      error: `${lastOverRes.rows[0].bowler_name || "This bowler"} cannot bowl two consecutive overs! Please choose a different bowler.`
+    });
+  }
+
+  await pool.query(`UPDATE bowling_stats SET is_current = false WHERE innings_id = $1`, [inningsId]);
   await pool.query(
     `INSERT INTO bowling_stats (innings_id, player_id, overs_bowled, runs_conceded, wickets, is_current)
      VALUES ($1,$2,0,0,0,true)
@@ -996,7 +1075,7 @@ const selectBowler = asyncHandler(async (req, res) => {
 // ============================================================
 const newBatsman = asyncHandler(async (req, res) => {
   const { matchId } = req.params;
-  const { player_id } = req.body;
+  const { player_id, replaces_position } = req.body;
   if (!player_id) return res.status(400).json({ error: "player_id is required" });
 
   const inningsRes = await pool.query(
@@ -1006,11 +1085,36 @@ const newBatsman = asyncHandler(async (req, res) => {
   if (inningsRes.rows.length === 0) return res.status(400).json({ error: "No active innings" });
   const inningsId = inningsRes.rows[0].id;
 
+  // Find remaining active partner at the crease
+  const activeBattersRes = await pool.query(
+    `SELECT player_id, is_on_strike FROM batting_stats WHERE innings_id = $1 AND is_out = false`,
+    [inningsId]
+  );
+  const remainingBatter = activeBattersRes.rows.find((r) => r.player_id !== player_id);
+
+  // If replacing non-striker, or if remaining partner is on strike, new batter is non-striker
+  let isOnStrike = true;
+  if (replaces_position === "non_striker") {
+    isOnStrike = false;
+  } else if (replaces_position === "striker") {
+    isOnStrike = true;
+  } else if (remainingBatter) {
+    isOnStrike = !remainingBatter.is_on_strike;
+  }
+
+  // Ensure mutual exclusivity between striker and non-striker
+  if (remainingBatter) {
+    await pool.query(
+      `UPDATE batting_stats SET is_on_strike = $1 WHERE innings_id = $2 AND player_id = $3`,
+      [!isOnStrike, inningsId, remainingBatter.player_id]
+    );
+  }
+
   await pool.query(
     `INSERT INTO batting_stats (innings_id, player_id, runs, balls_faced, fours, sixes, is_out, is_on_strike)
-     VALUES ($1,$2,0,0,0,0,false,true)
-     ON CONFLICT (innings_id, player_id) DO UPDATE SET is_on_strike = true`,
-    [inningsId, player_id]
+     VALUES ($1,$2,0,0,0,0,false,$3)
+     ON CONFLICT (innings_id, player_id) DO UPDATE SET is_out = false, is_on_strike = $3`,
+    [inningsId, player_id, isOnStrike]
   );
 
   const live = await buildLiveState(matchId);
@@ -1037,38 +1141,43 @@ const completeMatch = asyncHandler(async (req, res) => {
 async function fetchFallOfWickets(inningsId) {
   try {
     const fowRes = await pool.query(
-      `SELECT b.id, b.created_at, b.wicket_type, p.name AS player_name
-       FROM balls b
-       JOIN overs o ON o.id = b.over_id
-       LEFT JOIN players p ON p.id = b.dismissed_player_id
-       WHERE o.innings_id = $1 AND b.is_wicket = true
-       ORDER BY b.created_at ASC`,
+      `SELECT
+         sub.id,
+         sub.created_at,
+         sub.wicket_type,
+         COALESCE(sub.player_name, 'Unknown') AS player_name,
+         sub.cumulative_score::int AS score,
+         CONCAT(FLOOR(sub.cumulative_legal_balls / 6), '.', MOD(sub.cumulative_legal_balls, 6)) AS overs_display
+       FROM (
+         SELECT
+           b.id,
+           b.created_at,
+           b.wicket_type,
+           b.is_wicket,
+           p.name AS player_name,
+           COALESCE(SUM(b.runs + b.extra_runs) OVER (
+             ORDER BY b.created_at ASC, b.ball_number ASC, b.id ASC
+           ), 0) AS cumulative_score,
+           COUNT(CASE WHEN b.extra_type IS DISTINCT FROM 'wide' AND b.extra_type IS DISTINCT FROM 'noball' THEN 1 END) OVER (
+             ORDER BY b.created_at ASC, b.ball_number ASC, b.id ASC
+           ) AS cumulative_legal_balls
+         FROM balls b
+         JOIN overs o ON o.id = b.over_id
+         LEFT JOIN players p ON p.id = b.dismissed_player_id
+         WHERE o.innings_id = $1
+       ) sub
+       WHERE sub.is_wicket = true
+       ORDER BY sub.created_at ASC`,
       [inningsId]
     );
-    if (fowRes.rows.length === 0) return [];
 
-    return await Promise.all(
-      fowRes.rows.map(async (w, idx) => {
-        const statsRes = await pool.query(
-          `SELECT COALESCE(SUM(b.runs + b.extra_runs), 0) AS total_score,
-                  COUNT(CASE WHEN b.extra_type IS DISTINCT FROM 'wide' AND b.extra_type IS DISTINCT FROM 'noball' THEN 1 END) AS legal_balls
-           FROM balls b
-           JOIN overs o ON o.id = b.over_id
-           WHERE o.innings_id = $1 AND b.created_at <= $2`,
-          [inningsId, w.created_at]
-        );
-        const { total_score, legal_balls } = statsRes.rows[0];
-        const overs = Math.floor(Number(legal_balls) / 6);
-        const ballsInOver = Number(legal_balls) % 6;
-        return {
-          wicket_num: idx + 1,
-          score: Number(total_score),
-          overs_display: `${overs}.${ballsInOver}`,
-          player_name: w.player_name || "Unknown",
-          wicket_type: w.wicket_type,
-        };
-      })
-    );
+    return fowRes.rows.map((row, idx) => ({
+      wicket_num: idx + 1,
+      score: Number(row.score),
+      overs_display: row.overs_display,
+      player_name: row.player_name,
+      wicket_type: row.wicket_type,
+    }));
   } catch (err) {
     console.error("fetchFallOfWickets error:", err);
     return [];
@@ -1160,12 +1269,36 @@ async function buildLiveState(matchId) {
   };
 
   if (!activeInnings) {
-    if (inningsRes.rows.length > 0 && match.status !== "completed") {
-      const last = inningsRes.rows[inningsRes.rows.length - 1];
-      match.batting_team = last.bowling_team_id === match.team1_id ? match.team1_name : match.team2_name;
-      match.bowling_team = last.batting_team_id === match.team1_id ? match.team1_name : match.team2_name;
+    let firstInningsSummary = null;
+    let target = null;
+    if (inningsRes.rows.length > 0) {
+      const first = inningsRes.rows[0];
+      target = Number(first.total_runs || 0) + 1;
+      const firstBattingTeam = first.batting_team_id === match.team1_id ? match.team1_name : match.team2_name;
+      firstInningsSummary = {
+        innings_number: 1,
+        batting_team: firstBattingTeam,
+        total_runs: first.total_runs,
+        wickets: first.wickets,
+        overs_completed: Number(first.overs_completed || 0).toFixed(1),
+        target,
+      };
+      if (match.status !== "completed") {
+        match.batting_team = first.bowling_team_id === match.team1_id ? match.team1_name : match.team2_name;
+        match.bowling_team = first.batting_team_id === match.team1_id ? match.team1_name : match.team2_name;
+      }
     }
-    return { match, current_innings: null, batting: [], bowling: [], recent_balls: [], fall_of_wickets: [] };
+    return {
+      match,
+      current_innings: null,
+      first_innings: firstInningsSummary,
+      target,
+      batting: [],
+      bowling: [],
+      recent_balls: [],
+      commentary_balls: [],
+      fall_of_wickets: [],
+    };
   }
 
   const battingRes = await pool.query(
@@ -1190,15 +1323,100 @@ async function buildLiveState(matchId) {
     [activeInnings.id]
   );
 
+  const commentaryBallsRes = await pool.query(
+    `SELECT b.*, o.over_number,
+            pb.name AS batsman_name,
+            pw.name AS bowler_name
+     FROM balls b
+     JOIN overs o ON o.id = b.over_id
+     LEFT JOIN players pb ON pb.id = b.batsman_id
+     LEFT JOIN players pw ON pw.id = b.bowler_id
+     WHERE o.innings_id = $1
+     ORDER BY b.created_at DESC, b.ball_number DESC, b.id DESC
+     LIMIT 150`,
+    [activeInnings.id]
+  );
+
   const fallOfWickets = await fetchFallOfWickets(activeInnings.id);
+
+  let firstInningsSummary = null;
+  let chase = null;
+  if (activeInnings.inning_number === 2) {
+    const first = inningsRes.rows.find((i) => i.inning_number === 1);
+    if (first) {
+      const target = Number(first.total_runs || 0) + 1;
+      const runsNeeded = Math.max(0, target - Number(activeInnings.total_runs || 0));
+      const firstBattingTeam = first.batting_team_id === match.team1_id ? match.team1_name : match.team2_name;
+      firstInningsSummary = {
+        innings_number: 1,
+        batting_team: firstBattingTeam,
+        total_runs: first.total_runs,
+        wickets: first.wickets,
+        overs_completed: Number(first.overs_completed || 0).toFixed(1),
+        target,
+      };
+
+      const maxBalls = Number(match.overs_limit || 20) * 6;
+      const currentOversNum = Number(activeInnings.overs_completed || 0);
+      const wholeOvers = Math.floor(currentOversNum);
+      const ballsInOver = Math.round((currentOversNum - wholeOvers) * 10);
+      const legalBallsBowled = wholeOvers * 6 + ballsInOver;
+      const ballsRemaining = Math.max(0, maxBalls - legalBallsBowled);
+      const requiredRunRate = ballsRemaining > 0 ? ((runsNeeded / ballsRemaining) * 6).toFixed(2) : "0.00";
+
+      chase = {
+        target,
+        runs_needed: runsNeeded,
+        balls_remaining: ballsRemaining,
+        required_run_rate: requiredRunRate,
+        is_chase_won: Number(activeInnings.total_runs || 0) >= target,
+      };
+    }
+  }
+
+  // Determine if the over has completed and a new bowler must be selected
+  const activeOverRes = await pool.query(
+    `SELECT * FROM overs WHERE innings_id = $1 AND is_completed = false`,
+    [activeInnings.id]
+  );
+  const hasActiveOver = activeOverRes.rows.length > 0;
+  const currentBowler = bowlingRes.rows.find((b) => b.is_current);
+
+  const lastCompletedOverRes = await pool.query(
+    `SELECT o.bowler_id, p.name AS bowler_name, o.over_number
+     FROM overs o
+     LEFT JOIN players p ON p.id = o.bowler_id
+     WHERE o.innings_id = $1 AND o.is_completed = true
+     ORDER BY o.over_number DESC LIMIT 1`,
+    [activeInnings.id]
+  );
+  const lastCompletedOver = lastCompletedOverRes.rows[0];
+  const lastCompletedOverBowlerId = lastCompletedOver?.bowler_id || null;
+  const lastCompletedOverBowlerName = lastCompletedOver?.bowler_name || null;
+  const lastCompletedOverNumber = lastCompletedOver?.over_number || 0;
+
+  const isOverEnded = !currentBowler && Number(activeInnings.overs_completed) > 0 && !activeInnings.is_completed;
 
   return {
     match,
     current_innings: activeInnings,
+    first_innings: firstInningsSummary,
+    chase,
     batting: battingRes.rows.map((b) => ({ ...b, player_id: b.player_id })),
     bowling: bowlingRes.rows.map((b) => ({ ...b, player_id: b.player_id })),
     recent_balls: recentBallsRes.rows,
+    commentary_balls: commentaryBallsRes.rows,
     fall_of_wickets: fallOfWickets,
+    is_over_ended: isOverEnded,
+    last_completed_over_number: lastCompletedOverNumber,
+    last_bowler_id: lastCompletedOverBowlerId,
+    last_bowler_name: lastCompletedOverBowlerName,
+    prompts: {
+      needs_new_bowler: false,
+      is_over_ended: isOverEnded,
+      last_bowler_id: lastCompletedOverBowlerId,
+      last_bowler_name: lastCompletedOverBowlerName,
+    },
   };
 }
 
@@ -1361,6 +1579,95 @@ const deleteMatch = asyncHandler(async (req, res) => {
   }
 });
 
+// ============================================================
+// POST /api/matches/:matchId/players/:playerId/update-name
+// Body: { name }
+// ============================================================
+const updatePlayerName = asyncHandler(async (req, res) => {
+  const { matchId, playerId } = req.params;
+  const { name } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: "Player name cannot be empty" });
+  }
+
+  await pool.query(
+    `UPDATE players SET name = $1 WHERE id = $2`,
+    [name.trim(), playerId]
+  );
+
+  const live = await buildLiveState(matchId);
+  res.json(live);
+});
+
+// ============================================================
+// POST /api/matches/:matchId/end-innings
+// Manually end current innings (declare, innings complete)
+// ============================================================
+const endInnings = asyncHandler(async (req, res) => {
+  const { matchId } = req.params;
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const inningsRes = await client.query(
+      `SELECT * FROM innings WHERE match_id = $1 AND is_completed = false ORDER BY inning_number DESC LIMIT 1 FOR UPDATE`,
+      [matchId]
+    );
+    if (inningsRes.rows.length === 0) throw new Error("No active innings to end");
+    const activeInnings = inningsRes.rows[0];
+
+    await client.query(`UPDATE innings SET is_completed = true WHERE id = $1`, [activeInnings.id]);
+
+    // If this was innings 2, or if match complete
+    if (activeInnings.inning_number >= 2) {
+      const firstInningsRes = await client.query(
+        `SELECT total_runs, batting_team_id FROM innings WHERE match_id = $1 AND inning_number = 1`,
+        [matchId]
+      );
+      const first = firstInningsRes.rows[0];
+      const matchRes = await client.query(
+        `SELECT m.*, t1.name AS team1_name, t2.name AS team2_name FROM matches m
+         JOIN teams t1 ON t1.id = m.team1_id JOIN teams t2 ON t2.id = m.team2_id WHERE m.id = $1`,
+        [matchId]
+      );
+      const match = matchRes.rows[0];
+
+      let resultText = "Match Completed";
+      if (first) {
+        const team1BatFirst = first.batting_team_id === match.team1_id;
+        const team1Name = team1BatFirst ? match.team1_name : match.team2_name;
+        const team2Name = team1BatFirst ? match.team2_name : match.team1_name;
+        const team1Runs = Number(first.total_runs || 0);
+        const team2Runs = Number(activeInnings.total_runs || 0);
+
+        if (team2Runs > team1Runs) {
+          resultText = `${team2Name} won by chasing the target`;
+        } else if (team1Runs > team2Runs) {
+          resultText = `${team1Name} won by ${team1Runs - team2Runs} runs`;
+        } else {
+          resultText = `Match tied! Both teams scored ${team1Runs} runs`;
+        }
+      }
+
+      await client.query(
+        `UPDATE matches SET status = 'completed', result = $1, updated_at = now() WHERE id = $2`,
+        [resultText, matchId]
+      );
+    }
+
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  const live = await buildLiveState(matchId);
+  res.json(live);
+});
+
 module.exports = {
   listMatches,
   createMatch,
@@ -1381,4 +1688,6 @@ module.exports = {
   setActivePlayers,
   acceptChallenge,
   cancelChallenge,
+  updatePlayerName,
+  endInnings,
 };

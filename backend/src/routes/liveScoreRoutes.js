@@ -18,6 +18,8 @@ const {
   getLiveScore,
   getCurrentLiveMatch,
   setActivePlayers,
+  updatePlayerName,
+  endInnings,
 } = require("../controllers/matchController");
 const { authRequired, optionalAuth } = require("../middleware/auth");
 
@@ -43,6 +45,8 @@ router.post("/:matchId/balls/undo", undoBall);
 router.post("/:matchId/select-bowler", selectBowler);
 router.post("/:matchId/new-batsman", newBatsman);
 router.post("/:matchId/complete", completeMatch);
+router.post("/:matchId/end-innings", endInnings);
+router.post("/:matchId/players/:playerId/update-name", updatePlayerName);
 
 module.exports = router;
 
