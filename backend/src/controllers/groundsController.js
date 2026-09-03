@@ -1,5 +1,6 @@
 const pool = require("../config/db");
 const asyncHandler = require("../utils/asyncHandler");
+const { notifyAllUsersExcept } = require("../services/notificationService");
 
 const BOOKING_LIMIT_PER_DAY = 2;
 
@@ -184,7 +185,20 @@ const createGround = asyncHandler(async (req, res) => {
      WHERE g.id = $1`,
     [result.rows[0].id]
   );
-  res.status(201).json({ ground: normalizeGroundRow(created.rows[0]) });
+  const groundObj = normalizeGroundRow(created.rows[0]);
+
+  console.log(`🏟️ [Ground Listed] Ground #${groundObj.id} ("${groundObj.name}") listed by User #${req.user.id}. Sending broadcast notification to other users...`);
+
+  // Broadcast web notification to ALL other users
+  notifyAllUsersExcept(
+    req.user.id,
+    "New Cricket Ground Available! 🏟️",
+    `"${groundObj.name}" in ${groundObj.area} is now available for booking at ₹${groundObj.price_per_hour}/hr`,
+    { type: "new_ground", ground_id: String(groundObj.id) },
+    "ground"
+  ).catch((err) => console.error("Ground notification error:", err.message));
+
+  res.status(201).json({ ground: groundObj });
 });
 
 // PUT /api/grounds/:id

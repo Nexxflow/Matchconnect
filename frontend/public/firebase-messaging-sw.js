@@ -2,19 +2,26 @@ importScripts("https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js
 importScripts("https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js");
 
 firebase.initializeApp({
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID",
+  apiKey: "AIzaSyA8Xh67YkkHBqgU2UmxxMWWF9EOG5FX2eQ",
+  authDomain: "matchconnect-f398b.firebaseapp.com",
+  projectId: "matchconnect-f398b",
+  storageBucket: "matchconnect-f398b.appspot.com",
+  messagingSenderId: "1051816080402",
+  appId: "1:1051816080402:web:778a67b863da2486eb14cb",
 });
 
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  self.registration.showNotification(payload.notification.title, {
-    body: payload.notification.body,
-    icon: "/logo192.png",
-  });
+  const title = payload.notification?.title || payload.data?.title || "MatchConnect";
+  const body = payload.notification?.body || payload.data?.body || "";
+  console.log("🔔 [Service Worker] Background Push Notification RECEIVED:", { title, body, payload });
+  const options = {
+    body,
+    icon: "/logo.png",
+    badge: "/logo.png",
+    data: payload.data || {},
+  };
+  self.registration.showNotification(title, options);
+  console.log("📱 [Service Worker] Native system notification displayed for:", title);
 });

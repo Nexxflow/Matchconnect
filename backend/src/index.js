@@ -112,7 +112,11 @@ app.use(morgan("dev"));
 // ====================================================
 
 app.use((req, res, next) => {
-  
+  // Skip verbose multi-line dump for polling endpoints to prevent terminal spam
+  if (req.originalUrl === "/health" || (req.method === "GET" && req.originalUrl.startsWith("/api/notifications"))) {
+    return next();
+  }
+
   console.log("📥 Incoming Request");
   console.log("Time:", new Date().toLocaleString());
   console.log("Method:", req.method);
@@ -120,7 +124,6 @@ app.use((req, res, next) => {
   console.log("Origin:", req.headers.origin);
   console.log("Authorization:", req.headers.authorization || "None");
   console.log("Body:", req.body);
-  
 
   next();
 });

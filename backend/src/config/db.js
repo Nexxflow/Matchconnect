@@ -42,6 +42,34 @@ async function connectWithRetry(retries = 3, delayMs = 2000) {
     try {
       const result = await pool.query("SELECT NOW()");
       console.log("✅ PostgreSQL Connected:", result.rows[0].now);
+
+      try {
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS in_app_notifications (
+            id SERIAL PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            body TEXT NOT NULL,
+            type VARCHAR(50) DEFAULT 'general',
+            data JSONB DEFAULT '{}',
+            is_read BOOLEAN DEFAULT false,
+            created_at TIMESTAMPTZ DEFAULT now()
+          );
+        `);
+        await pool.query(`
+          ALTER TABLE in_app_notifications ALTER COLUMN user_id TYPE TEXT;
+        `).catch(() => {});
+        await pool.query(`
+          CREATE INDEX IF NOT EXISTS idx_in_app_notifs_user ON in_app_notifications(user_id);
+        `).catch(() => {});
+        await pool.query(`
+          CREATE INDEX IF NOT EXISTS idx_in_app_notifs_user_created ON in_app_notifications(user_id, created_at DESC);
+        `).catch(() => {});
+        console.log("✅ in_app_notifications table ready (user_id TEXT, indexed)");
+      } catch (tblErr) {
+        console.error("❌ in_app_notifications table creation error in db.js:", tblErr.message);
+      }
+
       return true;
     } catch (err) {
       console.error(`❌ PG connect attempt ${attempt}/${retries} failed: ${err.message}`);

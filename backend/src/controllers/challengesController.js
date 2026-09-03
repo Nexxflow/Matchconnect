@@ -3,6 +3,9 @@ const asyncHandler = require("../utils/asyncHandler");
 const {
   notifyChallengeAccepted,
   notifyChallengeCancelled,
+  notifyAllUsersExcept,
+  notifyTeammatesOnly,
+  notifyUser,
 } = require("../services/notificationService");
 
 // ============================================================
@@ -71,8 +74,22 @@ const createChallenge = asyncHandler(async (req, res) => {
      RETURNING *`,
     [team_name, contact_no, format, overs, match_date, time_slot, ground_id, ground_name, note, userId]
   );
+  const challenge = rows[0];
 
-  res.status(201).json({ ok: true, challenge: rows[0] });
+  console.log(`🏏 [Challenge Created] Post #${challenge.id} created by User #${userId} (${team_name}). Sending broadcast notification to other users...`);
+
+  // Broadcast web notification to ALL other users
+  const oversText = overs ? ` (${overs} Overs)` : "";
+  const venueText = ground_name ? ` at ${ground_name}` : "";
+  notifyAllUsersExcept(
+    userId,
+    "New Match Challenge! 🏏",
+    `${team_name} posted a ${format}${oversText} challenge for ${match_date}${venueText}`,
+    { type: "new_challenge", challenge_id: String(challenge.id) },
+    "challenge"
+  ).catch((err) => console.error("Create challenge notification error:", err.message));
+
+  res.status(201).json({ ok: true, challenge });
 });
 
 // ============================================================
@@ -141,11 +158,34 @@ const acceptChallenge = asyncHandler(async (req, res) => {
     [team_name, contact_no, userId, id]
   );
 
-  const creatorRes = await pool.query(`SELECT fcm_token FROM users WHERE id = $1`, [challenge.creator_id]);
-  const creatorToken = creatorRes.rows[0]?.fcm_token;
-  if (creatorToken) {
-    await notifyChallengeAccepted(creatorToken, team_name, { challenge_id: String(id) });
-  }
+  console.log(`🤝 [Challenge Accepted] Challenge #${id} accepted by User #${userId} (${team_name}). Dispatching targeted notifications to teammates and creator...`);
+
+  // 1. Notify the challenge creator who posted the challenge
+  notifyUser(
+    challenge.creator_id,
+    "Challenge Accepted! 🏏",
+    `${team_name} accepted your challenge for ${challenge.match_date} (${challenge.time_slot})!`,
+    { type: "challenge_accepted", challenge_id: String(id) },
+    "challenge"
+  ).catch((err) => console.error("Creator accept notification error:", err.message));
+
+  // 2. Notify the challenge creator's teammates
+  notifyTeammatesOnly(
+    challenge.creator_id,
+    "Our Match Challenge Accepted! 🏏",
+    `${team_name} accepted our match challenge on ${challenge.match_date} (${challenge.time_slot})!`,
+    { type: "team_challenge_accepted", challenge_id: String(id) },
+    "challenge"
+  ).catch((err) => console.error("Creator teammates notification error:", err.message));
+
+  // 3. Notify the accepting team's teammates ONLY
+  notifyTeammatesOnly(
+    userId,
+    "Match Challenge Accepted! 🤝",
+    `Your team (${team_name}) accepted a match challenge against ${challenge.team_name} on ${challenge.match_date} (${challenge.time_slot})!`,
+    { type: "teammate_challenge_accepted", challenge_id: String(id) },
+    "challenge"
+  ).catch((err) => console.error("Accepter teammates notification error:", err.message));
 
   res.json({ ok: true, challenge: updated.rows[0] });
 });

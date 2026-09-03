@@ -234,3 +234,15 @@ CREATE TABLE IF NOT EXISTS bowling_stats (
   is_current BOOLEAN DEFAULT false,
   UNIQUE(innings_id, player_id)
 );
+
+CREATE TABLE IF NOT EXISTS in_app_notifications (
+  id SERIAL PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  body TEXT NOT NULL,
+  type VARCHAR(50) DEFAULT 'general',
+  data JSONB DEFAULT '{}',
+  is_read BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_in_app_notifs_user ON in_app_notifications(user_id);

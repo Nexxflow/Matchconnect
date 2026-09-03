@@ -4,6 +4,9 @@ const asyncHandler = require("../utils/asyncHandler");
 const {
   notifyChallengeAccepted,
   notifyChallengeCancelled,
+  notifyAllUsersExcept,
+  notifyTeammatesOnly,
+  notifyUser,
 } = require("../services/notificationService");
 
 // Ensure non_striker_id exists on balls table
@@ -235,6 +238,17 @@ const createMatch = asyncHandler(async (req, res) => {
     if (team2_players.length) await createPlayers(client, team2Id, team2_players, matchId);
 
     await client.query("COMMIT");
+
+    if (req.user?.id) {
+      notifyAllUsersExcept(
+        req.user.id,
+        "New Match Created! 🏏",
+        `${team1_name.trim()} vs ${team2_name.trim()} (${overs_limit} ov)${venue ? ` at ${venue}` : ""}`,
+        { type: "new_match", match_id: String(matchId) },
+        "match"
+      ).catch(() => {});
+    }
+
     res.status(201).json({ match_id: matchId });
   } catch (err) {
     await client.query("ROLLBACK");

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { AlertCircle } from "lucide-react";
 import AuthScreen from "./components/Auth/AuthScreen.jsx";
 import Navbar from "./components/Navbar.jsx";
@@ -182,16 +182,101 @@ export default function App() {
 
   const registerPushNotifications = async (token) => {
     try {
+      console.log("🔑 [Frontend Notification] Checking notification permission and FCM token...");
       const fcmToken = await requestNotificationPermission();
-      if (!fcmToken) return;
+      if (!fcmToken) {
+        console.warn("⚠️ [Frontend Notification] Notification permission not granted or token unavailable.");
+        return;
+      }
 
       await apiRequest("/notifications/save-token", {
         method: "POST",
         token,
         body: { token: fcmToken },
       });
+      console.log("✅ [Frontend Notification] FCM Device token successfully synced with backend.");
     } catch (err) {
-      console.error("FCM Registration Error:", err);
+      console.error("❌ [Frontend Notification] FCM Registration Error:", err);
+    }
+  };
+
+  const knownNotifIdsRef = useRef(new Set());
+  const lastNotifFetchRef = useRef(0);
+
+  const loadNotifications = useCallback(async (token, force = false) => {
+    if (!token) return;
+    const now = Date.now();
+    // Throttle to avoid duplicate rapid requests within 30s unless explicitly forced
+    if (!force && now - lastNotifFetchRef.current < 30000) {
+      return;
+    }
+    lastNotifFetchRef.current = now;
+    try {
+      const res = await apiRequest("/notifications", { token });
+      if (res?.notifications) {
+        setPushNotifications(res.notifications);
+
+        // If new notifications arrived while tab is open, trigger native desktop notification
+        if (knownNotifIdsRef.current.size > 0) {
+          const fresh = res.notifications.filter(
+            (n) => !n.is_read && !knownNotifIdsRef.current.has(n.id)
+          );
+          fresh.forEach((n) => {
+            console.log("🔔 [Frontend Notification] Live notification popup:", n.title);
+            if ("Notification" in window && Notification.permission === "granted") {
+              try {
+                new Notification(n.title, {
+                  body: n.body,
+                  icon: "/logo.png",
+                });
+              } catch (e) {
+                console.warn("Desktop notification popup error:", e);
+              }
+            }
+          });
+        }
+        res.notifications.forEach((n) => knownNotifIdsRef.current.add(n.id));
+      }
+    } catch (err) {
+      console.warn("⚠️ [Frontend Notification] Could not load notifications:", err.message);
+    }
+  }, []);
+
+  // Relaxed background check (every 60s) only when tab is visible, plus on focus if stale
+  useEffect(() => {
+    if (!auth.token) return;
+    loadNotifications(auth.token, true);
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        loadNotifications(auth.token);
+      }
+    }, 60000);
+
+    const onFocus = () => {
+      loadNotifications(auth.token);
+    };
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [auth.token, loadNotifications]);
+
+  const handleMarkAllRead = async () => {
+    setPushNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    if (auth.token) {
+      await apiRequest("/notifications/mark-read", { method: "PUT", token: auth.token }).catch(() => {});
+      console.log("✅ [Frontend Notification] Marked all notifications as read.");
+    }
+  };
+
+  const handleClearNotifications = async () => {
+    setPushNotifications([]);
+    if (auth.token) {
+      await apiRequest("/notifications", { method: "DELETE", token: auth.token }).catch(() => {});
+      console.log("🗑️ [Frontend Notification] Cleared all notifications.");
     }
   };
 
@@ -200,15 +285,41 @@ export default function App() {
     (async () => {
       const messaging = await getFirebaseMessaging();
       if (!messaging) return;
-      unsubscribe = onMessage(messaging, payload => {
-        setPushNotifications(prev => [
-          {
-            id: Date.now(),
-            title: payload?.notification?.title || "MatchConnect",
-            body: payload?.notification?.body || ""
-          },
-          ...prev
-        ]);
+      unsubscribe = onMessage(messaging, (payload) => {
+        const title = payload?.notification?.title || payload?.data?.title || "MatchConnect";
+        const body = payload?.notification?.body || payload?.data?.body || "";
+        const type = payload?.data?.type || "general";
+
+        console.log("🔔 [Frontend Notification] Real-time Web Push notification RECEIVED:", {
+          title,
+          body,
+          type,
+          data: payload?.data || {},
+        });
+
+        const newNotif = {
+          id: Date.now(),
+          title,
+          body,
+          type,
+          is_read: false,
+          created_at: new Date().toISOString(),
+          data: payload?.data || {},
+        };
+        setPushNotifications((prev) => [newNotif, ...prev]);
+
+        // Browser native Web Notification
+        if ("Notification" in window && Notification.permission === "granted") {
+          try {
+            new Notification(title, {
+              body,
+              icon: "/logo.png",
+            });
+            console.log("📱 [Frontend Notification] Browser system notification displayed:", title);
+          } catch (e) {
+            console.warn("⚠️ [Frontend Notification] Browser Web Notification error:", e);
+          }
+        }
       });
     })();
     return () => {
@@ -233,6 +344,7 @@ export default function App() {
         if (cancelled) return;
         setAuth({ token, user });
         loadAppData(token, user);
+        loadNotifications(token);
         registerPushNotifications(token);
       } catch {
         setStoredToken(null);
@@ -242,12 +354,13 @@ export default function App() {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadNotifications]);
 
   const handleAuthSuccess = (user, token) => {
     setStoredToken(token);
     setAuth({ token, user });
     loadAppData(token, user);
+    loadNotifications(token);
     registerPushNotifications(token);
   };
 
@@ -475,7 +588,12 @@ export default function App() {
         user={auth.user}
         onLogout={handleLogout}
         token={auth.token}
-        pushCount={pushNotifications.length}
+        notifications={pushNotifications}
+        onMarkAllRead={handleMarkAllRead}
+        onClearNotifications={handleClearNotifications}
+        onOpenNotifications={() => {
+          if (auth.token) loadNotifications(auth.token, true);
+        }}
         onUserUpdated={updatedUser => {
           setAuth(prev => ({ ...prev, user: updatedUser }));
           if (auth.token) loadTeammates(auth.token);

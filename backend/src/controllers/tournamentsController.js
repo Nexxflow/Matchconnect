@@ -1,5 +1,6 @@
 const pool = require("../config/db");
 const asyncHandler = require("../utils/asyncHandler");
+const { notifyAllUsersExcept, notifyTeammatesOnly } = require("../services/notificationService");
 
 // Live data only, ordered ascending by start_date (undated tournaments last),
 // then by created_at as a tiebreaker.
@@ -242,6 +243,19 @@ const createTournament = asyncHandler(async (req, res) => {
 
     await client.query("COMMIT");
 
+    console.log(`🏆 [Tournament Created] Tournament #${tournament.id} ("${name.trim()}") created by User #${req.user.id}. Sending broadcast notification to other users...`);
+
+    // Send web notification to ALL other users
+    const formatText = format ? ` (${format})` : "";
+    const venueText = venue ? ` at ${venue}` : "";
+    notifyAllUsersExcept(
+      req.user.id,
+      "New Tournament Announced! 🏆",
+      `"${name.trim()}"${formatText} tournament is now open for registration${venueText}!`,
+      { type: "new_tournament", tournament_id: String(tournament.id) },
+      "tournament"
+    ).catch((err) => console.error("Tournament notification error:", err.message));
+
     const team_count = include_own_team ? 1 : 0;
     res.status(201).json({
       tournament: {
@@ -344,6 +358,15 @@ const registerTeam = asyncHandler(async (req, res) => {
     );
 
     await client.query("COMMIT");
+
+    // Notify team's teammates that their team registered
+    notifyTeammatesOnly(
+      req.user.id,
+      "Tournament Registration Confirmed! 🏆",
+      `Your team registered for "${tournament.name}"!`,
+      { type: "tournament_registration", tournament_id: String(id) },
+      "tournament"
+    ).catch(() => {});
 
     res.status(201).json({
       tournament: {
