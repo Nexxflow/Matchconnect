@@ -22,19 +22,19 @@ exports.saveFcmToken = async (req, res) => {
     const { token } = req.body;
     if (!token) return res.status(400).json({ error: "token is required" });
 
-    // 1. Assign token to the current user
+    // 1. If this device token was previously attached to a different account, clear it
+    await db.query(
+      "UPDATE users SET fcm_token = NULL WHERE fcm_token = $1 AND id != $2",
+      [token, userId]
+    );
+
+    // 2. Assign device token strictly to the current authenticated user
     await db.query(
       "UPDATE users SET fcm_token = $1 WHERE id = $2",
       [token, userId]
     );
 
-    // 2. Backfill any user accounts that do not have a device token so they can receive push notifications
-    await db.query(
-      "UPDATE users SET fcm_token = $1 WHERE fcm_token IS NULL",
-      [token]
-    );
-
-    console.log(`🔑 [FCM Token] Synced device token for User #${userId} and backfilled all test accounts.`);
+    console.log(`🔑 [FCM Token] Synced device token exclusively for User #${userId}.`);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -44,7 +44,11 @@ exports.saveFcmToken = async (req, res) => {
 // Called on logout
 exports.clearFcmToken = async (req, res) => {
   try {
-    // Keep device token preserved across test accounts on this machine
+    const userId = req.user?.id;
+    if (userId) {
+      await db.query("UPDATE users SET fcm_token = NULL WHERE id = $1", [userId]);
+      console.log(`🔑 [FCM Token] Cleared device token for User #${userId} on logout.`);
+    }
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });

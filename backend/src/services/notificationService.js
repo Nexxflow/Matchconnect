@@ -172,22 +172,31 @@ const sendNotification = async (token, title, body, data = {}) => {
     );
     const targetUrl = getNotificationUrl(data, title, body);
 
+    const notifTag = String(data.tag || data.challenge_id || data.match_id || data.tournament_id || data.ground_id || `mc_${Date.now()}`);
+    const payloadData = {
+      ...stringData,
+      title: String(title),
+      body: String(body),
+      targetUrl,
+      click_action: targetUrl,
+      url: targetUrl,
+      tag: notifTag,
+    };
+
     const message = {
       token,
       notification: {
         title,
         body,
       },
-      data: {
-        ...stringData,
-        targetUrl,
-        click_action: targetUrl,
-        url: targetUrl,
-      },
+      data: payloadData,
       webpush: {
         notification: {
+          title,
+          body,
           icon: "/logo.png",
           badge: "/logo.png",
+          tag: notifTag,
         },
         fcm_options: {
           link: targetUrl,
@@ -196,12 +205,23 @@ const sendNotification = async (token, title, body, data = {}) => {
       android: {
         priority: "high",
         notification: {
+          title,
+          body,
           clickAction: targetUrl,
         },
       },
       apns: {
         headers: {
           "apns-priority": "10",
+        },
+        payload: {
+          aps: {
+            alert: {
+              title,
+              body,
+            },
+            sound: "default",
+          },
         },
       },
     };
@@ -238,6 +258,16 @@ const sendMulticastNotification = async (tokens, title, body, data = {}) => {
     Object.entries(data).map(([k, v]) => [k, String(v)])
   );
   const targetUrl = getNotificationUrl(data, title, body);
+  const notifTag = String(data.tag || data.challenge_id || data.match_id || data.tournament_id || data.ground_id || `mc_${Date.now()}`);
+  const payloadData = {
+    ...stringData,
+    title: String(title),
+    body: String(body),
+    targetUrl,
+    click_action: targetUrl,
+    url: targetUrl,
+    tag: notifTag,
+  };
 
   if (typeof syncTimeWithGoogle === "function") await syncTimeWithGoogle();
 
@@ -251,16 +281,14 @@ const sendMulticastNotification = async (tokens, title, body, data = {}) => {
           title,
           body,
         },
-        data: {
-          ...stringData,
-          targetUrl,
-          click_action: targetUrl,
-          url: targetUrl,
-        },
+        data: payloadData,
         webpush: {
           notification: {
+            title,
+            body,
             icon: "/logo.png",
             badge: "/logo.png",
+            tag: notifTag,
           },
           fcm_options: {
             link: targetUrl,
@@ -269,7 +297,23 @@ const sendMulticastNotification = async (tokens, title, body, data = {}) => {
         android: {
           priority: "high",
           notification: {
+            title,
+            body,
             clickAction: targetUrl,
+          },
+        },
+        apns: {
+          headers: {
+            "apns-priority": "10",
+          },
+          payload: {
+            aps: {
+              alert: {
+                title,
+                body,
+              },
+              sound: "default",
+            },
           },
         },
       });

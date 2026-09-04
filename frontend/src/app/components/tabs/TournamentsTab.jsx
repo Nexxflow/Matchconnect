@@ -469,17 +469,13 @@ export default function TournamentsTab({ registeredIds = [], onRegister, onUnreg
 
   // Single check used everywhere: organizer = user who directly created the tournament (`created_by === currentUser.id`).
   const organizerCheck = (t) => isOrganizerOf(t, { currentUser });
-  const isMine = (t) => organizerCheck(t) || registeredIds.includes(t.id);
-
   // Check if tournament was published by any member of our squad
   const isSquadPublished = (t) => t.created_by && squadMemberIds.has(String(t.created_by));
-
-  // Check if any teammate in the squad has published a tournament
-  const teamPublishedTournament = allTournaments.find(isSquadPublished);
+  const isMine = (t) => organizerCheck(t) || registeredIds.includes(t.id) || isSquadPublished(t);
 
   const myTournaments = allTournaments.filter(isMine);
   // All Tournaments section should only show tournaments published by other teams (not our squad) and not already mine
-  const otherTournaments = allTournaments.filter((t) => !isMine(t) && !isSquadPublished(t));
+  const otherTournaments = allTournaments.filter((t) => !isMine(t));
   const viewingTournament = allTournaments.find((t) => t.id === viewingId) || null;
 
   const handleCreated = (tournament) => {
@@ -496,23 +492,12 @@ export default function TournamentsTab({ registeredIds = [], onRegister, onUnreg
           <p className="text-sm mt-0.5" style={{ color: "#6b7a6b" }}>Organize or register for local cricket tournaments</p>
         </div>
 
-        {teamPublishedTournament ? (
-          <button
-            disabled
-            title="A member of your squad has already published an active tournament. Only the creator can delete it to allow new creations."
-            className="px-4 py-2.5 rounded-xl text-sm font-bold opacity-60 cursor-not-allowed flex items-center gap-2"
-            style={{ backgroundColor: "#1e241e", color: "#6b7a6b", border: "1px solid #2a2a2a" }}
-          >
-            <Plus className="w-4 h-4" /> Create Tournament
-          </button>
-        ) : (
-          <button
-            onClick={() => setShowCreateForm(true)}
-            className="px-5 py-2.5 rounded-xl bg-green-500 text-black font-bold text-sm hover:bg-green-400 transition-colors flex items-center gap-2 shrink-0"
-          >
-            <Plus className="w-4 h-4" /> Create Tournament
-          </button>
-        )}
+        <button
+          onClick={() => setShowCreateForm(true)}
+          className="px-5 py-2.5 rounded-xl bg-green-500 text-black font-bold text-sm hover:bg-green-400 transition-colors flex items-center gap-2 shrink-0"
+        >
+          <Plus className="w-4 h-4" /> Create Tournament
+        </button>
       </div>
 
 
@@ -533,7 +518,7 @@ export default function TournamentsTab({ registeredIds = [], onRegister, onUnreg
                 t={t}
                 isMine
                 isOrganizer={organizerCheck(t)}
-                roleLabel={organizerCheck(t) ? "Organizing" : "Registered"}
+                roleLabel={organizerCheck(t) ? "Organizing" : (registeredIds.includes(t.id) ? "Registered" : "Squad Tournament")}
                 registered={registeredIds.includes(t.id)}
                 onRegister={onRegister}
                 onUnregister={onUnregister}
@@ -587,7 +572,7 @@ export default function TournamentsTab({ registeredIds = [], onRegister, onUnreg
           onClose={() => setViewingId(null)}
           isMine={isMine(viewingTournament)}
           isOrganizer={organizerCheck(viewingTournament)}
-          roleLabel={organizerCheck(viewingTournament) ? "Organizing" : "Registered"}
+          roleLabel={organizerCheck(viewingTournament) ? "Organizing" : (registeredIds.includes(viewingTournament.id) ? "Registered" : "Squad Tournament")}
           registered={registeredIds.includes(viewingTournament.id)}
           onRegister={onRegister}
           onUnregister={onUnregister}

@@ -413,7 +413,7 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
   );
 }
 
-function AcceptChallengeModal({ challenge, token, user, onClose, onAccepted }) {
+function AcceptChallengeModal({ challenge, token, user, hasActiveAcceptedChallenge, onClose, onAccepted }) {
   const [teamName, setTeamName] = useState(user?.team_name || "");
   const contact = user?.phone || "";
   const normalizedContact = normalizePhone(contact);
@@ -428,6 +428,9 @@ function AcceptChallengeModal({ challenge, token, user, onClose, onAccepted }) {
 
   const handleSubmit = async e => {
     e.preventDefault();
+    if (hasActiveAcceptedChallenge) {
+      return setError("You already have an active accepted match challenge. Cancel it in 'My Team' before accepting another.");
+    }
     const missing = [];
     if (!user?.name?.trim()) missing.push("Name");
     if (!contact.trim() || normalizedContact.length < 10) missing.push("Phone number");
@@ -1039,14 +1042,19 @@ export default function FindMatchTab({
     ? challenges.find(c => c.status === "open" && teamPhoneSet.has(normalizePhone(c.contact_no)))
     : null;
 
-  const myTeamAcceptedChallenge = teamPhoneSet.size
-    ? challenges.find(
-        c =>
-          c.status === "accepted" &&
+  const myTeamAcceptedChallenge = challenges.find(
+    c =>
+      c.status === "accepted" &&
+      ((user?.id && (c.accepted_by_user_id === user.id || c.creator_id === user.id)) ||
+        (myPhone &&
+          (normalizePhone(c.contact_no) === myPhone ||
+            normalizePhone(c.accepted_by_contact_no) === myPhone)) ||
+        (teamPhoneSet.size > 0 &&
           (teamPhoneSet.has(normalizePhone(c.contact_no)) ||
-            teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no)))
-      )
-    : null;
+            teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no)))))
+  );
+
+  const hasActiveAcceptedChallenge = Boolean(acceptedChallenge || myTeamAcceptedChallenge);
 
   const openChallenges = challenges.filter(
     c => (!c.status || c.status === "open") && !teamPhoneSet.has(normalizePhone(c.contact_no))
@@ -1256,6 +1264,23 @@ export default function FindMatchTab({
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-base font-semibold text-white">Challenge Requests</h3>
         </div>
+
+        {hasActiveAcceptedChallenge && (
+          <div
+            className="flex items-center gap-2.5 text-xs rounded-xl p-3 mb-3"
+            style={{
+              backgroundColor: "rgba(245,158,11,0.08)",
+              border: "1px solid rgba(245,158,11,0.25)",
+              color: "#f59e0b",
+            }}
+          >
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>
+              You already have an active accepted match challenge. You can only accept one challenge at a time. To accept another challenge, cancel your active match in <strong>My Team</strong>.
+            </span>
+          </div>
+        )}
+
         <div className="space-y-3">
           {filtered.length === 0 && <div className="text-sm text-center py-8" style={{ color: "#4a5a4a" }}>No challenges match your filters right now.</div>}
           {filtered.map(t => {
@@ -1299,18 +1324,20 @@ export default function FindMatchTab({
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-2 mt-3">
-                  <button
-                    disabled={blocked}
-                    onClick={() => setAcceptTarget(t)}
-                    className="flex-1 py-2.5 sm:py-2 rounded-xl text-xs font-bold transition-colors text-center"
-                    style={blocked
-                      ? { backgroundColor: "#1e211e", color: "#3a3a3a", cursor: "not-allowed" }
-                      : { backgroundColor: "#22c55e", color: "#000" }}
-                    onMouseEnter={e => !blocked && (e.currentTarget.style.backgroundColor = "#4ade80")}
-                    onMouseLeave={e => !blocked && (e.currentTarget.style.backgroundColor = "#22c55e")}
-                  >
-                    {blocked ? "Unavailable" : "Accept Challenge"}
-                  </button>
+                  {!hasActiveAcceptedChallenge && (
+                    <button
+                      disabled={blocked}
+                      onClick={() => setAcceptTarget(t)}
+                      className="flex-1 py-2.5 sm:py-2 rounded-xl text-xs font-bold transition-colors text-center"
+                      style={blocked
+                        ? { backgroundColor: "#1e211e", color: "#3a3a3a", cursor: "not-allowed" }
+                        : { backgroundColor: "#22c55e", color: "#000" }}
+                      onMouseEnter={e => !blocked && (e.currentTarget.style.backgroundColor = "#4ade80")}
+                      onMouseLeave={e => !blocked && (e.currentTarget.style.backgroundColor = "#22c55e")}
+                    >
+                      {blocked ? "Unavailable" : "Accept Challenge"}
+                    </button>
+                  )}
                   <GhostButton className="flex-1 text-center py-2.5 sm:py-2" onClick={() => setDetailsTarget(t)}>View Details</GhostButton>
                 </div>
               </div>
@@ -1391,18 +1418,20 @@ export default function FindMatchTab({
             </div>
 
             <div className="flex gap-2 mt-5">
-              <button
-                disabled={hasActiveOnDate(detailsTarget.rawDate)}
-                onClick={() => { setAcceptTarget(detailsTarget); setDetailsTarget(null); }}
-                className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-colors"
-                style={hasActiveOnDate(detailsTarget.rawDate)
-                  ? { backgroundColor: "#1e211e", color: "#3a3a3a", cursor: "not-allowed" }
-                  : { backgroundColor: "#22c55e", color: "#000" }}
-                onMouseEnter={e => !hasActiveOnDate(detailsTarget.rawDate) && (e.currentTarget.style.backgroundColor = "#4ade80")}
-                onMouseLeave={e => !hasActiveOnDate(detailsTarget.rawDate) && (e.currentTarget.style.backgroundColor = "#22c55e")}
-              >
-                {hasActiveOnDate(detailsTarget.rawDate) ? "Unavailable" : "Accept Challenge"}
-              </button>
+              {!hasActiveAcceptedChallenge && (
+                <button
+                  disabled={hasActiveOnDate(detailsTarget.rawDate)}
+                  onClick={() => { setAcceptTarget(detailsTarget); setDetailsTarget(null); }}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-colors"
+                  style={hasActiveOnDate(detailsTarget.rawDate)
+                    ? { backgroundColor: "#1e211e", color: "#3a3a3a", cursor: "not-allowed" }
+                    : { backgroundColor: "#22c55e", color: "#000" }}
+                  onMouseEnter={e => !hasActiveOnDate(detailsTarget.rawDate) && (e.currentTarget.style.backgroundColor = "#4ade80")}
+                  onMouseLeave={e => !hasActiveOnDate(detailsTarget.rawDate) && (e.currentTarget.style.backgroundColor = "#22c55e")}
+                >
+                  {hasActiveOnDate(detailsTarget.rawDate) ? "Unavailable" : "Accept Challenge"}
+                </button>
+              )}
               <GhostButton className="flex-1" onClick={() => setDetailsTarget(null)}>Close</GhostButton>
             </div>
           </div>
@@ -1414,6 +1443,7 @@ export default function FindMatchTab({
           challenge={acceptTarget}
           token={token}
           user={user}
+          hasActiveAcceptedChallenge={hasActiveAcceptedChallenge}
           onClose={() => setAcceptTarget(null)}
           onAccepted={updated => { setAcceptTarget(null); onChallengeAccepted(updated); }}
         />

@@ -136,7 +136,7 @@ const createTournament = asyncHandler(async (req, res) => {
 
     let myTeam = null;
     if (user?.team_id) {
-      const teamRes = await client.query(`SELECT id, name FROM teams WHERE id = $1 FOR UPDATE`, [user.team_id]);
+      const teamRes = await client.query(`SELECT id, name FROM teams WHERE id = $1`, [user.team_id]);
       myTeam = teamRes.rows[0] || null;
     }
 
@@ -148,10 +148,21 @@ const createTournament = asyncHandler(async (req, res) => {
       );
       myTeam = teamByNameRes.rows[0] || null;
 
+      if (!myTeam) {
+        const teamName = user.team_name.trim();
+        const village = user?.village_name?.trim() || null;
+        const year = user?.team_year ? Number(user.team_year) : new Date().getFullYear();
+        const insRes = await client.query(
+          `INSERT INTO teams (name, village_name, year_formed, created_by)
+           VALUES ($1, $2, $3, $4)
+           RETURNING id, name`,
+          [teamName, village, year, req.user.id]
+        );
+        myTeam = insRes.rows[0] || null;
+      }
+
       // Self-heal: persist the resolved team_id onto the user row so future
-      // requests don't need to re-derive it by name every time. Uses `pool`
-      // (not `client`) so it commits independently of this transaction —
-      // it must survive even if we're about to roll back on the 409 below.
+      // requests don't need to re-derive it by name every time.
       if (myTeam) {
         await pool.query(
           `UPDATE users SET team_id = $1 WHERE id = $2 AND team_id IS NULL`,
@@ -167,37 +178,7 @@ const createTournament = asyncHandler(async (req, res) => {
       );
     }
 
-    // Check for an active tournament already organized by this team.
-    // See the note at the top of this function: creator_team_name isn't a
-    // real column, so we match on the actual FK (creator_team_id) when we
-    // have one, or join to teams for a name comparison when we don't.
-    let activeRes;
-    if (myTeam) {
-      activeRes = await client.query(
-        `SELECT id, name, status FROM tournaments
-         WHERE creator_team_id = $1
-           AND status IN ('registering', 'ongoing')`,
-        [myTeam.id]
-      );
-    } else {
-      activeRes = await client.query(
-        `SELECT t.id, t.name, t.status
-         FROM tournaments t
-         LEFT JOIN teams ct ON ct.id = t.creator_team_id
-         WHERE LOWER(TRIM(ct.name)) = LOWER(TRIM($1))
-           AND t.status IN ('registering', 'ongoing')`,
-        [user.team_name]
-      );
-    }
-    if (activeRes.rows.length > 0) {
-      const active = activeRes.rows[0];
-      throw Object.assign(
-        new Error(
-          `Your team is already organizing "${active.name}" (${active.status}). Any team member can wait for it to complete, or the organizer can cancel/delete it before creating another.`
-        ),
-        { status: 409 }
-      );
-    }
+    // Users and teams can create multiple tournaments concurrently.
 
     // teamName is only used for the JSON response below (and as a display
     // fallback) — it is never written to the DB. The persisted source of

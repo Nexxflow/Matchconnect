@@ -89,17 +89,6 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
     };
   }, [token]);
 
-  // A team can only run one tournament (registering/ongoing) at a time.
-  const userTeamName = user?.team_name?.trim()?.toLowerCase();
-  const myActiveTournament = !initialTournament
-    ? tournaments.find(
-        (t) =>
-          (t.status === "registering" || t.status === "ongoing") &&
-          ((myTeam && t.creator_team_id === myTeam.id) ||
-            (user?.id && t.created_by === user.id) ||
-            (userTeamName && t.creator_team_name?.trim()?.toLowerCase() === userTeamName))
-      )
-    : null;
 
   const [form, setForm] = useState({
     name: initialTournament?.name || "",
@@ -130,7 +119,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!loadingTeam && !myTeam && !initialTournament) {
+    if (!loadingTeam && !myTeam && !user?.team_name?.trim() && !initialTournament) {
       setForm((f) => ({ ...f, includeOwnTeam: false }));
     }
     if (user?.phone && !form.phone) {
@@ -157,13 +146,10 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
       alert(msg);
       return msg;
     }
-    if (myActiveTournament) {
-      return `Your team already has an active tournament ("${myActiveTournament.name}"). Complete or cancel it before creating another.`;
-    }
     if (!form.name.trim()) return "Tournament name is required";
     const maxTeams = parseInt(form.maxTeams, 10);
     if (!Number.isInteger(maxTeams) || maxTeams < 2) return "Number of teams must be at least 2";
-    if (form.includeOwnTeam && !myTeam && !initialTournament) return "You don't have a team registered — turn off 'include my team', or register a team first";
+    if (form.includeOwnTeam && !myTeam && !user?.team_name?.trim() && !initialTournament) return "You don't have a team registered — turn off 'include my team', or register a team first";
     for (let i = 0; i < prizeCount; i++) {
       if (prizes[i].money === "" || Number(prizes[i].money) < 0) {
         return `Enter a prize amount for position ${i + 1}`;
@@ -243,7 +229,6 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
 
   const maxTeamsNum = parseInt(form.maxTeams, 10) || 0;
   const remainingPreview = form.includeOwnTeam ? Math.max(maxTeamsNum - 1, 0) : maxTeamsNum;
-  const blocked = !!myActiveTournament;
 
   return (
     <div
@@ -263,21 +248,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
           </button>
         </div>
 
-        {blocked && (
-          <div
-            className="flex items-start gap-2 text-xs rounded-xl p-3"
-            style={{ backgroundColor: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", color: "#f59e0b" }}
-          >
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>
-              Your team is already organizing "{myActiveTournament.name}" (
-              {myActiveTournament.status}). You can create a new tournament once that one is
-              completed or cancelled.
-            </span>
-          </div>
-        )}
-
-        <fieldset disabled={blocked || submitting} className={cn(blocked && "opacity-50")}>
+        <fieldset disabled={submitting}>
         <form onSubmit={handleSubmit} className="space-y-6">
           <Section icon={Trophy} title="Tournament details">
             <div>
@@ -489,7 +460,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
             </GhostButton>
             <button
               type="submit"
-              disabled={submitting || blocked}
+              disabled={submitting}
               className="flex-1 py-2.5 rounded-xl bg-green-500 text-black font-bold text-sm hover:bg-green-400 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {submitting && <Loader2 className="w-4 h-4 animate-spin" />}

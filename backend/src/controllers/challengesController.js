@@ -134,6 +134,22 @@ const acceptChallenge = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "You can't accept your own challenge" });
   }
 
+  // A user can only accept one challenge at a time.
+  const activeExisting = await pool.query(
+    `SELECT id, team_name, match_date, time_slot
+     FROM challenges
+     WHERE status = 'accepted'
+       AND (accepted_by_user_id = $1 OR accepted_by_contact_no = $2 OR LOWER(TRIM(accepted_by_team_name)) = LOWER(TRIM($3)))
+     LIMIT 1`,
+    [userId, contact_no, team_name]
+  );
+  if (activeExisting.rows.length > 0) {
+    const existing = activeExisting.rows[0];
+    return res.status(400).json({
+      error: `You have already accepted a challenge against ${existing.team_name} for ${existing.match_date}. You can only accept one challenge at a time. Cancel it in 'My Team' before accepting another.`
+    });
+  }
+
   const updated = await pool.query(
     `UPDATE challenges
      SET status = 'accepted',

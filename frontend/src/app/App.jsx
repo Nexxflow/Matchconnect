@@ -182,14 +182,14 @@ export default function App() {
       }
 
       const myPhone = normalizePhone(user?.phone);
-      const myActive = myPhone
-        ? allChallenges.find(
-            c =>
-              c.status === "accepted" &&
+      const myActive = allChallenges.find(
+        c =>
+          c.status === "accepted" &&
+          ((user?.id && (c.accepted_by_user_id === user.id || c.creator_id === user.id)) ||
+            (myPhone &&
               (normalizePhone(c.contact_no) === myPhone ||
-                normalizePhone(c.accepted_by_contact_no) === myPhone)
-          )
-        : null;
+                normalizePhone(c.accepted_by_contact_no) === myPhone)))
+      );
       setAcceptedChallenge(myActive || null);
 
       setBackendStatus("online");
@@ -368,30 +368,6 @@ export default function App() {
       const res = await apiRequest("/notifications", { token });
       if (res?.notifications) {
         setPushNotifications(res.notifications);
-
-        // If new notifications arrived while tab is open, trigger native desktop notification
-        if (knownNotifIdsRef.current.size > 0) {
-          const fresh = res.notifications.filter(
-            (n) => !n.is_read && !knownNotifIdsRef.current.has(n.id)
-          );
-          fresh.forEach((n) => {
-            console.log("🔔 [Frontend Notification] Live notification popup:", n.title);
-            if ("Notification" in window && Notification.permission === "granted") {
-              try {
-                const notif = new Notification(n.title, {
-                  body: n.body,
-                  icon: "/logo.png",
-                });
-                notif.onclick = () => {
-                  window.focus();
-                  handleNotificationNavigate(n);
-                };
-              } catch (e) {
-                console.warn("Desktop notification popup error:", e);
-              }
-            }
-          });
-        }
         res.notifications.forEach((n) => knownNotifIdsRef.current.add(n.id));
       }
     } catch (err) {
@@ -443,9 +419,15 @@ export default function App() {
       const messaging = await getFirebaseMessaging();
       if (!messaging) return;
       unsubscribe = onMessage(messaging, (payload) => {
-        const title = payload?.notification?.title || payload?.data?.title || "MatchConnect";
-        const body = payload?.notification?.body || payload?.data?.body || "";
+        const title = payload?.data?.title || payload?.notification?.title || "";
+        const body = payload?.data?.body || payload?.notification?.body || "";
         const type = payload?.data?.type || "general";
+
+        // Filter out dummy/empty notifications (e.g. blank body with generic title)
+        if (!title || (!body && title === "MatchConnect")) {
+          console.log("ℹ️ [Frontend Notification] Ignored empty/dummy notification:", payload);
+          return;
+        }
 
         console.log("🔔 [Frontend Notification] Real-time Web Push notification RECEIVED:", {
           title,
@@ -465,12 +447,14 @@ export default function App() {
         };
         setPushNotifications((prev) => [newNotif, ...prev]);
 
-        // Browser native Web Notification
+        // Browser native Web Notification (tagged to deduplicate)
         if ("Notification" in window && Notification.permission === "granted") {
           try {
+            const notifTag = payload?.data?.tag || `notif_${newNotif.id}`;
             const notif = new Notification(title, {
               body,
               icon: "/logo.png",
+              tag: notifTag,
             });
             notif.onclick = () => {
               window.focus();
@@ -650,7 +634,13 @@ export default function App() {
 
   const handleTournamentCreated = (newTournament) => {
     setTournaments(prev => [transformTournament(newTournament), ...prev.filter(x => x.id !== newTournament.id)]);
+    if (newTournament?.creator_included && newTournament?.id) {
+      setRegisteredIds(prev => (prev.includes(newTournament.id) ? prev : [...prev, newTournament.id]));
+    }
     refreshTournaments();
+    if (auth?.token) {
+      loadMyTeamAndRegistrations(auth.token);
+    }
   };
   const handleTournamentUpdated = (raw) => {
     const t = transformTournament(raw);

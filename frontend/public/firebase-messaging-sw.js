@@ -57,26 +57,13 @@ function getTargetUrl(data = {}, title = "", body = "") {
   return `/?tab=${encodeURIComponent(tab)}&notifType=${encodeURIComponent(type || "general")}${extra}`;
 }
 
+// Background message listener
+// NOTE: Firebase Web SDK (firebase-messaging-compat) AUTOMATICALLY renders and displays
+// the single original notification from the 'notification' and 'webpush.notification' payload.
+// We do NOT call self.registration.showNotification() here to guarantee that only
+// ONE original notification is ever shown and no dummy or duplicate notification appears.
 messaging.onBackgroundMessage((payload) => {
-  const title = payload.notification?.title || payload.data?.title || "MatchConnect";
-  const body = payload.notification?.body || payload.data?.body || "";
-  const data = payload.data || {};
-  const targetUrl = getTargetUrl(data, title, body);
-
-  console.log("🔔 [Service Worker] Background Push Notification RECEIVED:", { title, body, payload, targetUrl });
-  const options = {
-    body,
-    icon: "/logo.png",
-    badge: "/logo.png",
-    data: {
-      ...data,
-      targetUrl,
-      title,
-      body,
-    },
-  };
-  self.registration.showNotification(title, options);
-  console.log("📱 [Service Worker] Native system notification displayed for:", title);
+  console.log("🔔 [Service Worker] Push Notification received (displayed by Firebase SDK):", payload);
 });
 
 self.addEventListener("notificationclick", (event) => {

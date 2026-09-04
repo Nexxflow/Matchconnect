@@ -157,25 +157,32 @@ const signup = asyncHandler(async (req, res) => {
 
 // POST /api/auth/login
 // POST /api/auth/login   Body: { identifier, password }
-// `identifier` can be either the account's email or phone number.
 const login = asyncHandler(async (req, res) => {
   const { identifier, password } = req.body;
   if (!identifier || !password) {
-    return res.status(400).json({ error: "email/phone and password are required" });
+    return res.status(400).json({ error: "Email or phone number and password are required" });
   }
 
+  const cleanId = String(identifier).trim();
+  const digits = cleanId.replace(/\D/g, "");
+
+  // Query database strictly for matching user by email or phone
   const result = await pool.query(
-    "SELECT * FROM users WHERE email = $1 OR phone = $1",
-    [identifier.trim()]
+    `SELECT * FROM users
+     WHERE LOWER(TRIM(email)) = LOWER($1)
+        OR phone = $1
+        OR ($2 != '' AND LENGTH($2) >= 10 AND RIGHT(REGEXP_REPLACE(phone, '\\D', '', 'g'), 10) = RIGHT($2, 10))
+     LIMIT 1`,
+    [cleanId, digits]
   );
   const user = result.rows[0];
   if (!user) {
-    return res.status(401).json({ error: "Invalid credentials" });
+    return res.status(401).json({ error: "Invalid credentials. No user found with these credentials in database." });
   }
 
   const match = await bcrypt.compare(password, user.password_hash);
   if (!match) {
-    return res.status(401).json({ error: "Invalid credentials" });
+    return res.status(401).json({ error: "Invalid credentials. Password does not match." });
   }
 
   // Self-heal team_id on every login — cheap no-op once it's set, and this
