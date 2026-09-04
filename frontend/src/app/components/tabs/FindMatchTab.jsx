@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Plus, X, Calendar, Clock, Filter, Search, ChevronDown, MapPin, CheckCircle, Phone, XCircle, AlertCircle } from "lucide-react";
+import { Plus, X, Calendar, Clock, Filter, Search, ChevronDown, MapPin, CheckCircle, Phone, XCircle, AlertCircle, Users, Star } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { apiRequest } from "../../api";
 import { C, cn, Tag, GhostButton, normalizePhone, formatDateIST } from "../../utils/helpers.jsx";
 import { FORMATS, DEFAULT_OVERS } from "../../utils/constants";
+import TeamDetailsModal from "../TeamDetailsModal.jsx";
 
 const challengePinIcon = L.divIcon({
   className: "",
@@ -864,7 +865,50 @@ function MyPostedChallengeCard({ challenge, token, onDeleted }) {
         <span className="text-xs font-semibold text-green-400 uppercase tracking-wide">Your Posted Challenge</span>
         <Tag color="blue">{challenge.status === "on_hold" ? "On Hold" : "Open"}</Tag>
       </div>
-      <div className="text-sm font-semibold text-white">{challenge.team_name}</div>
+      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+        <div className="text-sm font-semibold text-white">{challenge.team_name}</div>
+        {challenge.team_rating != null && (
+          <div className="flex items-center gap-1 text-[11px] font-bold text-amber-400 px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/20">
+            <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+            <span>{Number(challenge.team_rating).toFixed(1)}</span>
+            {challenge.reviews_count > 0 && (
+              <span className="text-neutral-400 font-normal text-[10px]">
+                ({challenge.reviews_count} review{challenge.reviews_count !== 1 ? "s" : ""})
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {challenge.latest_review_text && (
+        <div className="mt-2 p-2.5 rounded-xl bg-[#0f120f] border border-[#222922] text-[11px]">
+          <div className="flex items-center justify-between gap-1 text-[10px] text-neutral-400 mb-0.5">
+            <span className="font-semibold text-neutral-200 truncate flex items-center gap-1">
+              <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400 shrink-0" />
+              <span>{Number(challenge.latest_review_rating || 5.0).toFixed(1)}★</span>
+              <span>by {challenge.latest_reviewer_name || "Opponent"}</span>
+              {challenge.latest_reviewer_team_name ? ` (${challenge.latest_reviewer_team_name})` : ""}
+            </span>
+            <span className="shrink-0 text-neutral-500 text-[9px]">
+              {challenge.latest_review_created_at
+                ? new Date(challenge.latest_review_created_at).toLocaleString("en-IN", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                    hour12: true,
+                    timeZone: "Asia/Kolkata"
+                  })
+                : "Recent"}
+            </span>
+          </div>
+          <p className="text-neutral-300 italic line-clamp-2 pl-2 border-l border-green-500/40">
+            "{challenge.latest_review_text}"
+          </p>
+        </div>
+      )}
+
       <div className="flex items-center gap-2 mt-1.5 flex-wrap">
         <Tag color="blue">{challenge.format}</Tag>
         <Tag color="green">{challenge.match_date} · {challenge.time_slot}</Tag>
@@ -895,6 +939,7 @@ function normalizeChallenge(c) {
     team: c.team_name,
     contact_no: c.contact_no,
     postedBy: c.posted_by_name || c.creator_name || null,
+    creator_id: c.creator_id,
     postedAt: c.created_at || null,
     format: c.format,
     date: formatDateIST(c.match_date),
@@ -905,7 +950,15 @@ function normalizeChallenge(c) {
     groundLng: c.ground_lng != null ? Number(c.ground_lng) : null,
     note: c.note || "",
     urgent: !!c.urgent,
-    rating: 0,
+    rating: c.team_rating != null ? Number(c.team_rating) : (c.rating ? Number(c.rating) : 5.0),
+    reviewsCount: Number(c.reviews_count) || 0,
+    latestReview: c.latest_review || (c.latest_review_text ? {
+      reviewer_name: c.latest_reviewer_name,
+      reviewer_team_name: c.latest_reviewer_team_name,
+      rating: c.latest_review_rating,
+      review_text: c.latest_review_text,
+      created_at: c.latest_review_created_at
+    } : null),
     wins: 0,
     losses: 0
   };
@@ -994,8 +1047,19 @@ export default function FindMatchTab({
   const [searchQuery, setSearchQuery] = useState("");
   const [acceptTarget, setAcceptTarget] = useState(null);
   const [detailsTarget, setDetailsTarget] = useState(null);
+  const [viewTeamTarget, setViewTeamTarget] = useState(null);
 
   const normalize = normalizeChallenge;
+
+  // Keep detailsTarget synchronized with incoming challenge updates (e.g. newly posted reviews/ratings)
+  useEffect(() => {
+    if (detailsTarget) {
+      const updated = challenges.find(c => c.id === detailsTarget.id);
+      if (updated) {
+        setDetailsTarget(normalize(updated));
+      }
+    }
+  }, [challenges]);
 
   const formatPostedAgo = timestamp => {
     if (!timestamp) return null;
@@ -1025,6 +1089,20 @@ export default function FindMatchTab({
       hour: "numeric",
       minute: "2-digit",
       hour12: true
+    });
+  };
+
+  const formatReviewDate = ts => {
+    if (!ts) return "";
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleString("en-IN", {
+      day: "numeric",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: "Asia/Kolkata"
     });
   };
 
@@ -1290,6 +1368,39 @@ export default function FindMatchTab({
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold text-white truncate">{t.team}</div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <div className="flex items-center gap-1 text-[11px] font-bold text-amber-400">
+                        <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                        <span>{t.rating.toFixed(1)}</span>
+                      </div>
+                      {t.reviewsCount > 0 ? (
+                        <span className="text-[10px] text-neutral-400">
+                          ({t.reviewsCount} review{t.reviewsCount !== 1 ? "s" : ""})
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-neutral-500">New team</span>
+                      )}
+                    </div>
+
+                    {/* Latest Review under Team Name */}
+                    {t.latestReview && (
+                      <div className="mt-2 p-2.5 rounded-xl bg-[#0f120f] border border-[#222922] text-[11px]">
+                        <div className="flex items-center justify-between gap-1 text-[10px] text-neutral-400 mb-1">
+                          <span className="font-semibold text-neutral-200 truncate flex items-center gap-1">
+                            <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400 shrink-0" />
+                            <span>{Number(t.latestReview.rating || 5.0).toFixed(1)}★</span>
+                            <span>by {t.latestReview.reviewer_name}</span>
+                            {t.latestReview.reviewer_team_name ? ` (${t.latestReview.reviewer_team_name})` : ""}:
+                          </span>
+                          <span className="shrink-0 text-neutral-500 text-[9px]">
+                            {formatReviewDate(t.latestReview.created_at)}
+                          </span>
+                        </div>
+                        <p className="text-neutral-300 italic line-clamp-2 pl-2 border-l border-green-500/40">
+                          "{t.latestReview.review_text}"
+                        </p>
+                      </div>
+                    )}
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
                     {postedAgo && (
@@ -1375,17 +1486,67 @@ export default function FindMatchTab({
             </div>
 
             <div className="mt-4 rounded-2xl p-4 space-y-3" style={{ backgroundColor: "#0f0f0f", border: "1px solid #1e1e1e" }}>
-              <div className="pb-3 border-b" style={{ borderColor: "#1e1e1e" }}>
-                <div className="text-lg font-bold text-white truncate">{detailsTarget.team}</div>
-                <div className="text-xs mt-1" style={{ color: "#6b7a6b" }}>
-                  Posted by{" "}
-                  <span className="font-semibold" style={{ color: "#4ade80" }}>
-                    {detailsTarget.postedBy || formatPhoneDisplay(detailsTarget.contact_no) || "team contact"}
-                  </span>
-                  {formatPostedFull(detailsTarget.postedAt) && (
-                    <span style={{ color: "#4a5a4a" }}> · {formatPostedFull(detailsTarget.postedAt)}</span>
+              <div className="pb-3 border-b flex items-start justify-between gap-3" style={{ borderColor: "#1e1e1e" }}>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="text-lg font-bold text-white truncate">{detailsTarget.team}</div>
+                    <div className="flex items-center gap-1 text-xs font-bold text-amber-400 px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/20">
+                      <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                      <span>{detailsTarget.rating.toFixed(1)}</span>
+                      {detailsTarget.reviewsCount > 0 && (
+                        <span className="text-neutral-400 font-normal text-[10px]">
+                          ({detailsTarget.reviewsCount})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-xs mt-1" style={{ color: "#6b7a6b" }}>
+                    Posted by{" "}
+                    <span className="font-semibold" style={{ color: "#4ade80" }}>
+                      {detailsTarget.postedBy || formatPhoneDisplay(detailsTarget.contact_no) || "team contact"}
+                    </span>
+                    {formatPostedFull(detailsTarget.postedAt) && (
+                      <span style={{ color: "#4a5a4a" }}> · {formatPostedFull(detailsTarget.postedAt)}</span>
+                    )}
+                  </div>
+
+                  {/* Latest Review under Team Name in Details Modal */}
+                  {detailsTarget.latestReview && (
+                    <div className="mt-2.5 p-2.5 rounded-xl bg-[#121612] border border-[#222a22] text-xs">
+                      <div className="flex items-center justify-between gap-2 text-[11px] text-neutral-400 mb-1">
+                        <span className="font-semibold text-neutral-200 truncate flex items-center gap-1">
+                          <Star className="w-3 h-3 fill-amber-400 text-amber-400 shrink-0" />
+                          <span>{Number(detailsTarget.latestReview.rating || 5.0).toFixed(1)}★</span>
+                          <span>by {detailsTarget.latestReview.reviewer_name}</span>
+                          {detailsTarget.latestReview.reviewer_team_name ? ` (${detailsTarget.latestReview.reviewer_team_name})` : ""}
+                        </span>
+                        <span className="shrink-0 text-neutral-500 text-[10px]">
+                          {formatReviewDate(detailsTarget.latestReview.created_at)}
+                        </span>
+                      </div>
+                      <p className="text-neutral-300 italic pl-2 border-l border-green-500/40">
+                        "{detailsTarget.latestReview.review_text}"
+                      </p>
+                    </div>
                   )}
                 </div>
+
+                {/* View Team Button in Marked Area */}
+                <button
+                  type="button"
+                  onClick={() => setViewTeamTarget(detailsTarget)}
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all hover:scale-105 active:scale-95"
+                  style={{
+                    backgroundColor: "rgba(34, 197, 94, 0.12)",
+                    color: "#4ade80",
+                    border: "1px solid rgba(34, 197, 94, 0.35)",
+                    boxShadow: "0 2px 10px rgba(0,0,0,0.3)"
+                  }}
+                  title={`View ${detailsTarget.team} details, ratings and reviews`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>View Team</span>
+                </button>
               </div>
 
               <div className="space-y-2.5">
@@ -1442,6 +1603,17 @@ export default function FindMatchTab({
           hasActiveAcceptedChallenge={hasActiveAcceptedChallenge}
           onClose={() => setAcceptTarget(null)}
           onAccepted={updated => { setAcceptTarget(null); onChallengeAccepted(updated); }}
+        />
+      )}
+
+      {viewTeamTarget && (
+        <TeamDetailsModal
+          teamName={viewTeamTarget.team}
+          contactFallback={viewTeamTarget.contact_no}
+          postedByFallback={viewTeamTarget.postedBy}
+          user={user}
+          token={token}
+          onClose={() => setViewTeamTarget(null)}
         />
       )}
     </div>

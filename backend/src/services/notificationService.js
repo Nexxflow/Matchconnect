@@ -502,12 +502,50 @@ const notifyChallengeCancelled = async (creatorToken, cancellerTeamName, data = 
   );
 };
 
+/**
+ * Notify all members of a team when feedback/review is submitted
+ */
+const notifyTeamOfFeedback = async (teamName, reviewerName, reviewerTeamName, rating, reviewText, data = {}) => {
+  if (!teamName) return;
+
+  try {
+    const res = await pool.query(
+      `SELECT id, fcm_token FROM users WHERE LOWER(TRIM(team_name)) = LOWER(TRIM($1))`,
+      [teamName]
+    );
+    const teammates = res.rows || [];
+    if (teammates.length === 0) return;
+
+    const userIds = teammates.map((t) => t.id);
+    const tokens = teammates.map((t) => t.fcm_token).filter(Boolean);
+
+    const fromWho = reviewerTeamName
+      ? `${reviewerName} (${reviewerTeamName})`
+      : reviewerName;
+    const title = `New Review for ${teamName}! ⭐`;
+    const snippet = reviewText.length > 70 ? `${reviewText.slice(0, 70)}...` : reviewText;
+    const body = `${fromWho} gave feedback about your team (${rating}★): "${snippet}"`;
+    const notifData = { type: "team_feedback", team_name: teamName, ...data };
+
+    console.log(`⭐ [Feedback Notification] Dispatching feedback notification to ${userIds.length} members of team "${teamName}"`);
+
+    await recordInAppNotifications(userIds, title, body, "team_feedback", notifData);
+
+    if (tokens.length > 0) {
+      await sendMulticastNotification(tokens, title, body, notifData);
+    }
+  } catch (err) {
+    console.error("❌ [Feedback Notification] Delivery error:", err.message);
+  }
+};
+
 module.exports = {
   sendNotification,
   sendMulticastNotification,
   notifyUser,
   notifyAllUsersExcept,
   notifyTeammatesOnly,
+  notifyTeamOfFeedback,
   notifyChallengeAccepted,
   notifyChallengeCancelled,
   recordInAppNotifications,

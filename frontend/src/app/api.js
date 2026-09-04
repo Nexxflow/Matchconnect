@@ -1,9 +1,20 @@
 // ─── API layer ──────────────────────────────────────────────────────────────
-// Reads VITE_API_URL from the environment (.env / .env.production) so the
-// same build can point at localhost in dev and the real deployed backend in
-// production, instead of a hardcoded host. Falls back to localhost so local
-// `npm run dev` keeps working even if a dev hasn't set up a .env yet.
-const rawApiUrl = (import.meta.env.VITE_API_URL || "http://localhost:8000/api").replace(/\/+$/, "");
+// Reads VITE_API_URL from environment (.env / .env.production).
+// In local development (localhost / 127.0.0.1), uses local backend http://localhost:8000/api
+// to ensure local code changes take effect immediately without needing cloud deployment.
+const isLocalhost =
+  typeof window !== "undefined" &&
+  (window.location.hostname === "localhost" ||
+   window.location.hostname === "127.0.0.1" ||
+   window.location.hostname.endsWith(".local"));
+
+const envApiUrl = import.meta.env.VITE_API_URL;
+const rawApiUrl = (
+  isLocalhost
+    ? "http://localhost:8000/api"
+    : (envApiUrl || "http://localhost:8000/api")
+).replace(/\/+$/, "");
+
 export const API_BASE = rawApiUrl.endsWith("/api") ? rawApiUrl : `${rawApiUrl}/api`;
 
 // ─── Auth token persistence ─────────────────────────────────────────────────
@@ -47,8 +58,11 @@ export async function apiRequest(path, { method = "GET", body, token } = {}) {
 
     if (!res.ok) {
       if (res.status === 401) {
-        console.log("⚠️ Token expired. Removing local token...");
+        console.log("⚠️ Token expired or invalid. Clearing session...");
         setStoredToken(null);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("mc:unauthorized"));
+        }
       }
 
       throw new Error(data.error || `Request failed: ${res.status}`);

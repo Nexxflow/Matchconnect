@@ -1,13 +1,36 @@
 import React, { useState, useEffect } from "react";
-import { CalendarCheck, Users, Calendar, Megaphone, MapPin, Swords, Phone, XCircle, Trophy } from "lucide-react";
+import { CalendarCheck, Users, Calendar, Megaphone, MapPin, Swords, Phone, XCircle, Trophy, Star, MessageSquare, RotateCw } from "lucide-react";
 import { apiRequest } from "../../api";
 import { C, cn, Tag, normalizePhone } from "../../utils/helpers.jsx";
+import TeamDetailsModal from "../TeamDetailsModal.jsx";
 
-function SquadSection({ token, currentUserId }) {
+function SquadSection({ token, currentUserId, user }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [team, setTeam] = useState(null);
   const [members, setMembers] = useState([]);
+  const [teamStats, setTeamStats] = useState(null);
+  const [refreshingStats, setRefreshingStats] = useState(false);
+  const [viewSelfTeam, setViewSelfTeam] = useState(false);
+
+  const effectiveTeam = team || (user?.team_name ? {
+    team_name: user.team_name,
+    village_name: user.village_name || null,
+    team_year: user.team_year || null
+  } : null);
+
+  const loadTeamStats = async (teamName) => {
+    if (!teamName) return;
+    try {
+      setRefreshingStats(true);
+      const details = await apiRequest(`/teams/details?team_name=${encodeURIComponent(teamName)}`, { token });
+      setTeamStats(details);
+    } catch {
+      // non-fatal
+    } finally {
+      setRefreshingStats(false);
+    }
+  };
 
   useEffect(() => {
     if (!token) {
@@ -22,6 +45,10 @@ function SquadSection({ token, currentUserId }) {
         if (cancelled) return;
         setTeam(data.team);
         setMembers(data.members || []);
+        const targetTeam = data.team?.team_name || user?.team_name;
+        if (targetTeam) {
+          loadTeamStats(targetTeam);
+        }
       } catch (err) {
         if (!cancelled) setError(err.message || "Could not load your squad");
       } finally {
@@ -29,12 +56,42 @@ function SquadSection({ token, currentUserId }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [token]);
+  }, [token, user?.team_name]);
+
+  useEffect(() => {
+    const activeTeamName = effectiveTeam?.team_name;
+    if (!activeTeamName) return;
+
+    const onReviewSubmitted = (e) => {
+      if (!e.detail?.team_name || e.detail.team_name.toLowerCase() === activeTeamName.toLowerCase()) {
+        loadTeamStats(activeTeamName);
+      }
+    };
+    window.addEventListener("mc:review_submitted", onReviewSubmitted);
+
+    const onFocus = () => {
+      loadTeamStats(activeTeamName);
+    };
+    window.addEventListener("focus", onFocus);
+
+    // Auto-sync team reviews every 15s when active so new feedback from other users appears automatically
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        loadTeamStats(activeTeamName);
+      }
+    }, 15000);
+
+    return () => {
+      window.removeEventListener("mc:review_submitted", onReviewSubmitted);
+      window.removeEventListener("focus", onFocus);
+      clearInterval(interval);
+    };
+  }, [effectiveTeam?.team_name, token]);
 
   if (loading) return <div className="text-sm text-center py-8" style={{ color: "#4a5a4a" }}>Loading squad...</div>;
   if (error) return <div className="text-sm text-center py-8" style={{ color: "#4a5a4a" }}>{error}</div>;
 
-  if (!team) {
+  if (!effectiveTeam) {
     return (
       <div className="rounded-2xl p-8 text-center border border-dashed" style={{ borderColor: "#2a2a2a", backgroundColor: "#131413" }}>
         <div className="text-4xl mb-3 opacity-60">🧑‍🤝‍🧑</div>
@@ -47,12 +104,164 @@ function SquadSection({ token, currentUserId }) {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="rounded-2xl p-4" style={{ backgroundColor: "#151715", border: "1px solid #2a2a2a" }}>
-        <div className="text-sm font-semibold text-white">{team.team_name}</div>
-        <div className="text-xs mt-0.5" style={{ color: "#6b7a6b" }}>{team.village_name} · Formed {team.team_year}</div>
-        <div className="text-xs mt-1" style={{ color: "#4a5a4a" }}>{members.length} member{members.length !== 1 ? "s" : ""}</div>
+    <div className="space-y-4">
+      {/* Bright & Premium Team Header with Self View Team Button */}
+      <div
+        className="rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-4 transition-all"
+        style={{
+          background: "linear-gradient(135deg, rgba(34, 197, 94, 0.14) 0%, #141714 100%)",
+          border: "1px solid rgba(34, 197, 94, 0.35)",
+          boxShadow: "0 8px 24px rgba(0,0,0,0.35)"
+        }}
+      >
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div
+            className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-lg shrink-0 shadow-lg"
+            style={{ background: "linear-gradient(135deg,#166534,#14532d)", border: "1px solid #22c55e" }}
+          >
+            {effectiveTeam.team_name ? effectiveTeam.team_name.split(" ").map(w => w[0]).slice(0, 2).join("") : "TM"}
+          </div>
+
+          <div className="min-w-0">
+            <div className="text-xl font-black text-white tracking-wide truncate drop-shadow-sm flex items-center gap-2">
+              <span>{effectiveTeam.team_name}</span>
+              {teamStats?.rating != null && (
+                <span className="flex items-center gap-1 text-xs font-bold text-amber-400 px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/20 shrink-0">
+                  <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                  <span>{teamStats.rating.toFixed(1)}</span>
+                </span>
+              )}
+            </div>
+            <div className="text-xs mt-0.5 text-neutral-300 font-medium flex items-center gap-2 flex-wrap">
+              {effectiveTeam.village_name && <span>📍 {effectiveTeam.village_name}</span>}
+              {effectiveTeam.team_year && <span>· 🗓️ Formed {effectiveTeam.team_year}</span>}
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30">
+                {members.length} member{members.length !== 1 ? "s" : ""}
+              </span>
+              {teamStats?.reviews?.length > 0 && (
+                <span className="text-[11px] text-neutral-400">
+                  · {teamStats.reviews.length} feedback review{teamStats.reviews.length !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Self View Team Button */}
+        <button
+          type="button"
+          onClick={() => setViewSelfTeam(true)}
+          className="px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-lg hover:scale-105 active:scale-95"
+          style={{
+            backgroundColor: "#22c55e",
+            color: "#051305",
+            boxShadow: "0 4px 14px rgba(34, 197, 94, 0.35)",
+          }}
+          title="View your team performance, rating & feedback reviews"
+        >
+          <Users className="w-3.5 h-3.5" />
+          <span>View Team</span>
+        </button>
       </div>
+
+      {/* Team Reviews & Feedback Card */}
+      <div className="rounded-2xl p-4 sm:p-5" style={{ backgroundColor: "#151815", border: "1px solid #242a24" }}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-green-400" />
+            <h4 className="text-sm font-bold text-white">
+              Team Reviews & Feedback ({teamStats?.reviews?.length || 0})
+            </h4>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => loadTeamStats(effectiveTeam.team_name)}
+              disabled={refreshingStats}
+              className="p-1 rounded-lg hover:bg-neutral-800 text-neutral-400 hover:text-green-400 transition-colors"
+              title="Refresh reviews"
+            >
+              <RotateCw className={cn("w-3.5 h-3.5", refreshingStats && "animate-spin text-green-400")} />
+            </button>
+            {teamStats?.rating != null && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-400/10 border border-amber-400/20 text-xs font-bold text-amber-400">
+                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                <span>{teamStats.rating.toFixed(1)}</span>
+                <span className="text-[10px] text-neutral-400 font-normal">/ 5.0</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {(!teamStats?.reviews || teamStats.reviews.length === 0) ? (
+          <div className="rounded-xl p-4 text-center text-xs" style={{ backgroundColor: "#111311", border: "1px dashed #282d28", color: "#6b7a6b" }}>
+            <MessageSquare className="w-5 h-5 mx-auto mb-1.5 opacity-40 text-neutral-500" />
+            <p className="font-semibold text-neutral-300">No feedback reviews yet for {effectiveTeam.team_name}</p>
+            <p className="mt-0.5 text-[11px] text-neutral-500">When opponents review your team in Find Match, their feedback reviews and ratings will show here.</p>
+          </div>
+        ) : (
+          <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+            {teamStats.reviews.map(r => (
+              <div
+                key={r.id}
+                className="rounded-xl p-3 transition-colors"
+                style={{ backgroundColor: "#111311", border: "1px solid #222622" }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs bg-green-900/60 border border-green-700/50">
+                      {(r.reviewer_name || "P")[0].toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-white leading-tight">
+                        {r.reviewer_name || "Cricket Player"}
+                        {r.reviewer_team_name && (
+                          <span className="font-normal text-neutral-400 text-[11px] ml-1.5">
+                            ({r.reviewer_team_name})
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-neutral-500 mt-0.5">
+                        {r.created_at
+                          ? new Date(r.created_at).toLocaleString("en-IN", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                              hour12: true,
+                              timeZone: "Asia/Kolkata"
+                            })
+                          : "Recent"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 text-xs font-bold text-amber-400 shrink-0">
+                    <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                    <span>{Number(r.rating).toFixed(1)}</span>
+                  </div>
+                </div>
+
+                <p className="text-xs text-neutral-300 mt-2 pl-9 leading-relaxed italic border-l border-green-500/30">
+                  "{r.review_text}"
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {viewSelfTeam && (
+        <TeamDetailsModal
+          teamName={effectiveTeam.team_name}
+          user={user}
+          token={token}
+          contactFallback={members.find(m => m.id === currentUserId)?.phone || user?.phone}
+          postedByFallback={members.find(m => m.id === currentUserId)?.name || user?.name}
+          onClose={() => setViewSelfTeam(false)}
+        />
+      )}
       <div className="rounded-2xl overflow-hidden border divide-y" style={{ borderColor: "#2a2a2a" }}>
         {members.map(m => (
           <div key={m.id} className="flex items-center gap-3 px-4 py-3" style={{ backgroundColor: "#161616" }}>
@@ -223,7 +432,7 @@ export default function MyTeamTab({
         </div>
       )}
 
-      {activeSection === "squad" && <SquadSection token={token} currentUserId={user?.id} />}
+      {activeSection === "squad" && <SquadSection token={token} currentUserId={user?.id} user={user} />}
 
       {activeSection === "schedule" && (
         <section className="space-y-6">

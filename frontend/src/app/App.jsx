@@ -38,8 +38,10 @@ function normalizeChallenge(c) {
   return {
     id: c.id,
     team: c.team_name,
+    team_name: c.team_name,
     contact_no: c.contact_no,
     postedBy: c.posted_by_name || c.creator_name || null,
+    creator_id: c.creator_id,
     postedAt: c.created_at || null,
     format: c.format,
     date: c.match_date,
@@ -50,7 +52,16 @@ function normalizeChallenge(c) {
     groundLng: c.ground_lng != null ? Number(c.ground_lng) : null,
     note: c.note || "",
     urgent: !!c.urgent,
-    rating: 0,
+    rating: c.team_rating != null ? Number(c.team_rating) : (c.rating ? Number(c.rating) : 5.0),
+    reliabilityScore: c.reliability_score != null ? Number(c.reliability_score) : 5.0,
+    reviewsCount: Number(c.reviews_count) || 0,
+    latestReview: c.latest_review || (c.latest_review_text ? {
+      reviewer_name: c.latest_reviewer_name || "Cricket Player",
+      reviewer_team_name: c.latest_reviewer_team_name || null,
+      rating: c.latest_review_rating != null ? Number(c.latest_review_rating) : 5.0,
+      review_text: c.latest_review_text,
+      created_at: c.latest_review_created_at
+    } : null),
     wins: 0,
     losses: 0
   };
@@ -370,6 +381,10 @@ export default function App() {
       }
     } catch (err) {
       console.warn("⚠️ [Frontend Notification] Could not load notifications:", err.message);
+      if (err.message && (err.message.includes("401") || err.message.includes("Invalid or expired token"))) {
+        setAuth({ token: null, user: null });
+        setStoredToken(null);
+      }
     }
   }, []);
 
@@ -445,6 +460,11 @@ export default function App() {
         };
         setPushNotifications((prev) => [newNotif, ...prev]);
 
+        // Automatically update challenges and reviews if feedback or challenge notification arrives
+        if (type === "team_feedback" || type === "new_challenge" || type === "challenge_accepted" || type === "challenge_cancelled") {
+          refreshChallenges();
+        }
+
         // Browser native Web Notification (tagged to deduplicate)
         if ("Notification" in window && Notification.permission === "granted") {
           try {
@@ -512,6 +532,51 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const handleUnauthorized = () => {
+      setAuth({ token: null, user: null });
+      setStoredToken(null);
+    };
+    window.addEventListener("mc:unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("mc:unauthorized", handleUnauthorized);
+  }, []);
+
+  const refreshChallenges = async () => {
+    try {
+      const res = await apiRequest("/challenges", { token: auth.token });
+      if (res?.challenges) {
+        setChallenges(res.challenges);
+      }
+    } catch {
+      // non-fatal
+    }
+  };
+
+  useEffect(() => {
+    const handleReviewSubmitted = () => {
+      refreshChallenges();
+    };
+    window.addEventListener("mc:review_submitted", handleReviewSubmitted);
+
+    const onFocus = () => {
+      refreshChallenges();
+    };
+    window.addEventListener("focus", onFocus);
+
+    // Periodically sync challenges & reviews every 15s so all users see feedback updates live
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        refreshChallenges();
+      }
+    }, 15000);
+
+    return () => {
+      window.removeEventListener("mc:review_submitted", handleReviewSubmitted);
+      window.removeEventListener("focus", onFocus);
+      clearInterval(interval);
+    };
+  }, [auth.token]);
+
+  useEffect(() => {
     if (resetToken) {
       setAuthChecked(true);
       return;
@@ -532,6 +597,7 @@ export default function App() {
         registerPushNotifications(token);
       } catch {
         setStoredToken(null);
+        setAuth({ token: null, user: null });
       } finally {
         if (!cancelled) setAuthChecked(true);
       }

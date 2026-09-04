@@ -66,8 +66,46 @@ async function connectWithRetry(retries = 3, delayMs = 2000) {
           CREATE INDEX IF NOT EXISTS idx_in_app_notifs_user_created ON in_app_notifications(user_id, created_at DESC);
         `).catch(() => {});
         console.log("✅ in_app_notifications table ready (user_id TEXT, indexed)");
+
+        // Team stats, cancellations, acceptances & feedback reviews tables
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS challenge_acceptances (
+            id SERIAL PRIMARY KEY,
+            challenge_id UUID,
+            accepted_by_user_id INTEGER,
+            accepted_by_team_name VARCHAR(120),
+            creator_team_name VARCHAR(120),
+            created_at TIMESTAMPTZ DEFAULT now()
+          );
+
+          CREATE TABLE IF NOT EXISTS challenge_cancellations (
+            id SERIAL PRIMARY KEY,
+            challenge_id UUID,
+            cancelled_by_user_id INTEGER,
+            cancelled_by_team_name VARCHAR(120),
+            created_at TIMESTAMPTZ DEFAULT now()
+          );
+
+          CREATE TABLE IF NOT EXISTS team_reviews (
+            id SERIAL PRIMARY KEY,
+            team_name VARCHAR(120) NOT NULL,
+            reviewer_user_id INTEGER,
+            reviewer_name VARCHAR(120),
+            reviewer_team_name VARCHAR(120),
+            rating NUMERIC(2,1) NOT NULL,
+            review_text TEXT NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT now()
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_team_reviews_team ON team_reviews(team_name);
+          CREATE INDEX IF NOT EXISTS idx_cancellations_team ON challenge_cancellations(cancelled_by_team_name);
+          CREATE INDEX IF NOT EXISTS idx_acceptances_team ON challenge_acceptances(accepted_by_team_name);
+
+          ALTER TABLE teams ADD COLUMN IF NOT EXISTS created_by INTEGER;
+        `);
+        console.log("✅ challenge_acceptances, challenge_cancellations, and team_reviews tables ready");
       } catch (tblErr) {
-        console.error("❌ in_app_notifications table creation error in db.js:", tblErr.message);
+        console.error("❌ database tables creation error in db.js:", tblErr.message);
       }
 
       return true;

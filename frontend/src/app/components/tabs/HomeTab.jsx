@@ -73,14 +73,44 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-semibold text-white truncate">{req.team}</div>
-                        {(req.rating > 0 || req.wins > 0 || req.losses > 0) && (
-                          <div className="flex items-center gap-1">
+                        {(req.rating > 0 || req.reviewsCount > 0) && (
+                          <div className="flex items-center gap-1 mt-0.5">
                             <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                            <span className="text-xs" style={{ color: "#6b7a6b" }}>{req.rating} · W{req.wins}/L{req.losses}</span>
+                            <span className="text-xs font-bold text-amber-400">{req.rating.toFixed(1)}</span>
+                            {req.reviewsCount > 0 && (
+                              <span className="text-[10px] text-neutral-400">({req.reviewsCount} review{req.reviewsCount !== 1 ? "s" : ""})</span>
+                            )}
                           </div>
                         )}
                       </div>
                     </div>
+                    {req.latestReview && (
+                      <div className="mt-2 p-2 rounded-xl bg-[#0f120f] border border-[#222922] text-[11px]">
+                        <div className="flex items-center justify-between gap-1 text-[10px] text-neutral-400 mb-0.5">
+                          <span className="font-semibold text-neutral-200 truncate flex items-center gap-1">
+                            <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400 shrink-0" />
+                            <span>{Number(req.latestReview.rating || 5.0).toFixed(1)}★</span>
+                            <span>by {req.latestReview.reviewer_name}</span>
+                            {req.latestReview.reviewer_team_name ? ` (${req.latestReview.reviewer_team_name})` : ""}:
+                          </span>
+                          <span className="shrink-0 text-neutral-500 text-[9px]">
+                            {req.latestReview.created_at
+                              ? new Date(req.latestReview.created_at).toLocaleString("en-IN", {
+                                  day: "numeric",
+                                  month: "short",
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                  hour12: true,
+                                  timeZone: "Asia/Kolkata"
+                                })
+                              : "Recent"}
+                          </span>
+                        </div>
+                        <p className="text-neutral-300 italic line-clamp-1 pl-2 border-l border-green-500/40">
+                          "{req.latestReview.review_text}"
+                        </p>
+                      </div>
+                    )}
                   </div>
                   <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-green-500 flex items-center justify-center shrink-0 self-center" style={{ backgroundColor: "rgba(34,197,94,0.1)" }}>
                     <span className="text-green-400 font-bold text-[10px] sm:text-xs">VS</span>

@@ -16,14 +16,80 @@ const {
 // ============================================================
 const listChallenges = asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT c.*, u.name AS creator_name,
-            g.latitude AS ground_lat, g.longitude AS ground_lng
+    `SELECT c.*, 
+            u.name AS creator_name,
+            g.latitude AS ground_lat, 
+            g.longitude AS ground_lng,
+            COALESCE(rs.reviews_count, 0) AS reviews_count,
+            rs.reviews_avg,
+            COALESCE(acc.accepted_count, 0) AS accepted_count,
+            COALESCE(can.cancelled_count, 0) AS cancelled_count,
+            lr.reviewer_name AS latest_reviewer_name,
+            lr.reviewer_team_name AS latest_reviewer_team_name,
+            lr.rating AS latest_review_rating,
+            lr.review_text AS latest_review_text,
+            lr.created_at AS latest_review_created_at
      FROM challenges c
      LEFT JOIN users u ON u.id = c.creator_id
      LEFT JOIN grounds g ON g.id = c.ground_id
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS reviews_count,
+              ROUND(AVG(rating), 1)::float AS reviews_avg
+       FROM team_reviews
+       WHERE REGEXP_REPLACE(LOWER(TRIM(team_name)), '\s+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '\s+', ' ', 'g')
+     ) rs ON true
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS accepted_count
+       FROM challenges
+       WHERE REGEXP_REPLACE(LOWER(TRIM(accepted_by_team_name)), '\s+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '\s+', ' ', 'g')
+     ) acc ON true
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS cancelled_count
+       FROM challenge_cancellations
+       WHERE REGEXP_REPLACE(LOWER(TRIM(cancelled_by_team_name)), '\s+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '\s+', ' ', 'g')
+     ) can ON true
+     LEFT JOIN LATERAL (
+       SELECT id AS latest_review_id, reviewer_name, reviewer_team_name, rating::float AS rating, review_text, created_at
+       FROM team_reviews
+       WHERE REGEXP_REPLACE(LOWER(TRIM(team_name)), '\s+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '\s+', ' ', 'g')
+       ORDER BY created_at DESC
+       LIMIT 1
+     ) lr ON true
      ORDER BY c.created_at DESC`
   );
-  res.json({ challenges: rows });
+
+  const challengesWithStats = rows.map(c => {
+    const acc = Number(c.accepted_count) || 0;
+    const can = Number(c.cancelled_count) || 0;
+    let reliability = 5.0;
+    if (can > 0) {
+      const ratio = acc === 0 ? Math.max(0.2, 1.0 - (can * 0.25)) : acc / (acc + can * 1.25);
+      reliability = Math.max(1.0, Math.min(5.0, 5.0 * ratio));
+    } else if (acc > 0) {
+      reliability = 5.0;
+    }
+    let overallRating = reliability;
+    if (c.reviews_count > 0 && c.reviews_avg != null) {
+      overallRating = Number(((reliability * 0.5) + (Number(c.reviews_avg) * 0.5)).toFixed(1));
+    } else {
+      overallRating = Number(reliability.toFixed(1));
+    }
+    return {
+      ...c,
+      team_rating: overallRating,
+      reliability_score: Number(reliability.toFixed(1)),
+      latest_review: (c.latest_review_text || c.latest_reviewer_name) ? {
+        id: c.latest_review_id,
+        reviewer_name: c.latest_reviewer_name || "Cricket Player",
+        reviewer_team_name: c.latest_reviewer_team_name || null,
+        rating: c.latest_review_rating != null ? Number(c.latest_review_rating) : 5.0,
+        review_text: c.latest_review_text || "",
+        created_at: c.latest_review_created_at || null,
+      } : null,
+    };
+  });
+
+  res.json({ challenges: challengesWithStats });
 });
 
 // ============================================================
@@ -168,6 +234,13 @@ const acceptChallenge = asyncHandler(async (req, res) => {
     [team_name, contact_no, userId, id]
   );
 
+  // Log acceptance for team statistics and reliability rating boost
+  await pool.query(
+    `INSERT INTO challenge_acceptances (challenge_id, accepted_by_user_id, accepted_by_team_name, creator_team_name)
+     VALUES ($1, $2, $3, $4)`,
+    [id, userId, team_name, challenge.team_name]
+  ).catch(err => console.error("Could not record challenge acceptance:", err.message));
+
   console.log(`🤝 [Challenge Accepted] Challenge #${id} accepted by User #${userId} (${team_name}). Dispatching targeted notifications to teammates and creator...`);
 
   // 1. Notify the challenge creator who posted the challenge
@@ -215,6 +288,24 @@ const cancelChallenge = asyncHandler(async (req, res) => {
   if (cRes.rows.length === 0) return res.status(404).json({ error: "Challenge not found" });
   const challenge = cRes.rows[0];
 
+  // Determine which team cancelled the challenge
+  let cancellingTeamName = challenge.accepted_by_team_name;
+  if (challenge.creator_id === userId) {
+    cancellingTeamName = challenge.team_name;
+  } else if (!cancellingTeamName) {
+    const uRes = await pool.query(`SELECT team_name FROM users WHERE id = $1`, [userId]);
+    cancellingTeamName = uRes.rows[0]?.team_name || challenge.accepted_by_team_name || challenge.team_name;
+  }
+
+  // Record cancellation for team reliability rating deduction
+  if (cancellingTeamName) {
+    await pool.query(
+      `INSERT INTO challenge_cancellations (challenge_id, cancelled_by_user_id, cancelled_by_team_name)
+       VALUES ($1, $2, $3)`,
+      [id, userId, cancellingTeamName]
+    ).catch(err => console.error("Could not record challenge cancellation:", err.message));
+  }
+
   const updated = await pool.query(
     `UPDATE challenges
      SET status = 'open',
@@ -229,7 +320,7 @@ const cancelChallenge = asyncHandler(async (req, res) => {
   const creatorRes = await pool.query(`SELECT fcm_token FROM users WHERE id = $1`, [challenge.creator_id]);
   const creatorToken = creatorRes.rows[0]?.fcm_token;
   if (creatorToken) {
-    await notifyChallengeCancelled(creatorToken, challenge.accepted_by_team_name, { challenge_id: String(id) });
+    await notifyChallengeCancelled(creatorToken, challenge.accepted_by_team_name || cancellingTeamName, { challenge_id: String(id) });
   }
 
   res.json({ ok: true, challenge: updated.rows[0] });

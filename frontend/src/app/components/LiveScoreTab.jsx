@@ -19,7 +19,18 @@ import { useEffect, useState, useCallback, useRef } from "react";
    GET  /api/matches/:id/scoreboard
    ============================================================================ */
 
-const rawLiveScoreUrl = (import.meta.env.VITE_API_URL || "http://localhost:8000/api").replace(/\/+$/, "");
+const isLocalHostLive =
+  typeof window !== "undefined" &&
+  (window.location.hostname === "localhost" ||
+   window.location.hostname === "127.0.0.1" ||
+   window.location.hostname.endsWith(".local"));
+
+const envLiveUrl = import.meta.env.VITE_API_URL;
+const rawLiveScoreUrl = (
+  isLocalHostLive
+    ? "http://localhost:8000/api"
+    : (envLiveUrl || "http://localhost:8000/api")
+).replace(/\/+$/, "");
 const API_BASE = rawLiveScoreUrl.endsWith("/api") ? rawLiveScoreUrl : `${rawLiveScoreUrl}/api`;
 
 async function api(path, options) {

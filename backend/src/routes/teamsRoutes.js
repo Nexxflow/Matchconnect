@@ -1,10 +1,11 @@
 const express = require("express");
 const router = express.Router();
-const { getMyTeam } = require("../controllers/teamsController");
+const { getMyTeam, getTeamDetails, addTeamReview } = require("../controllers/teamsController");
 const { authRequired } = require("../middleware/auth");
 
 router.get("/mine", authRequired, getMyTeam);
-
-// ...mount your existing team routes here too if this file doesn't already exist elsewhere
+router.get("/details", getTeamDetails);
+router.get("/:teamName/details", getTeamDetails);
+router.post("/reviews", authRequired, addTeamReview);
 
 module.exports = router;

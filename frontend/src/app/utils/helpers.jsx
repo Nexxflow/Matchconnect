@@ -55,6 +55,13 @@ export function normalizePhone(p) {
   return digits.length > 10 ? digits.slice(-10) : digits;
 }
 
+export function formatPhoneDisplay(phone) {
+  if (!phone) return "";
+  const digits = String(phone).replace(/\D/g, "");
+  if (digits.length !== 10) return String(phone);
+  return `${digits.slice(0, 5)} ${digits.slice(5)}`;
+}
+
 export function formatGroundPrice(value) {
   if (value === null || value === undefined || value === "") return "—";
   const numeric = Number(value);
