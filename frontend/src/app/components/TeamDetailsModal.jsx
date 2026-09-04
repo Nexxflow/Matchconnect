@@ -112,6 +112,15 @@ export default function TeamDetailsModal({
 
   useEffect(() => {
     fetchTeamDetails();
+
+    const onReviewUpdated = (e) => {
+      const incomingTeam = e.detail?.team_name;
+      if (!incomingTeam || incomingTeam.trim().toLowerCase() === String(teamName || "").trim().toLowerCase()) {
+        fetchTeamDetails();
+      }
+    };
+    window.addEventListener("mc:review_submitted", onReviewUpdated);
+    return () => window.removeEventListener("mc:review_submitted", onReviewUpdated);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamName]);
 
@@ -383,11 +392,12 @@ export default function TeamDetailsModal({
                   </h3>
                 </div>
 
-                {isOwnTeam ? (
-                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-neutral-800 text-neutral-400 border border-neutral-700">
-                    Your Team Profile
-                  </span>
-                ) : (
+                <div className="flex items-center gap-2">
+                  {isOwnTeam && (
+                    <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-neutral-800 text-neutral-400 border border-neutral-700">
+                      Your Team Profile
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -398,9 +408,9 @@ export default function TeamDetailsModal({
                     className="px-3 py-1.5 rounded-xl text-xs font-semibold text-green-400 bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 transition-all flex items-center gap-1.5"
                   >
                     <ThumbsUp className="w-3.5 h-3.5" />
-                    <span>{showReviewForm ? "Cancel Review" : "Add Review"}</span>
+                    <span>{showReviewForm ? "Cancel Review" : (isOwnTeam ? "Add Team Note / Review" : "Add Review")}</span>
                   </button>
-                )}
+                </div>
               </div>
 
               {/* Review submission form */}
@@ -469,7 +479,11 @@ export default function TeamDetailsModal({
                 >
                   <MessageSquare className="w-6 h-6 mx-auto mb-2 opacity-50 text-neutral-500" />
                   <p className="font-semibold text-neutral-300">No reviews yet for {teamName}</p>
-                  <p className="mt-1 text-neutral-500">Be the first team to leave a feedback review!</p>
+                  <p className="mt-1 text-neutral-500">
+                    {isOwnTeam
+                      ? "Feedback reviews and ratings from opponents in Find Match will appear here."
+                      : "Be the first team to leave a feedback review!"}
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">

@@ -10,7 +10,9 @@ const listTournaments = asyncHandler(async (req, res) => {
        t.*,
        ct.name AS creator_team_name,
        COALESCE(reg.team_count, 0)::int   AS team_count,
-       GREATEST(t.max_teams - COALESCE(reg.team_count, 0), 0)::int AS spots_left
+       GREATEST(t.max_teams - COALESCE(reg.team_count, 0), 0)::int AS spots_left,
+       COALESCE(mt.matches_count, 0)::int AS matches_count,
+       COALESCE(mt.completed_count, 0)::int AS completed_count
      FROM tournaments t
      LEFT JOIN teams ct ON ct.id = t.creator_team_id
      LEFT JOIN (
@@ -19,6 +21,14 @@ const listTournaments = asyncHandler(async (req, res) => {
        WHERE status = 'confirmed'
        GROUP BY tournament_id
      ) reg ON reg.tournament_id = t.id
+     LEFT JOIN (
+       SELECT 
+         tournament_id, 
+         COUNT(*)::int AS matches_count,
+         COUNT(*) FILTER (WHERE LOWER(status) = 'completed')::int AS completed_count
+       FROM matches
+       GROUP BY tournament_id
+     ) mt ON mt.tournament_id = t.id
      ORDER BY t.start_date ASC NULLS LAST, t.created_at ASC`
   );
   res.json({ tournaments: rows });
@@ -46,14 +56,21 @@ const getTournament = asyncHandler(async (req, res) => {
   );
 
   const matchesRes = await pool.query(
-    `SELECT m.*, t1.name AS team1_name, t2.name AS team2_name
+    `SELECT m.*, 
+            COALESCE(m.team1_name, t1.name, 'Team 1') AS team1_name, 
+            COALESCE(m.team2_name, t2.name, 'Team 2') AS team2_name,
+            COALESCE(m.mom, m.man_of_the_match) AS mom
      FROM matches m
-     JOIN teams t1 ON t1.id = m.team1_id
-     JOIN teams t2 ON t2.id = m.team2_id
+     LEFT JOIN teams t1 ON t1.id = m.team1_id
+     LEFT JOIN teams t2 ON t2.id = m.team2_id
      WHERE m.tournament_id = $1
-     ORDER BY m.created_at ASC`,
+     ORDER BY m.match_date ASC NULLS LAST, m.created_at ASC`,
     [id]
   );
+
+  const completedCount = matchesRes.rows.filter(
+    (m) => m.status && m.status.toLowerCase() === "completed"
+  ).length;
 
   res.json({
     tournament: {
@@ -62,6 +79,9 @@ const getTournament = asyncHandler(async (req, res) => {
       spots_left: Math.max(tournament.max_teams - teamsRes.rows.length, 0),
       teams: teamsRes.rows,
       matches: matchesRes.rows,
+      matches_count: matchesRes.rows.length,
+      completed_count: completedCount,
+      pending_count: matchesRes.rows.length - completedCount,
     },
   });
 });
@@ -575,6 +595,339 @@ const deleteTournament = asyncHandler(async (req, res) => {
   res.json({ message: "Tournament deleted successfully" });
 });
 
+// Helper to verify if user is tournament creator or a member of creator's team,
+// or if tournament is open/seeded without a specific creator.
+async function canUserManageTournament(userId, tournament) {
+  if (!userId || !tournament) return false;
+
+  // If tournament has no specific created_by (e.g. seeded/public tournaments like Monsoon Mavericks),
+  // any logged-in user can add matches and scorecards!
+  if (!tournament.created_by) return true;
+
+  // 1. Direct creator
+  if (String(tournament.created_by) === String(userId)) return true;
+
+  // 2. Teammate check via creator_team_id
+  if (tournament.creator_team_id) {
+    const userRes = await pool.query(
+      `SELECT id, team_id, team_name FROM users WHERE id = $1`,
+      [userId]
+    );
+    const user = userRes.rows[0];
+
+    if (user?.team_id && String(user.team_id) === String(tournament.creator_team_id)) {
+      return true;
+    }
+
+    const teamRes = await pool.query(
+      `SELECT id, name, created_by, owner_id FROM teams WHERE id = $1`,
+      [tournament.creator_team_id]
+    );
+    const team = teamRes.rows[0];
+    if (team) {
+      if (String(team.created_by) === String(userId) || String(team.owner_id) === String(userId)) {
+        return true;
+      }
+      if (user?.team_name && team.name && user.team_name.trim().toLowerCase() === team.name.trim().toLowerCase()) {
+        return true;
+      }
+    }
+  }
+
+  // 3. Teammate check by comparing creator user's team with current user's team
+  if (tournament.created_by) {
+    const creatorUserRes = await pool.query(
+      `SELECT id, team_id, team_name FROM users WHERE id = $1`,
+      [tournament.created_by]
+    );
+    const creatorUser = creatorUserRes.rows[0];
+    const currUserRes = await pool.query(
+      `SELECT id, team_id, team_name FROM users WHERE id = $1`,
+      [userId]
+    );
+    const currUser = currUserRes.rows[0];
+
+    if (creatorUser && currUser) {
+      if (creatorUser.team_id && currUser.team_id && String(creatorUser.team_id) === String(currUser.team_id)) {
+        return true;
+      }
+      if (
+        creatorUser.team_name &&
+        currUser.team_name &&
+        creatorUser.team_name.trim().toLowerCase() === currUser.team_name.trim().toLowerCase()
+      ) {
+        return true;
+      }
+    }
+  }
+
+  // 4. Check if user is a member of any registered team in this tournament
+  try {
+    const regRes = await pool.query(
+      `SELECT tr.id FROM tournament_registrations tr
+       LEFT JOIN users u ON u.id = $1
+       WHERE tr.tournament_id = $2
+         AND (
+           tr.user_id = $1
+           OR (u.team_id IS NOT NULL AND tr.team_id = u.team_id)
+           OR (u.team_name IS NOT NULL AND LOWER(TRIM(tr.team_name)) = LOWER(TRIM(u.team_name)))
+         )
+       LIMIT 1`,
+      [userId, tournament.id]
+    );
+    if (regRes.rows.length > 0) return true;
+  } catch {}
+
+  return false;
+}
+
+// GET /api/tournaments/:id/matches
+const getTournamentMatches = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const tRes = await pool.query(`SELECT * FROM tournaments WHERE id = $1`, [id]);
+  if (tRes.rows.length === 0) return res.status(404).json({ error: "Tournament not found" });
+  const tournament = tRes.rows[0];
+
+  const matchesRes = await pool.query(
+    `SELECT m.*, 
+            COALESCE(m.team1_name, t1.name, 'Team 1') AS team1_name, 
+            COALESCE(m.team2_name, t2.name, 'Team 2') AS team2_name,
+            COALESCE(m.mom, m.man_of_the_match) AS mom
+     FROM matches m
+     LEFT JOIN teams t1 ON t1.id = m.team1_id
+     LEFT JOIN teams t2 ON t2.id = m.team2_id
+     WHERE m.tournament_id = $1
+     ORDER BY m.match_date ASC NULLS LAST, m.created_at ASC`,
+    [id]
+  );
+
+  const canManage = req.user?.id ? await canUserManageTournament(req.user.id, tournament) : false;
+  const total = matchesRes.rows.length;
+  const completed = matchesRes.rows.filter((m) => m.status && m.status.toLowerCase() === "completed").length;
+  const pending = total - completed;
+
+  res.json({
+    tournament_id: id,
+    total_matches: total,
+    completed_matches: completed,
+    pending_matches: pending,
+    can_manage: canManage,
+    matches: matchesRes.rows,
+  });
+});
+
+// POST /api/tournaments/:id/matches
+const createTournamentMatch = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const {
+    team1_name,
+    team2_name,
+    team1_id = null,
+    team2_id = null,
+    status = "scheduled",
+    result = null,
+    mom = null,
+    scoreboard_url = null,
+    scoreboard_name = null,
+    venue = null,
+    match_date = null,
+    round = null,
+    overs_limit = 20,
+  } = req.body;
+
+  if (!team1_name || !team1_name.trim() || !team2_name || !team2_name.trim()) {
+    return res.status(400).json({ error: "Both Team 1 and Team 2 names are required" });
+  }
+
+  const tRes = await pool.query(`SELECT * FROM tournaments WHERE id = $1`, [id]);
+  if (tRes.rows.length === 0) return res.status(404).json({ error: "Tournament not found" });
+  const tournament = tRes.rows[0];
+
+  const canManage = await canUserManageTournament(req.user.id, tournament);
+  if (!canManage) {
+    return res.status(403).json({
+      error: "Only the tournament creator or creator team members can add matches",
+    });
+  }
+
+  let resolvedTeam1Id = team1_id;
+  let resolvedTeam2Id = team2_id;
+
+  if (!resolvedTeam1Id && team1_name) {
+    const t1 = await pool.query(
+      `SELECT id FROM teams WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
+      [team1_name.trim()]
+    );
+    if (t1.rows.length > 0) resolvedTeam1Id = t1.rows[0].id;
+  }
+  if (!resolvedTeam2Id && team2_name) {
+    const t2 = await pool.query(
+      `SELECT id FROM teams WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
+      [team2_name.trim()]
+    );
+    if (t2.rows.length > 0) resolvedTeam2Id = t2.rows[0].id;
+  }
+
+  const insertRes = await pool.query(
+    `INSERT INTO matches
+       (tournament_id, team1_id, team2_id, team1_name, team2_name, status, result, mom, man_of_the_match, scoreboard_url, scoreboard_name, venue, match_date, round, overs_limit, created_by)
+     VALUES
+       ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14, $15)
+     RETURNING *`,
+    [
+      id,
+      resolvedTeam1Id,
+      resolvedTeam2Id,
+      team1_name.trim(),
+      team2_name.trim(),
+      status || "scheduled",
+      result ? result.trim() : null,
+      mom ? mom.trim() : null,
+      scoreboard_url,
+      scoreboard_name,
+      venue ? venue.trim() : (tournament.venue || null),
+      match_date ? new Date(match_date) : null,
+      round ? round.trim() : null,
+      Number(overs_limit) || 20,
+      req.user.id,
+    ]
+  );
+
+  const match = insertRes.rows[0];
+
+  res.status(201).json({
+    message: "Tournament match created successfully",
+    match: {
+      ...match,
+      team1_name: team1_name.trim(),
+      team2_name: team2_name.trim(),
+      mom: mom ? mom.trim() : null,
+    },
+  });
+});
+
+// PUT /api/tournaments/:id/matches/:matchId
+const updateTournamentMatch = asyncHandler(async (req, res) => {
+  const { id, matchId } = req.params;
+  const {
+    team1_name,
+    team2_name,
+    team1_id = null,
+    team2_id = null,
+    status,
+    result,
+    mom,
+    scoreboard_url,
+    scoreboard_name,
+    venue,
+    match_date,
+    round,
+    overs_limit,
+  } = req.body;
+
+  const tRes = await pool.query(`SELECT * FROM tournaments WHERE id = $1`, [id]);
+  if (tRes.rows.length === 0) return res.status(404).json({ error: "Tournament not found" });
+  const tournament = tRes.rows[0];
+
+  const canManage = await canUserManageTournament(req.user.id, tournament);
+  if (!canManage) {
+    return res.status(403).json({
+      error: "Only the tournament creator or creator team members can update matches",
+    });
+  }
+
+  const mRes = await pool.query(
+    `SELECT * FROM matches WHERE id = $1 AND tournament_id = $2`,
+    [matchId, id]
+  );
+  if (mRes.rows.length === 0) return res.status(404).json({ error: "Match not found in this tournament" });
+  const existing = mRes.rows[0];
+
+  const updatedTeam1Name = team1_name !== undefined ? (team1_name ? team1_name.trim() : null) : existing.team1_name;
+  const updatedTeam2Name = team2_name !== undefined ? (team2_name ? team2_name.trim() : null) : existing.team2_name;
+  const updatedStatus = status !== undefined ? status : existing.status;
+  const updatedResult = result !== undefined ? (result ? result.trim() : null) : existing.result;
+  const updatedMom = mom !== undefined ? (mom ? mom.trim() : null) : (existing.mom || existing.man_of_the_match);
+  const updatedScoreboardUrl = scoreboard_url !== undefined ? scoreboard_url : existing.scoreboard_url;
+  const updatedScoreboardName = scoreboard_name !== undefined ? scoreboard_name : existing.scoreboard_name;
+  const updatedVenue = venue !== undefined ? (venue ? venue.trim() : null) : existing.venue;
+  const updatedDate = match_date !== undefined ? (match_date ? new Date(match_date) : null) : existing.match_date;
+  const updatedRound = round !== undefined ? (round ? round.trim() : null) : existing.round;
+  const updatedOvers = overs_limit !== undefined ? Number(overs_limit) || 20 : existing.overs_limit;
+
+  const updateRes = await pool.query(
+    `UPDATE matches
+     SET team1_name = $1,
+         team2_name = $2,
+         team1_id = COALESCE($3, team1_id),
+         team2_id = COALESCE($4, team2_id),
+         status = $5,
+         result = $6,
+         mom = $7,
+         man_of_the_match = $7,
+         scoreboard_url = $8,
+         scoreboard_name = $9,
+         venue = $10,
+         match_date = $11,
+         round = $12,
+         overs_limit = $13,
+         updated_at = now()
+     WHERE id = $14 AND tournament_id = $15
+     RETURNING *`,
+    [
+      updatedTeam1Name,
+      updatedTeam2Name,
+      team1_id,
+      team2_id,
+      updatedStatus,
+      updatedResult,
+      updatedMom,
+      updatedScoreboardUrl,
+      updatedScoreboardName,
+      updatedVenue,
+      updatedDate,
+      updatedRound,
+      updatedOvers,
+      matchId,
+      id,
+    ]
+  );
+
+  res.json({
+    message: "Tournament match updated successfully",
+    match: {
+      ...updateRes.rows[0],
+      team1_name: updatedTeam1Name,
+      team2_name: updatedTeam2Name,
+      mom: updatedMom,
+    },
+  });
+});
+
+// DELETE /api/tournaments/:id/matches/:matchId
+const deleteTournamentMatch = asyncHandler(async (req, res) => {
+  const { id, matchId } = req.params;
+
+  const tRes = await pool.query(`SELECT * FROM tournaments WHERE id = $1`, [id]);
+  if (tRes.rows.length === 0) return res.status(404).json({ error: "Tournament not found" });
+  const tournament = tRes.rows[0];
+
+  const canManage = await canUserManageTournament(req.user.id, tournament);
+  if (!canManage) {
+    return res.status(403).json({
+      error: "Only the tournament creator or creator team members can delete matches",
+    });
+  }
+
+  const delRes = await pool.query(
+    `DELETE FROM matches WHERE id = $1 AND tournament_id = $2 RETURNING id`,
+    [matchId, id]
+  );
+  if (delRes.rows.length === 0) return res.status(404).json({ error: "Match not found in this tournament" });
+
+  res.json({ message: "Tournament match deleted successfully", match_id: matchId });
+});
+
 module.exports = {
   listTournaments,
   getTournament,
@@ -584,4 +937,8 @@ module.exports = {
   registerTeam,
   unregisterTeam,
   myTournaments,
+  getTournamentMatches,
+  createTournamentMatch,
+  updateTournamentMatch,
+  deleteTournamentMatch,
 };

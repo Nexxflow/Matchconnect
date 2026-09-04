@@ -36,22 +36,26 @@ const listChallenges = asyncHandler(async (req, res) => {
        SELECT COUNT(*)::int AS reviews_count,
               ROUND(AVG(rating), 1)::float AS reviews_avg
        FROM team_reviews
-       WHERE REGEXP_REPLACE(LOWER(TRIM(team_name)), '\s+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '\s+', ' ', 'g')
+       WHERE LOWER(TRIM(team_name)) = LOWER(TRIM(c.team_name))
+          OR REGEXP_REPLACE(LOWER(TRIM(team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '[[:space:]]+', ' ', 'g')
      ) rs ON true
      LEFT JOIN LATERAL (
        SELECT COUNT(*)::int AS accepted_count
        FROM challenges
-       WHERE REGEXP_REPLACE(LOWER(TRIM(accepted_by_team_name)), '\s+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '\s+', ' ', 'g')
+       WHERE LOWER(TRIM(accepted_by_team_name)) = LOWER(TRIM(c.team_name))
+          OR REGEXP_REPLACE(LOWER(TRIM(accepted_by_team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '[[:space:]]+', ' ', 'g')
      ) acc ON true
      LEFT JOIN LATERAL (
        SELECT COUNT(*)::int AS cancelled_count
        FROM challenge_cancellations
-       WHERE REGEXP_REPLACE(LOWER(TRIM(cancelled_by_team_name)), '\s+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '\s+', ' ', 'g')
+       WHERE LOWER(TRIM(cancelled_by_team_name)) = LOWER(TRIM(c.team_name))
+          OR REGEXP_REPLACE(LOWER(TRIM(cancelled_by_team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '[[:space:]]+', ' ', 'g')
      ) can ON true
      LEFT JOIN LATERAL (
        SELECT id AS latest_review_id, reviewer_name, reviewer_team_name, rating::float AS rating, review_text, created_at
        FROM team_reviews
-       WHERE REGEXP_REPLACE(LOWER(TRIM(team_name)), '\s+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '\s+', ' ', 'g')
+       WHERE LOWER(TRIM(team_name)) = LOWER(TRIM(c.team_name))
+          OR REGEXP_REPLACE(LOWER(TRIM(team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '[[:space:]]+', ' ', 'g')
        ORDER BY created_at DESC
        LIMIT 1
      ) lr ON true

@@ -62,10 +62,8 @@ function SquadSection({ token, currentUserId, user }) {
     const activeTeamName = effectiveTeam?.team_name;
     if (!activeTeamName) return;
 
-    const onReviewSubmitted = (e) => {
-      if (!e.detail?.team_name || e.detail.team_name.toLowerCase() === activeTeamName.toLowerCase()) {
-        loadTeamStats(activeTeamName);
-      }
+    const onReviewSubmitted = () => {
+      loadTeamStats(activeTeamName);
     };
     window.addEventListener("mc:review_submitted", onReviewSubmitted);
 

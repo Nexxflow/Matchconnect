@@ -840,7 +840,7 @@ function TimePicker({ value, onChange }) {
   );
 }
 
-function MyPostedChallengeCard({ challenge, token, onDeleted }) {
+function MyPostedChallengeCard({ challenge, token, onDeleted, onViewTeam }) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
   const [confirming, setConfirming] = useState(false);
@@ -917,18 +917,37 @@ function MyPostedChallengeCard({ challenge, token, onDeleted }) {
 
       {error && <div className="text-xs text-red-400 rounded-lg p-2 mt-3" style={{ backgroundColor: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}>{error}</div>}
 
-      {!confirming ? (
-        <button onClick={() => setConfirming(true)} className="w-full mt-3 py-2 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1.5">
-          <XCircle className="w-3.5 h-3.5" /> Delete Challenge
-        </button>
-      ) : (
-        <div className="flex gap-2 mt-3">
-          <GhostButton onClick={() => setConfirming(false)} disabled={deleting} className="flex-1 text-center">Keep it</GhostButton>
-          <button disabled={deleting} onClick={handleDelete} className="flex-[2] py-2 rounded-xl bg-red-500 text-black font-bold text-xs hover:bg-red-400 transition-colors" style={deleting ? { opacity: 0.6, cursor: "not-allowed" } : {}}>
-            {deleting ? "Deleting..." : "Confirm Delete"}
+      <div className="flex items-center gap-2 mt-3">
+        {onViewTeam && (
+          <button
+            type="button"
+            onClick={() => onViewTeam(challenge)}
+            className="flex-1 py-2 rounded-xl bg-green-500/10 border border-green-500/25 text-green-400 text-xs font-bold hover:bg-green-500/20 transition-colors flex items-center justify-center gap-1.5"
+            title="View team profile, performance and feedback reviews"
+          >
+            <Users className="w-3.5 h-3.5" /> View Team & Reviews
           </button>
-        </div>
-      )}
+        )}
+        {!confirming ? (
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            className={cn(
+              "py-2 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1.5",
+              onViewTeam ? "px-3" : "w-full"
+            )}
+          >
+            <XCircle className="w-3.5 h-3.5" /> Delete
+          </button>
+        ) : (
+          <div className="flex gap-1.5">
+            <GhostButton onClick={() => setConfirming(false)} disabled={deleting} className="text-center py-1.5 px-2.5 text-xs">Keep</GhostButton>
+            <button disabled={deleting} onClick={handleDelete} className="py-1.5 px-3 rounded-xl bg-red-500 text-black font-bold text-xs hover:bg-red-400 transition-colors">
+              {deleting ? "..." : "Confirm"}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1329,6 +1348,7 @@ export default function FindMatchTab({
               }}
               token={token}
               onDeleted={onChallengeDeleted}
+              onViewTeam={ch => setViewTeamTarget(ch)}
             />
           ))}
         </div>
@@ -1446,6 +1466,15 @@ export default function FindMatchTab({
                     </button>
                   )}
                   <GhostButton className="flex-1 text-center py-2.5 sm:py-2" onClick={() => setDetailsTarget(t)}>View Details</GhostButton>
+                  <button
+                    type="button"
+                    onClick={() => setViewTeamTarget(t)}
+                    className="px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold text-green-400 bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 transition-all flex items-center justify-center gap-1.5 shrink-0"
+                    title={`View ${t.team} reviews and performance`}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Reviews ({t.reviewsCount})</span>
+                  </button>
                 </div>
               </div>
             );
@@ -1608,9 +1637,9 @@ export default function FindMatchTab({
 
       {viewTeamTarget && (
         <TeamDetailsModal
-          teamName={viewTeamTarget.team}
+          teamName={viewTeamTarget.team || viewTeamTarget.team_name}
           contactFallback={viewTeamTarget.contact_no}
-          postedByFallback={viewTeamTarget.postedBy}
+          postedByFallback={viewTeamTarget.postedBy || viewTeamTarget.creator_name}
           user={user}
           token={token}
           onClose={() => setViewTeamTarget(null)}

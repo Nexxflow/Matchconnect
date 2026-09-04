@@ -46,6 +46,16 @@ const app = express();
       ALTER TABLE batting_stats ADD COLUMN IF NOT EXISTS is_on_strike BOOLEAN DEFAULT false;
       ALTER TABLE bowling_stats ADD COLUMN IF NOT EXISTS is_current BOOLEAN DEFAULT false;
       ALTER TABLE players ADD COLUMN IF NOT EXISTS match_id UUID REFERENCES matches(id) ON DELETE CASCADE;
+      ALTER TABLE matches ADD COLUMN IF NOT EXISTS tournament_id UUID REFERENCES tournaments(id) ON DELETE CASCADE;
+      ALTER TABLE matches ADD COLUMN IF NOT EXISTS team1_name VARCHAR(150);
+      ALTER TABLE matches ADD COLUMN IF NOT EXISTS team2_name VARCHAR(150);
+      ALTER TABLE matches ADD COLUMN IF NOT EXISTS man_of_the_match VARCHAR(150);
+      ALTER TABLE matches ADD COLUMN IF NOT EXISTS mom VARCHAR(150);
+      ALTER TABLE matches ADD COLUMN IF NOT EXISTS scoreboard_url TEXT;
+      ALTER TABLE matches ADD COLUMN IF NOT EXISTS scoreboard_name VARCHAR(255);
+      ALTER TABLE matches ADD COLUMN IF NOT EXISTS round VARCHAR(100);
+      ALTER TABLE matches ADD COLUMN IF NOT EXISTS match_date TIMESTAMPTZ;
+      CREATE INDEX IF NOT EXISTS idx_matches_tournament_id ON matches(tournament_id);
     `);
     console.log("✅ Database schema auto-patch completed");
     
@@ -97,11 +107,12 @@ app.use(
   })
 );
 
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
 
 app.use(
   express.urlencoded({
     extended: true,
+    limit: "50mb",
   })
 );
 

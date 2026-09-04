@@ -157,7 +157,8 @@ const getTeamDetails = asyncHandler(async (req, res) => {
     `SELECT id, team_name, reviewer_user_id, reviewer_name, reviewer_team_name,
             rating::float AS rating, review_text, created_at
      FROM team_reviews
-     WHERE REGEXP_REPLACE(LOWER(TRIM(team_name)), '\\s+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM($1)), '\\s+', ' ', 'g')
+     WHERE LOWER(TRIM(team_name)) = LOWER(TRIM($1))
+        OR REGEXP_REPLACE(LOWER(TRIM(team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM($1)), '[[:space:]]+', ' ', 'g')
      ORDER BY created_at DESC`,
     [teamName]
   );
@@ -220,29 +221,30 @@ const addTeamReview = asyncHandler(async (req, res) => {
   const reviewerName = user?.name || "Cricket Player";
   const reviewerTeam = user?.team_name || null;
 
-  if (reviewerTeam && reviewerTeam.trim().toLowerCase() === team_name.trim().toLowerCase()) {
-    return res.status(400).json({ error: "You cannot submit a review for your own team" });
-  }
+  const isSelf = reviewerTeam && reviewerTeam.trim().toLowerCase() === team_name.trim().toLowerCase();
+  const displayReviewerName = isSelf ? `${reviewerName} (Captain/Member)` : reviewerName;
 
   const insertRes = await pool.query(
     `INSERT INTO team_reviews (team_name, reviewer_user_id, reviewer_name, reviewer_team_name, rating, review_text)
      VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING id, team_name, reviewer_user_id, reviewer_name, reviewer_team_name,
                rating::float AS rating, review_text, created_at`,
-    [team_name.trim(), userId, reviewerName, reviewerTeam, numRating, review_text.trim()]
+    [team_name.trim(), userId, displayReviewerName, reviewerTeam, numRating, review_text.trim()]
   );
 
   const savedReview = insertRes.rows[0];
 
-  // Send notification to all users in the reviewed team
-  notifyTeamOfFeedback(
-    team_name.trim(),
-    reviewerName,
-    reviewerTeam,
-    numRating,
-    review_text.trim(),
-    { review_id: String(savedReview.id) }
-  ).catch(err => console.error("Error sending review notifications:", err.message));
+  // Send notification to all users in the reviewed team if reviewer is not self
+  if (!isSelf) {
+    notifyTeamOfFeedback(
+      team_name.trim(),
+      reviewerName,
+      reviewerTeam,
+      numRating,
+      review_text.trim(),
+      { review_id: String(savedReview.id) }
+    ).catch(err => console.error("Error sending review notifications:", err.message));
+  }
 
   res.status(201).json({
     ok: true,
