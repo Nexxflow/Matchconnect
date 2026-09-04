@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Plus, X, Calendar, Clock, Filter, Search, ChevronDown, MapPin, CheckCircle, Phone, XCircle } from "lucide-react";
+import { Plus, X, Calendar, Clock, Filter, Search, ChevronDown, MapPin, CheckCircle, Phone, XCircle, AlertCircle } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -1042,19 +1042,15 @@ export default function FindMatchTab({
     ? challenges.find(c => c.status === "open" && teamPhoneSet.has(normalizePhone(c.contact_no)))
     : null;
 
-  const myTeamAcceptedChallenge = challenges.find(
+  const myAcceptedChallenge = challenges.find(
     c =>
       c.status === "accepted" &&
-      ((user?.id && (c.accepted_by_user_id === user.id || c.creator_id === user.id)) ||
-        (myPhone &&
-          (normalizePhone(c.contact_no) === myPhone ||
-            normalizePhone(c.accepted_by_contact_no) === myPhone)) ||
-        (teamPhoneSet.size > 0 &&
-          (teamPhoneSet.has(normalizePhone(c.contact_no)) ||
-            teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no)))))
+      ((user?.id && String(c.accepted_by_user_id) === String(user.id)) ||
+        (myPhone && normalizePhone(c.accepted_by_contact_no) === myPhone) ||
+        (teamPhoneSet.size > 0 && teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no))))
   );
 
-  const hasActiveAcceptedChallenge = Boolean(acceptedChallenge || myTeamAcceptedChallenge);
+  const hasActiveAcceptedChallenge = Boolean(acceptedChallenge || myAcceptedChallenge);
 
   const openChallenges = challenges.filter(
     c => (!c.status || c.status === "open") && !teamPhoneSet.has(normalizePhone(c.contact_no))

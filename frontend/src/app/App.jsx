@@ -185,10 +185,8 @@ export default function App() {
       const myActive = allChallenges.find(
         c =>
           c.status === "accepted" &&
-          ((user?.id && (c.accepted_by_user_id === user.id || c.creator_id === user.id)) ||
-            (myPhone &&
-              (normalizePhone(c.contact_no) === myPhone ||
-                normalizePhone(c.accepted_by_contact_no) === myPhone)))
+          ((user?.id && String(c.accepted_by_user_id) === String(user.id)) ||
+            (myPhone && normalizePhone(c.accepted_by_contact_no) === myPhone))
       );
       setAcceptedChallenge(myActive || null);
 
@@ -570,11 +568,12 @@ export default function App() {
     setAcceptedChallenge(updatedChallenge);
   };
 
-  const handleCancelAcceptedChallenge = async () => {
-    if (!acceptedChallenge || !auth.token) return;
+  const handleCancelAcceptedChallenge = async (challengeId) => {
+    const targetId = challengeId || acceptedChallenge?.id;
+    if (!targetId || !auth.token) return;
     setCancellingChallenge(true);
     try {
-      const res = await apiRequest(`/challenges/${acceptedChallenge.id}/cancel`, { method: "POST", token: auth.token });
+      const res = await apiRequest(`/challenges/${targetId}/cancel`, { method: "POST", token: auth.token });
       setChallenges(prev => prev.map(c => c.id === res.challenge.id ? res.challenge : c));
       setAcceptedChallenge(null);
     } catch (err) {

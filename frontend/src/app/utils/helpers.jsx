@@ -51,7 +51,8 @@ export function GhostButton({ children, onClick, disabled, className = "" }) {
 }
 
 export function normalizePhone(p) {
-  return String(p || "").replace(/\D/g, "");
+  const digits = String(p || "").replace(/\D/g, "");
+  return digits.length > 10 ? digits.slice(-10) : digits;
 }
 
 export function formatGroundPrice(value) {

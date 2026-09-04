@@ -135,18 +135,25 @@ const acceptChallenge = asyncHandler(async (req, res) => {
   }
 
   // A user can only accept one challenge at a time.
+  const cleanPhone = String(contact_no || "").replace(/\D/g, "");
+  const last10 = cleanPhone.slice(-10);
+
   const activeExisting = await pool.query(
     `SELECT id, team_name, match_date, time_slot
      FROM challenges
      WHERE status = 'accepted'
-       AND (accepted_by_user_id = $1 OR accepted_by_contact_no = $2 OR LOWER(TRIM(accepted_by_team_name)) = LOWER(TRIM($3)))
+       AND (
+         accepted_by_user_id = $1
+         OR ($2 != '' AND RIGHT(REGEXP_REPLACE(accepted_by_contact_no, '\\D', '', 'g'), 10) = $2)
+         OR LOWER(TRIM(accepted_by_team_name)) = LOWER(TRIM($3))
+       )
      LIMIT 1`,
-    [userId, contact_no, team_name]
+    [userId, last10, team_name]
   );
   if (activeExisting.rows.length > 0) {
     const existing = activeExisting.rows[0];
     return res.status(400).json({
-      error: `You have already accepted a challenge against ${existing.team_name} for ${existing.match_date}. You can only accept one challenge at a time. Cancel it in 'My Team' before accepting another.`
+      error: `You already have an active accepted match challenge against ${existing.team_name} for ${existing.match_date}. You can only accept one challenge at a time. Cancel it in 'My Team' before accepting another.`
     });
   }
 
@@ -155,8 +162,7 @@ const acceptChallenge = asyncHandler(async (req, res) => {
      SET status = 'accepted',
          accepted_by_team_name = $1,
          accepted_by_contact_no = $2,
-         accepted_by_user_id = $3,
-         updated_at = now()
+         accepted_by_user_id = $3
      WHERE id = $4
      RETURNING *`,
     [team_name, contact_no, userId, id]
@@ -214,8 +220,7 @@ const cancelChallenge = asyncHandler(async (req, res) => {
      SET status = 'open',
          accepted_by_team_name = NULL,
          accepted_by_contact_no = NULL,
-         accepted_by_user_id = NULL,
-         updated_at = now()
+         accepted_by_user_id = NULL
      WHERE id = $1
      RETURNING *`,
     [id]

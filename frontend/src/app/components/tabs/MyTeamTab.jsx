@@ -139,14 +139,11 @@ export default function MyTeamTab({
     const hasId = c.accepted_by_user_id !== undefined && c.accepted_by_user_id !== null;
     const hasPhone = !!c.accepted_by_contact_no;
 
-    if (hasId && hasPhone && teamIdSet.size && teamPhoneSet.size) {
-      return teamIdSet.has(Number(c.accepted_by_user_id)) && teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no));
+    if (hasId && teamIdSet.has(Number(c.accepted_by_user_id))) {
+      return true;
     }
-    if (hasId && teamIdSet.size) {
-      return teamIdSet.has(Number(c.accepted_by_user_id));
-    }
-    if (hasPhone && teamPhoneSet.size) {
-      return teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no));
+    if (hasPhone && teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no))) {
+      return true;
     }
     return false;
   };
