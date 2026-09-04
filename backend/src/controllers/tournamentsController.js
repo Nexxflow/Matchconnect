@@ -83,6 +83,17 @@ const getTournament = asyncHandler(async (req, res) => {
 // persisted source of truth is always creator_team_id; anywhere we need the
 // display name, we either derive it via join or pass it through in the JS
 // response object without storing it.
+//
+// NOTE: every write that belongs to this operation — including the
+// users.team_id self-heal below — MUST go through `client` (the same
+// transaction), never the shared `pool`. A `pool.query` call commits
+// immediately on its own connection, outside the BEGIN/COMMIT/ROLLBACK
+// block. If the team INSERT here later gets rolled back (e.g. a later
+// validation step in this same request fails), a `pool.query`-based
+// users.team_id update would already be permanently committed and would
+// end up pointing at a team row that no longer exists — which is exactly
+// what caused the "insert or update on table users violates foreign key
+// constraint users_team_id_fkey" bug. Keep this on `client`.
 // ---------------------------------------------------------------------------
 const createTournament = asyncHandler(async (req, res) => {
   const {
@@ -163,8 +174,12 @@ const createTournament = asyncHandler(async (req, res) => {
 
       // Self-heal: persist the resolved team_id onto the user row so future
       // requests don't need to re-derive it by name every time.
+      // IMPORTANT: use `client` here, not `pool` — this must be part of the
+      // same transaction as the team INSERT above, or a later rollback in
+      // this request leaves users.team_id pointing at a team row that was
+      // never actually committed (foreign key violation on next write).
       if (myTeam) {
-        await pool.query(
+        await client.query(
           `UPDATE users SET team_id = $1 WHERE id = $2 AND team_id IS NULL`,
           [myTeam.id, req.user.id]
         );
