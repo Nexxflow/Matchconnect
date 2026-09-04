@@ -1,5 +1,13 @@
 require("dotenv").config();
 
+process.on("uncaughtException", (err) => {
+  console.error("💥 [Uncaught Exception] Handled gracefully:", err.message);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("💥 [Unhandled Rejection] Handled gracefully:", reason);
+});
+
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -35,7 +43,7 @@ const app = express();
    
     console.log("✅ PostgreSQL Connected:", result.rows[0].now);
 
-    // Auto-patch missing columns to guarantee matchController & live score queries never fail
+    // Auto-patch missing columns and tables to guarantee all queries never fail
     await pool.query(`
       ALTER TABLE matches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
       ALTER TABLE matches ADD COLUMN IF NOT EXISTS result TEXT;
@@ -56,14 +64,58 @@ const app = express();
       ALTER TABLE matches ADD COLUMN IF NOT EXISTS round VARCHAR(100);
       ALTER TABLE matches ADD COLUMN IF NOT EXISTS match_date TIMESTAMPTZ;
       CREATE INDEX IF NOT EXISTS idx_matches_tournament_id ON matches(tournament_id);
+
+      CREATE TABLE IF NOT EXISTS in_app_notifications (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        body TEXT NOT NULL,
+        type VARCHAR(50) DEFAULT 'general',
+        data JSONB DEFAULT '{}',
+        is_read BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+
+      CREATE TABLE IF NOT EXISTS challenge_acceptances (
+        id SERIAL PRIMARY KEY,
+        challenge_id UUID,
+        accepted_by_user_id INTEGER,
+        accepted_by_team_name VARCHAR(120),
+        creator_team_name VARCHAR(120),
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+
+      CREATE TABLE IF NOT EXISTS challenge_cancellations (
+        id SERIAL PRIMARY KEY,
+        challenge_id UUID,
+        cancelled_by_user_id INTEGER,
+        cancelled_by_team_name VARCHAR(120),
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+
+      CREATE TABLE IF NOT EXISTS team_reviews (
+        id SERIAL PRIMARY KEY,
+        team_name VARCHAR(120) NOT NULL,
+        reviewer_user_id INTEGER,
+        reviewer_name VARCHAR(120),
+        reviewer_team_name VARCHAR(120),
+        rating NUMERIC(2,1) NOT NULL,
+        review_text TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_team_reviews_team ON team_reviews(team_name);
+      CREATE INDEX IF NOT EXISTS idx_cancellations_team ON challenge_cancellations(cancelled_by_team_name);
+      CREATE INDEX IF NOT EXISTS idx_acceptances_team ON challenge_acceptances(accepted_by_team_name);
+
+      ALTER TABLE teams ADD COLUMN IF NOT EXISTS created_by INTEGER;
+      ALTER TABLE umpires ADD COLUMN IF NOT EXISTS created_by INTEGER;
+      ALTER TABLE umpires ADD COLUMN IF NOT EXISTS user_id INTEGER;
     `);
     console.log("✅ Database schema auto-patch completed");
     
   } catch (err) {
-    
-    console.error("❌ PostgreSQL Connection / Schema Patch Error");
-    console.error(err);
-    
+    console.error("❌ PostgreSQL Connection / Schema Patch Error:", err.message);
   }
 })();
 
@@ -214,18 +266,6 @@ transporter.verify((error) => {
   }
 });
 
-transporter.verify((error) => {
-  if (error) {
-    //console.log("===================================");
-    console.log("❌ SMTP Connection Failed");
-    console.error(error);
-   
-  } else {
-    
-    console.log("✅ SMTP Ready");
-    
-  }
-});
 
 // ====================================================
 // Start Server
