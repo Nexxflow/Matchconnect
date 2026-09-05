@@ -64,7 +64,12 @@ const createOrder = asyncHandler(async (req, res) => {
   }
 
   const table = booking_type === "ground" ? "grounds" : "umpires";
-  const priceCol = booking_type === "ground" ? "price_per_hour" : "price";
+  // NOTE: umpires table stores the price in `fee_per_match` (NOT `price`).
+  // grounds table uses `price_per_hour`. Keep this in sync if either
+  // schema changes — a wrong column name here silently returns undefined,
+  // which the validation below now catches instead of sending NaN/null to
+  // Razorpay.
+  const priceCol = booking_type === "ground" ? "price_per_hour" : "fee_per_match";
   const itemResult = await pool.query(`SELECT * FROM ${table} WHERE id = $1`, [ref_id]);
   if (itemResult.rows.length === 0) {
     return res.status(404).json({ error: `${booking_type} not found` });
@@ -122,7 +127,20 @@ const createOrder = asyncHandler(async (req, res) => {
     }
   }
 
-  const baseAmount = Number(item[priceCol]);
+  // item[priceCol] might be a plain number (200) or a formatted display
+  // string with currency symbols/units (e.g. "₹200/match", "₹1,200/hr").
+  // Strip everything except digits and a decimal point before parsing, so
+  // Razorpay never receives NaN for the order amount (NaN silently becomes
+  // null over JSON, which Razorpay rejects as "amount: is required").
+  const rawPrice = String(item[priceCol] ?? "").replace(/[^0-9.]/g, "");
+  const baseAmount = Number(rawPrice);
+
+  if (!rawPrice || isNaN(baseAmount) || baseAmount <= 0) {
+    return res.status(500).json({
+      error: `Invalid price configured for this ${booking_type}. Please contact support.`
+    });
+  }
+
   const platformFee = Math.round(baseAmount * PLATFORM_FEE_PCT);
   const totalAmount = baseAmount + platformFee;
 

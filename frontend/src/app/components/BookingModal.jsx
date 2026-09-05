@@ -18,6 +18,24 @@ export default function BookingModal({ item, type, token, onClose, onConfirm }) 
   const platformFee = Math.round(priceNum * 0.05);
   const total = priceNum + platformFee;
 
+  // Loads the Razorpay checkout.js script on demand if it isn't already on
+  // the page (belt-and-suspenders alongside the <script> tag in index.html).
+  const ensureRazorpayScript = () =>
+    new Promise((resolve, reject) => {
+      if (window.Razorpay) return resolve();
+      const existing = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
+      if (existing) {
+        existing.addEventListener("load", () => resolve());
+        existing.addEventListener("error", () => reject(new Error("Failed to load Razorpay checkout script")));
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Failed to load Razorpay checkout script"));
+      document.body.appendChild(script);
+    });
+
   const handleConfirmPayment = async () => {
     if (!item.id) {
       setPayError("This item isn't loaded from the backend yet — refresh and try again.");
@@ -31,11 +49,74 @@ export default function BookingModal({ item, type, token, onClose, onConfirm }) 
         token,
         body: { booking_type: type, ref_id: item.id, booking_date: days[selectedDay].iso, time_slot: selectedSlot }
       });
-      onConfirm(res.booking);
-      setStep(3);
+
+      // TEST MODE (no real Razorpay keys on the backend): booking is already
+      // marked paid server-side, so there's nothing to check out — go
+      // straight to the success screen.
+      if (res.test_mode) {
+        onConfirm(res.booking);
+        setStep(3);
+        return;
+      }
+
+      // LIVE MODE: a real Razorpay order was created — open the actual
+      // checkout popup so the user enters card/UPI details before we treat
+      // this as paid.
+      await ensureRazorpayScript();
+
+      const options = {
+        key: res.razorpay_key_id,
+        amount: res.razorpay_order.amount,
+        currency: res.razorpay_order.currency,
+        name: "MatchConnect",
+        description: type === "ground" ? "Ground booking" : "Umpire/Scorer booking",
+        order_id: res.razorpay_order.id,
+        handler: async (response) => {
+          // Payment succeeded on Razorpay's side — verify the signature
+          // server-side before marking the booking as paid in our DB.
+          try {
+            const verifyRes = await apiRequest("/bookings/verify-payment", {
+              method: "POST",
+              token,
+              body: {
+                booking_id: res.booking.id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature
+              }
+            });
+            onConfirm(verifyRes.booking);
+            setStep(3);
+          } catch (err) {
+            setPayError(err.message || "Payment succeeded but verification failed — contact support.");
+          } finally {
+            setPaying(false);
+          }
+        },
+        modal: {
+          // User closed the Razorpay popup without paying.
+          ondismiss: () => {
+            setPaying(false);
+            setPayError("Payment was cancelled.");
+          }
+        },
+        prefill: {
+          name: item.name || ""
+        },
+        theme: { color: "#22c55e" }
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on("payment.failed", (response) => {
+        setPaying(false);
+        setPayError(response?.error?.description || "Payment failed, please try again.");
+      });
+      rzp.open();
+      // Note: setPaying(false) intentionally not called here on the happy
+      // path — the handler/ondismiss callbacks above own that transition
+      // since the Razorpay popup is now driving the flow.
     } catch (err) {
       setPayError(err.message || "Payment failed, please try again.");
-    } finally {
       setPaying(false);
     }
   };

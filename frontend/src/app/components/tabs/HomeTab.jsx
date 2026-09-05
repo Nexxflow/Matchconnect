@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { MapPin, Star } from "lucide-react";
 import { C, cn, Tag, GhostButton } from "../../utils/helpers.jsx";
 import { GROUNDS, ALL_CHALLENGES } from "../../utils/constants";
@@ -9,6 +9,40 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
     allChallenges.flatMap(c => [c.team_name, c.accepted_by_team_name].filter(Boolean))
   ).size;
 
+  // Location: default to Tamil Nadu (this app's regional focus). If the
+  // browser grants geolocation permission, resolve the real city/state via
+  // reverse geocoding and use that instead. Any failure (denied, timeout,
+  // network error) silently keeps the Tamil Nadu fallback — never falls
+  // back to the old hardcoded "Mumbai, Maharashtra".
+  const [locationLabel, setLocationLabel] = useState("Tamil Nadu");
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          const data = await res.json();
+          const addr = data.address || {};
+          const city = addr.city || addr.town || addr.village || addr.county || "";
+          const state = addr.state || "Tamil Nadu";
+          setLocationLabel(city ? `${city}, ${state}` : state);
+        } catch (err) {
+          console.error("Reverse geocoding failed:", err);
+          // keep Tamil Nadu fallback
+        }
+      },
+      () => {
+        // permission denied / unavailable — keep Tamil Nadu fallback
+      },
+      { timeout: 8000 }
+    );
+  }, []);
+
   return (
     <div className="space-y-8">
       {/* Hero */}
@@ -17,7 +51,7 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
         <div className="relative z-10">
           <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 mb-4" style={{ backgroundColor: "rgba(13,15,13,0.5)", border: "1px solid rgba(34,197,94,0.3)" }}>
             <MapPin className="w-3 h-3 text-green-400" />
-            <span className="text-green-300 text-xs font-medium">Mumbai, Maharashtra</span>
+            <span className="text-green-300 text-xs font-medium">{locationLabel}</span>
           </div>
           <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">Find your next</h1>
           <h1 className="text-2xl md:text-3xl font-bold text-green-400 mb-5">cricket match</h1>
