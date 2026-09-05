@@ -41,9 +41,21 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
 
   const update = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
 
+  const isOwner = (ump) => {
+    if (!ump) return false;
+    if (ump.created_by && user?.id && String(ump.created_by) === String(user.id)) return true;
+    if (ump.user_id && user?.id && String(ump.user_id) === String(user.id)) return true;
+    if (normalizedPhone && normalizePhone(ump.mobile) === normalizedPhone) return true;
+    return false;
+  };
+
   const handleSubmit = async e => {
     e.preventDefault();
     setError(null);
+
+    if (editing && !isOwner(initialUmpire)) {
+      return setError("Only the user who posted this umpire can edit it.");
+    }
 
     if (!form.name.trim()) return setError("Name is required.");
     if (normalizedPhone.length < 10 || normalizedPhone.length > 15) {
@@ -83,6 +95,9 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
 
   const handleDelete = async () => {
     if (!editing || !initialUmpire?.id || !token) return;
+    if (!isOwner(initialUmpire)) {
+      return setError("Only the user who posted this umpire can delete it.");
+    }
     if (!window.confirm("Are you sure you want to delete this umpire?")) return;
 
     setSubmitting(true);
@@ -176,9 +191,15 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
   const [editingUmpire, setEditingUmpire] = useState(null);
 
   const userPhoneNorm = normalizePhone(user?.phone);
-  const myUmpire = umpires.find(
-    (u) => (u.user_id && user?.id && String(u.user_id) === String(user.id)) || (userPhoneNorm && normalizePhone(u.mobile) === userPhoneNorm)
-  );
+  const isOwner = (u) => {
+    if (!u) return false;
+    if (u.created_by && user?.id && String(u.created_by) === String(user.id)) return true;
+    if (u.user_id && user?.id && String(u.user_id) === String(user.id)) return true;
+    if (userPhoneNorm && normalizePhone(u.mobile) === userPhoneNorm) return true;
+    return false;
+  };
+
+  const myUmpire = umpires.find(isOwner);
 
   const roleColor = (role) => {
     if (role === "Scorer") return { bg: "bg-blue-900", text: "text-blue-300" };
@@ -358,30 +379,34 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                       </div>
 
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => setEditingUmpire(u)}
-                          title="Edit Umpire"
-                          className="p-2 rounded-xl text-xs font-bold transition-colors text-gray-300 hover:text-white bg-[#252525] hover:bg-[#333]"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            if (!window.confirm(`Delete ${u.name}?`)) return;
-                            try {
-                              await apiRequest(`/umpires/${u.id}`, { method: "DELETE", token });
-                              onDeleted?.(u.id);
-                            } catch (err) {
-                              alert(err.message || "Could not delete umpire.");
-                            }
-                          }}
-                          title="Delete Umpire"
-                          className="p-2 rounded-xl text-xs font-bold transition-colors text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {isOwner(u) && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setEditingUmpire(u)}
+                              title="Edit Umpire"
+                              className="p-2 rounded-xl text-xs font-bold transition-colors text-gray-300 hover:text-white bg-[#252525] hover:bg-[#333]"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!window.confirm(`Delete ${u.name}?`)) return;
+                                try {
+                                  await apiRequest(`/umpires/${u.id}`, { method: "DELETE", token });
+                                  onDeleted?.(u.id);
+                                } catch (err) {
+                                  alert(err.message || "Could not delete umpire.");
+                                }
+                              }}
+                              title="Delete Umpire"
+                              className="p-2 rounded-xl text-xs font-bold transition-colors text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
                         <button
                           disabled={!u.avail}
                           onClick={() => u.avail && onBook(u)}

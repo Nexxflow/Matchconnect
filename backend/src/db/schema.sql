@@ -74,6 +74,8 @@ CREATE TABLE IF NOT EXISTS umpires (
   experience INT,
   fee_per_match NUMERIC(10,2) NOT NULL,
   available BOOLEAN DEFAULT true,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 

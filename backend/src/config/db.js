@@ -102,8 +102,11 @@ async function connectWithRetry(retries = 3, delayMs = 2000) {
           CREATE INDEX IF NOT EXISTS idx_acceptances_team ON challenge_acceptances(accepted_by_team_name);
 
           ALTER TABLE teams ADD COLUMN IF NOT EXISTS created_by INTEGER;
+
+          ALTER TABLE umpires ADD COLUMN IF NOT EXISTS created_by INTEGER;
+          ALTER TABLE umpires ADD COLUMN IF NOT EXISTS user_id INTEGER;
         `);
-        console.log("✅ challenge_acceptances, challenge_cancellations, and team_reviews tables ready");
+        console.log("✅ challenge_acceptances, challenge_cancellations, team_reviews, and umpires schema ready");
       } catch (tblErr) {
         console.error("❌ database tables creation error in db.js:", tblErr.message);
       }

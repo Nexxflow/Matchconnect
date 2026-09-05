@@ -32,6 +32,20 @@ const getUmpire = asyncHandler(async (req, res) => {
   });
 });
 
+const checkUmpireOwnership = (umpire, user) => {
+  if (!user) return false;
+  const userId = user.id ? String(user.id) : null;
+  if (umpire.created_by && userId && String(umpire.created_by) === userId) return true;
+  if (umpire.user_id && userId && String(umpire.user_id) === userId) return true;
+
+  const clean = (p) => (p ? String(p).replace(/\D/g, "") : "");
+  const userPhone = clean(user.phone);
+  const umpirePhone = clean(umpire.mobile);
+  if (userPhone && umpirePhone && userPhone === umpirePhone) return true;
+
+  return false;
+};
+
 // POST /api/umpires
 const createUmpire = asyncHandler(async (req, res) => {
   const {
@@ -59,6 +73,8 @@ const createUmpire = asyncHandler(async (req, res) => {
     });
   }
 
+  const userId = req.user?.id || null;
+
   const result = await pool.query(
     `
     INSERT INTO umpires
@@ -67,11 +83,13 @@ const createUmpire = asyncHandler(async (req, res) => {
       mobile,
       role,
       experience,
-      fee_per_match
+      fee_per_match,
+      created_by,
+      user_id
     )
     VALUES
     (
-      $1,$2,$3,$4,$5
+      $1,$2,$3,$4,$5,$6,$7
     )
     RETURNING *
     `,
@@ -81,6 +99,8 @@ const createUmpire = asyncHandler(async (req, res) => {
       resolvedRole,
       Number(experience || 0),
       Number(fee_per_match),
+      userId,
+      userId,
     ]
   );
   res.status(201).json({
@@ -102,6 +122,13 @@ const updateUmpire = asyncHandler(async (req, res) => {
   const existing = await pool.query("SELECT * FROM umpires WHERE id=$1", [id]);
   if (existing.rows.length === 0) {
     return res.status(404).json({ error: "Umpire not found" });
+  }
+
+  const umpire = existing.rows[0];
+  if (!checkUmpireOwnership(umpire, req.user)) {
+    return res.status(403).json({
+      error: "Forbidden: Only the user who registered this umpire can edit it.",
+    });
   }
 
   if (!name || !name.trim()) {
@@ -145,6 +172,14 @@ const deleteUmpire = asyncHandler(async (req, res) => {
   if (existing.rows.length === 0) {
     return res.status(404).json({ error: "Umpire not found" });
   }
+
+  const umpire = existing.rows[0];
+  if (!checkUmpireOwnership(umpire, req.user)) {
+    return res.status(403).json({
+      error: "Forbidden: Only the user who registered this umpire can delete it.",
+    });
+  }
+
   await pool.query("DELETE FROM umpires WHERE id=$1", [id]);
   res.json({ ok: true });
 });

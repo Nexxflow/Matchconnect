@@ -101,47 +101,70 @@ const getTeamDetails = asyncHandler(async (req, res) => {
     if (!teamInfo.captain_name) teamInfo.captain_name = cp.poster_name;
   }
 
-  // 2. Stats calculation
+  // 2. Stats calculation with resilient fallbacks
   // A) Challenges Posted: Total challenge posts by this team
-  const postedRes = await pool.query(
-    `SELECT COUNT(*)::int AS count FROM challenges
-     WHERE LOWER(TRIM(team_name)) = LOWER(TRIM($1))`,
-    [teamName]
-  );
-  const challengesPosted = postedRes.rows[0]?.count || 0;
+  let challengesPosted = 0;
+  try {
+    const postedRes = await pool.query(
+      `SELECT COUNT(*)::int AS count FROM challenges
+       WHERE LOWER(TRIM(team_name)) = LOWER(TRIM($1))`,
+      [teamName]
+    );
+    challengesPosted = postedRes.rows[0]?.count || 0;
+  } catch (e) {
+    console.warn("Could not query challengesPosted:", e.message);
+  }
 
   // B) Challenges Booked: Challenges posted by this team that were accepted/booked by other teams
-  const bookedRes = await pool.query(
-    `SELECT COUNT(*)::int AS count FROM challenges
-     WHERE LOWER(TRIM(team_name)) = LOWER(TRIM($1))
-       AND (status = 'accepted' OR accepted_by_team_name IS NOT NULL)`,
-    [teamName]
-  );
-  const challengesBooked = bookedRes.rows[0]?.count || 0;
+  let challengesBooked = 0;
+  try {
+    const bookedRes = await pool.query(
+      `SELECT COUNT(*)::int AS count FROM challenges
+       WHERE LOWER(TRIM(team_name)) = LOWER(TRIM($1))
+         AND (status = 'accepted' OR accepted_by_team_name IS NOT NULL)`,
+      [teamName]
+    );
+    challengesBooked = bookedRes.rows[0]?.count || 0;
+  } catch (e) {
+    console.warn("Could not query challengesBooked:", e.message);
+  }
 
   // C) Challenges Accepted: Challenges from other teams that THIS team accepted
-  const acceptedRes = await pool.query(
-    `SELECT COUNT(DISTINCT ch_id)::int AS count FROM (
-       SELECT id AS ch_id FROM challenges
-       WHERE LOWER(TRIM(accepted_by_team_name)) = LOWER(TRIM($1))
-       UNION
-       SELECT challenge_id AS ch_id FROM challenge_acceptances
-       WHERE LOWER(TRIM(accepted_by_team_name)) = LOWER(TRIM($1))
-     ) t`,
-    [teamName]
-  );
-  const challengesAccepted = acceptedRes.rows[0]?.count || 0;
+  let challengesAccepted = 0;
+  try {
+    const acceptedRes = await pool.query(
+      `SELECT COUNT(DISTINCT ch_id)::int AS count FROM (
+         SELECT id AS ch_id FROM challenges
+         WHERE LOWER(TRIM(accepted_by_team_name)) = LOWER(TRIM($1))
+         UNION
+         SELECT challenge_id AS ch_id FROM challenge_acceptances
+         WHERE LOWER(TRIM(accepted_by_team_name)) = LOWER(TRIM($1))
+       ) t`,
+      [teamName]
+    );
+    challengesAccepted = acceptedRes.rows[0]?.count || 0;
+  } catch {
+    try {
+      const fallbackAcc = await pool.query(
+        `SELECT COUNT(*)::int AS count FROM challenges WHERE LOWER(TRIM(accepted_by_team_name)) = LOWER(TRIM($1))`,
+        [teamName]
+      );
+      challengesAccepted = fallbackAcc.rows[0]?.count || 0;
+    } catch {}
+  }
 
   // D) Challenges Cancelled: Total cancellations by this team
-  const cancelledRes = await pool.query(
-    `SELECT COUNT(*)::int AS count FROM challenge_cancellations
-     WHERE LOWER(TRIM(cancelled_by_team_name)) = LOWER(TRIM($1))`,
-    [teamName]
-  );
-  const challengesCancelled = cancelledRes.rows[0]?.count || 0;
+  let challengesCancelled = 0;
+  try {
+    const cancelledRes = await pool.query(
+      `SELECT COUNT(*)::int AS count FROM challenge_cancellations
+       WHERE LOWER(TRIM(cancelled_by_team_name)) = LOWER(TRIM($1))`,
+      [teamName]
+    );
+    challengesCancelled = cancelledRes.rows[0]?.count || 0;
+  } catch {}
 
   // 3. Dynamic Rating Calculation
-  // Rating increases when accepting other team challenges and decreases with match cancellations
   let reliabilityScore = 5.0;
   if (challengesCancelled > 0) {
     const ratio = challengesAccepted === 0
@@ -153,16 +176,21 @@ const getTeamDetails = asyncHandler(async (req, res) => {
   }
 
   // 4. Feedback Reviews
-  const reviewsRes = await pool.query(
-    `SELECT id, team_name, reviewer_user_id, reviewer_name, reviewer_team_name,
-            rating::float AS rating, review_text, created_at
-     FROM team_reviews
-     WHERE LOWER(TRIM(team_name)) = LOWER(TRIM($1))
-        OR REGEXP_REPLACE(LOWER(TRIM(team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM($1)), '[[:space:]]+', ' ', 'g')
-     ORDER BY created_at DESC`,
-    [teamName]
-  );
-  const reviews = reviewsRes.rows || [];
+  let reviews = [];
+  try {
+    const reviewsRes = await pool.query(
+      `SELECT id, team_name, reviewer_user_id, reviewer_name, reviewer_team_name,
+              rating::float AS rating, review_text, created_at
+       FROM team_reviews
+       WHERE LOWER(TRIM(team_name)) = LOWER(TRIM($1))
+          OR REGEXP_REPLACE(LOWER(TRIM(team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM($1)), '[[:space:]]+', ' ', 'g')
+       ORDER BY created_at DESC`,
+      [teamName]
+    );
+    reviews = reviewsRes.rows || [];
+  } catch (err) {
+    console.warn("Could not query team_reviews in getTeamDetails:", err.message);
+  }
 
   let overallRating = reliabilityScore;
   let reviewsAvg = null;
@@ -215,6 +243,20 @@ const addTeamReview = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "review_text is required" });
   }
 
+  // Ensure table exists
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS team_reviews (
+      id SERIAL PRIMARY KEY,
+      team_name VARCHAR(120) NOT NULL,
+      reviewer_user_id INTEGER,
+      reviewer_name VARCHAR(120),
+      reviewer_team_name VARCHAR(120),
+      rating NUMERIC(2,1) NOT NULL,
+      review_text TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+  `).catch(() => {});
+
   // Get reviewer user details
   const uRes = await pool.query(`SELECT name, team_name FROM users WHERE id = $1`, [userId]);
   const user = uRes.rows[0];
@@ -235,15 +277,19 @@ const addTeamReview = asyncHandler(async (req, res) => {
   const savedReview = insertRes.rows[0];
 
   // Send notification to all users in the reviewed team if reviewer is not self
-  if (!isSelf) {
-    notifyTeamOfFeedback(
-      team_name.trim(),
-      reviewerName,
-      reviewerTeam,
-      numRating,
-      review_text.trim(),
-      { review_id: String(savedReview.id) }
-    ).catch(err => console.error("Error sending review notifications:", err.message));
+  if (!isSelf && typeof notifyTeamOfFeedback === "function") {
+    try {
+      notifyTeamOfFeedback(
+        team_name.trim(),
+        reviewerName,
+        reviewerTeam,
+        numRating,
+        review_text.trim(),
+        { review_id: String(savedReview.id) }
+      ).catch(err => console.error("Error sending review notifications:", err.message));
+    } catch (notifErr) {
+      console.error("Non-fatal notification error:", notifErr.message);
+    }
   }
 
   res.status(201).json({

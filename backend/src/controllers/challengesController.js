@@ -15,85 +15,108 @@ const {
 // pin challenges that have a registered ground attached.
 // ============================================================
 const listChallenges = asyncHandler(async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT c.*, 
-            u.name AS creator_name,
-            g.latitude AS ground_lat, 
-            g.longitude AS ground_lng,
-            COALESCE(rs.reviews_count, 0) AS reviews_count,
-            rs.reviews_avg,
-            COALESCE(acc.accepted_count, 0) AS accepted_count,
-            COALESCE(can.cancelled_count, 0) AS cancelled_count,
-            lr.reviewer_name AS latest_reviewer_name,
-            lr.reviewer_team_name AS latest_reviewer_team_name,
-            lr.rating AS latest_review_rating,
-            lr.review_text AS latest_review_text,
-            lr.created_at AS latest_review_created_at
-     FROM challenges c
-     LEFT JOIN users u ON u.id = c.creator_id
-     LEFT JOIN grounds g ON g.id = c.ground_id
-     LEFT JOIN LATERAL (
-       SELECT COUNT(*)::int AS reviews_count,
-              ROUND(AVG(rating), 1)::float AS reviews_avg
-       FROM team_reviews
-       WHERE LOWER(TRIM(team_name)) = LOWER(TRIM(c.team_name))
-          OR REGEXP_REPLACE(LOWER(TRIM(team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '[[:space:]]+', ' ', 'g')
-     ) rs ON true
-     LEFT JOIN LATERAL (
-       SELECT COUNT(*)::int AS accepted_count
-       FROM challenges
-       WHERE LOWER(TRIM(accepted_by_team_name)) = LOWER(TRIM(c.team_name))
-          OR REGEXP_REPLACE(LOWER(TRIM(accepted_by_team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '[[:space:]]+', ' ', 'g')
-     ) acc ON true
-     LEFT JOIN LATERAL (
-       SELECT COUNT(*)::int AS cancelled_count
-       FROM challenge_cancellations
-       WHERE LOWER(TRIM(cancelled_by_team_name)) = LOWER(TRIM(c.team_name))
-          OR REGEXP_REPLACE(LOWER(TRIM(cancelled_by_team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '[[:space:]]+', ' ', 'g')
-     ) can ON true
-     LEFT JOIN LATERAL (
-       SELECT id AS latest_review_id, reviewer_name, reviewer_team_name, rating::float AS rating, review_text, created_at
-       FROM team_reviews
-       WHERE LOWER(TRIM(team_name)) = LOWER(TRIM(c.team_name))
-          OR REGEXP_REPLACE(LOWER(TRIM(team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '[[:space:]]+', ' ', 'g')
-       ORDER BY created_at DESC
-       LIMIT 1
-     ) lr ON true
-     ORDER BY c.created_at DESC`
-  );
+  try {
+    const { rows } = await pool.query(
+      `SELECT c.*, 
+              u.name AS creator_name,
+              g.latitude AS ground_lat, 
+              g.longitude AS ground_lng,
+              COALESCE(rs.reviews_count, 0) AS reviews_count,
+              rs.reviews_avg,
+              COALESCE(acc.accepted_count, 0) AS accepted_count,
+              COALESCE(can.cancelled_count, 0) AS cancelled_count,
+              lr.reviewer_name AS latest_reviewer_name,
+              lr.reviewer_team_name AS latest_reviewer_team_name,
+              lr.rating AS latest_review_rating,
+              lr.review_text AS latest_review_text,
+              lr.created_at AS latest_review_created_at
+       FROM challenges c
+       LEFT JOIN users u ON u.id = c.creator_id
+       LEFT JOIN grounds g ON g.id = c.ground_id
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS reviews_count,
+                ROUND(AVG(rating), 1)::float AS reviews_avg
+         FROM team_reviews
+         WHERE LOWER(TRIM(team_name)) = LOWER(TRIM(c.team_name))
+            OR REGEXP_REPLACE(LOWER(TRIM(team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '[[:space:]]+', ' ', 'g')
+       ) rs ON true
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS accepted_count
+         FROM challenges
+         WHERE LOWER(TRIM(accepted_by_team_name)) = LOWER(TRIM(c.team_name))
+            OR REGEXP_REPLACE(LOWER(TRIM(accepted_by_team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '[[:space:]]+', ' ', 'g')
+       ) acc ON true
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS cancelled_count
+         FROM challenge_cancellations
+         WHERE LOWER(TRIM(cancelled_by_team_name)) = LOWER(TRIM(c.team_name))
+            OR REGEXP_REPLACE(LOWER(TRIM(cancelled_by_team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '[[:space:]]+', ' ', 'g')
+       ) can ON true
+       LEFT JOIN LATERAL (
+         SELECT id AS latest_review_id, reviewer_name, reviewer_team_name, rating::float AS rating, review_text, created_at
+         FROM team_reviews
+         WHERE LOWER(TRIM(team_name)) = LOWER(TRIM(c.team_name))
+            OR REGEXP_REPLACE(LOWER(TRIM(team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '[[:space:]]+', ' ', 'g')
+         ORDER BY created_at DESC
+         LIMIT 1
+       ) lr ON true
+       ORDER BY c.created_at DESC`
+    );
 
-  const challengesWithStats = rows.map(c => {
-    const acc = Number(c.accepted_count) || 0;
-    const can = Number(c.cancelled_count) || 0;
-    let reliability = 5.0;
-    if (can > 0) {
-      const ratio = acc === 0 ? Math.max(0.2, 1.0 - (can * 0.25)) : acc / (acc + can * 1.25);
-      reliability = Math.max(1.0, Math.min(5.0, 5.0 * ratio));
-    } else if (acc > 0) {
-      reliability = 5.0;
-    }
-    let overallRating = reliability;
-    if (c.reviews_count > 0 && c.reviews_avg != null) {
-      overallRating = Number(((reliability * 0.5) + (Number(c.reviews_avg) * 0.5)).toFixed(1));
-    } else {
-      overallRating = Number(reliability.toFixed(1));
-    }
-    return {
+    const challengesWithStats = rows.map(c => {
+      const acc = Number(c.accepted_count) || 0;
+      const can = Number(c.cancelled_count) || 0;
+      let reliability = 5.0;
+      if (can > 0) {
+        const ratio = acc === 0 ? Math.max(0.2, 1.0 - (can * 0.25)) : acc / (acc + can * 1.25);
+        reliability = Math.max(1.0, Math.min(5.0, 5.0 * ratio));
+      } else if (acc > 0) {
+        reliability = 5.0;
+      }
+      let overallRating = reliability;
+      if (c.reviews_count > 0 && c.reviews_avg != null) {
+        overallRating = Number(((reliability * 0.5) + (Number(c.reviews_avg) * 0.5)).toFixed(1));
+      } else {
+        overallRating = Number(reliability.toFixed(1));
+      }
+      return {
+        ...c,
+        team_rating: overallRating,
+        reliability_score: Number(reliability.toFixed(1)),
+        latest_review: (c.latest_review_text || c.latest_reviewer_name) ? {
+          id: c.latest_review_id,
+          reviewer_name: c.latest_reviewer_name || "Cricket Player",
+          reviewer_team_name: c.latest_reviewer_team_name || null,
+          rating: c.latest_review_rating != null ? Number(c.latest_review_rating) : 5.0,
+          review_text: c.latest_review_text || "",
+          created_at: c.latest_review_created_at || null,
+        } : null,
+      };
+    });
+
+    return res.json({ challenges: challengesWithStats });
+  } catch (queryErr) {
+    console.warn("⚠️ [listChallenges] Lateral join query warning:", queryErr.message);
+    const fallbackRes = await pool.query(`
+      SELECT c.*, 
+             u.name AS creator_name,
+             g.latitude AS ground_lat, 
+             g.longitude AS ground_lng
+      FROM challenges c
+      LEFT JOIN users u ON u.id = c.creator_id
+      LEFT JOIN grounds g ON g.id = c.ground_id
+      ORDER BY c.created_at DESC
+    `);
+    const fallbackChallenges = fallbackRes.rows.map(c => ({
       ...c,
-      team_rating: overallRating,
-      reliability_score: Number(reliability.toFixed(1)),
-      latest_review: (c.latest_review_text || c.latest_reviewer_name) ? {
-        id: c.latest_review_id,
-        reviewer_name: c.latest_reviewer_name || "Cricket Player",
-        reviewer_team_name: c.latest_reviewer_team_name || null,
-        rating: c.latest_review_rating != null ? Number(c.latest_review_rating) : 5.0,
-        review_text: c.latest_review_text || "",
-        created_at: c.latest_review_created_at || null,
-      } : null,
-    };
-  });
-
-  res.json({ challenges: challengesWithStats });
+      team_rating: 5.0,
+      reliability_score: 5.0,
+      reviews_count: 0,
+      reviews_avg: null,
+      latest_review: null,
+    }));
+    return res.json({ challenges: fallbackChallenges });
+  }
 });
 
 // ============================================================
