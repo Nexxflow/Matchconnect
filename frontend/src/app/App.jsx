@@ -83,6 +83,7 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState(getInitialTab);
   const [autoOpenChallengeForm, setAutoOpenChallengeForm] = useState(false);
+  const [autoOpenTournamentForm, setAutoOpenTournamentForm] = useState(false);
   const [findMatchEntryMode, setFindMatchEntryMode] = useState("browse");
 
   const goCreateChallenge = () => {
@@ -91,8 +92,14 @@ export default function App() {
     setFindMatchEntryMode("create");
   };
 
+  const goCreateTournament = () => {
+    setActiveTab("Tournaments");
+    setAutoOpenTournamentForm(true);
+  };
+
   const handleNavTabClick = tab => {
     setFindMatchEntryMode("browse");
+    setAutoOpenTournamentForm(false);
     setActiveTab(tab);
   };
 
@@ -632,6 +639,7 @@ export default function App() {
   const handleChallengeAccepted = (updatedChallenge) => {
     setChallenges(prev => prev.map(c => c.id === updatedChallenge.id ? updatedChallenge : c));
     setAcceptedChallenge(updatedChallenge);
+    window.dispatchEvent(new CustomEvent("mc:challenge_accepted", { detail: updatedChallenge }));
   };
 
   const handleCancelAcceptedChallenge = async (challengeId) => {
@@ -642,6 +650,7 @@ export default function App() {
       const res = await apiRequest(`/challenges/${targetId}/cancel`, { method: "POST", token: auth.token });
       setChallenges(prev => prev.map(c => c.id === res.challenge.id ? res.challenge : c));
       setAcceptedChallenge(null);
+      window.dispatchEvent(new CustomEvent("mc:challenge_cancelled", { detail: { challengeId: targetId } }));
     } catch (err) {
       console.error("Could not cancel challenge:", err.message);
     } finally {
@@ -760,6 +769,7 @@ export default function App() {
         challenges={challenges.filter(c => c.status === "open").map(normalizeChallenge)}
         allChallenges={challenges}
         onCreateChallenge={goCreateChallenge}
+        onCreateTournament={goCreateTournament}
       />
     ),
     "Find Match": (
@@ -815,6 +825,8 @@ export default function App() {
         onTournamentCreated={handleTournamentCreated}
         onTournamentUpdated={handleTournamentUpdated}
         onTournamentDeleted={handleTournamentDeleted}
+        autoOpenCreate={autoOpenTournamentForm}
+        onAutoOpenHandled={() => setAutoOpenTournamentForm(false)}
       />
     ),
     "My Team": (

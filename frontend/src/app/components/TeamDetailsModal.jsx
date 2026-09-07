@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, Star, Users, CheckCircle, XCircle, AlertCircle, Send, Award, Phone, Calendar, MapPin, MessageSquare, ThumbsUp, Shield } from "lucide-react";
+import { X, Star, Users, CheckCircle, XCircle, AlertCircle, Send, Award, Phone, Calendar, MapPin, MessageSquare, ThumbsUp, Shield, Trash2 } from "lucide-react";
 import { apiRequest } from "../api";
 import { GhostButton } from "../utils/helpers.jsx";
 
@@ -11,27 +11,37 @@ function formatPhoneDisplay(phone) {
 }
 
 function StarRating({ rating = 0, size = "w-4 h-4", max = 5 }) {
-  const full = Math.floor(rating);
-  const frac = rating - full;
+  const numRating = Number(rating) || 0;
 
   return (
-    <div className="flex items-center gap-0.5">
+    <div className="flex items-center gap-1">
       {Array.from({ length: max }).map((_, i) => {
-        let fill = "#3a3a3a";
-        if (i < full) {
-          fill = "#eab308"; // full gold star
-        } else if (i === full && frac >= 0.3) {
-          fill = "#ca8a04"; // near-full / partial
+        let fillPercent = 0;
+        if (numRating >= i + 1) {
+          fillPercent = 100;
+        } else if (numRating > i) {
+          fillPercent = Math.min(100, Math.max(0, Math.round((numRating - i) * 100)));
         }
+
         return (
-          <Star
-            key={i}
-            className={`${size} shrink-0`}
-            style={{
-              color: i < Math.ceil(rating) ? "#eab308" : "#3a3a3a",
-              fill: i < Math.ceil(rating) ? fill : "transparent"
-            }}
-          />
+          <div key={i} className="relative inline-flex items-center justify-center shrink-0">
+            {/* Background empty star */}
+            <Star
+              className={`${size} shrink-0 text-neutral-600`}
+              style={{ fill: "#262626" }}
+            />
+            {/* Foreground filled golden star with percentage clip */}
+            {fillPercent > 0 && (
+              <Star
+                className={`${size} shrink-0 absolute top-0 left-0 text-amber-400 pointer-events-none`}
+                style={{
+                  fill: "#f59e0b",
+                  clipPath: `inset(0 ${100 - fillPercent}% 0 0)`,
+                  WebkitClipPath: `inset(0 ${100 - fillPercent}% 0 0)`
+                }}
+              />
+            )}
+          </div>
         );
       })}
     </div>
@@ -80,6 +90,7 @@ export default function TeamDetailsModal({
   onClose,
   token,
   user,
+  unreadReviewIds = null,
   contactFallback = null,
   postedByFallback = null,
 }) {
@@ -91,9 +102,16 @@ export default function TeamDetailsModal({
   const [ratingInput, setRatingInput] = useState(5);
   const [reviewTextInput, setReviewTextInput] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [deletingReviewId, setDeletingReviewId] = useState(null);
   const [reviewSuccess, setReviewSuccess] = useState(null);
   const [reviewError, setReviewError] = useState(null);
   const [showReviewForm, setShowReviewForm] = useState(false);
+
+  const isOwnTeam = Boolean(
+    (user?.team_name && user.team_name.trim().toLowerCase() === String(teamName || "").trim().toLowerCase()) ||
+    (teamData?.team?.created_by && user?.id && Number(teamData.team.created_by) === Number(user.id)) ||
+    (teamData?.team?.name && user?.team_name && teamData.team.name.trim().toLowerCase() === user.team_name.trim().toLowerCase())
+  );
 
   const fetchTeamDetails = async () => {
     if (!teamName) return;
@@ -119,15 +137,47 @@ export default function TeamDetailsModal({
         fetchTeamDetails();
       }
     };
+    const onActivityUpdated = () => {
+      fetchTeamDetails();
+    };
     window.addEventListener("mc:review_submitted", onReviewUpdated);
-    return () => window.removeEventListener("mc:review_submitted", onReviewUpdated);
+    window.addEventListener("mc:challenge_accepted", onActivityUpdated);
+    window.addEventListener("mc:challenge_cancelled", onActivityUpdated);
+    return () => {
+      window.removeEventListener("mc:review_submitted", onReviewUpdated);
+      window.removeEventListener("mc:challenge_accepted", onActivityUpdated);
+      window.removeEventListener("mc:challenge_cancelled", onActivityUpdated);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamName]);
+
+  const handleDeleteReview = async (reviewId) => {
+    if (!window.confirm("Are you sure you want to delete your feedback review?")) return;
+    setDeletingReviewId(reviewId);
+    try {
+      await apiRequest(`/teams/reviews/${reviewId}`, {
+        method: "DELETE",
+        token
+      });
+      await fetchTeamDetails();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("mc:review_submitted", { detail: { team_name: teamName } }));
+      }
+    } catch (err) {
+      alert(err.message || "Failed to delete review");
+    } finally {
+      setDeletingReviewId(null);
+    }
+  };
 
   const handleSubmitReview = async e => {
     e.preventDefault();
     if (!token) {
       setReviewError("Please log in to submit a review.");
+      return;
+    }
+    if (isOwnTeam) {
+      setReviewError("You cannot review your own team. Only opponent teams can leave feedback.");
       return;
     }
     if (!reviewTextInput.trim()) {
@@ -165,10 +215,6 @@ export default function TeamDetailsModal({
     }
   };
 
-  const isOwnTeam =
-    user?.team_name &&
-    user.team_name.trim().toLowerCase() === String(teamName || "").trim().toLowerCase();
-
   const phoneToDisplay =
     teamData?.team?.contact_no || contactFallback || null;
   const captainToDisplay =
@@ -183,6 +229,7 @@ export default function TeamDetailsModal({
 
   const ratingVal = teamData?.rating != null ? teamData.rating : 5.0;
   const reviews = teamData?.reviews || [];
+  const reviewsCount = teamData?.reviews_count != null ? teamData.reviews_count : reviews.length;
 
   return (
     <div
@@ -278,56 +325,14 @@ export default function TeamDetailsModal({
                 border: "1px solid rgba(34,197,94,0.25)"
               }}
             >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-3xl font-black text-white">{ratingVal.toFixed(1)}</span>
-                    <div className="space-y-0.5">
-                      <StarRating rating={ratingVal} size="w-4 h-4" />
-                      <div className="text-[11px] font-medium text-neutral-400">
-                        Overall Team Rating
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 mt-3">
-                    <span
-                      className="px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1"
-                      style={{ backgroundColor: "rgba(34,197,94,0.18)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.3)" }}
-                    >
-                      <CheckCircle className="w-3 h-3" />
-                      +{stats.challenges_accepted} Accepted Challenges
-                    </span>
-                    {stats.challenges_cancelled > 0 ? (
-                      <span
-                        className="px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1"
-                        style={{ backgroundColor: "rgba(239,68,68,0.15)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)" }}
-                      >
-                        <XCircle className="w-3 h-3" />
-                        -{stats.challenges_cancelled} Cancelled Matches
-                      </span>
-                    ) : (
-                      <span
-                        className="px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1"
-                        style={{ backgroundColor: "rgba(59,130,246,0.15)", color: "#60a5fa", border: "1px solid rgba(59,130,246,0.3)" }}
-                      >
-                        <Shield className="w-3 h-3" />
-                        0 Cancellations (100% Reliable)
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div
-                  className="rounded-xl p-3 sm:text-right text-xs"
-                  style={{ backgroundColor: "rgba(0,0,0,0.4)", border: "1px solid rgba(255,255,255,0.06)" }}
-                >
-                  <div className="text-neutral-300 font-semibold mb-1 flex items-center sm:justify-end gap-1.5">
-                    <Award className="w-3.5 h-3.5 text-yellow-400" />
-                    <span>Reliability Score</span>
-                  </div>
-                  <div className="text-[11px] text-neutral-400 leading-relaxed max-w-[200px]">
-                    Rating increases when challenges are accepted and drops when matches are cancelled.
+              <div className="flex items-center gap-3.5">
+                <span className="text-3xl sm:text-4xl font-black text-white">{ratingVal.toFixed(1)}</span>
+                <div className="space-y-1">
+                  <StarRating rating={ratingVal} size="w-5 h-5" />
+                  <div className="text-xs font-medium text-neutral-400">
+                    {reviewsCount > 0
+                      ? `User Feedback Rating (${reviewsCount} review${reviewsCount === 1 ? "" : "s"})`
+                      : "User Feedback Rating (New Team)"}
                   </div>
                 </div>
               </div>
@@ -341,33 +346,7 @@ export default function TeamDetailsModal({
               </h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {/* 1. How many they posted */}
-                <div
-                  className="rounded-2xl p-3.5 text-center transition-all hover:border-neutral-700"
-                  style={{ backgroundColor: "#171a17", border: "1px solid #282d28" }}
-                >
-                  <div className="w-8 h-8 rounded-full mx-auto flex items-center justify-center mb-2 bg-sky-500/10 text-sky-400">
-                    <Send className="w-4 h-4" />
-                  </div>
-                  <div className="text-2xl font-extrabold text-white">{stats.challenges_posted}</div>
-                  <div className="text-xs font-bold text-neutral-300 mt-0.5">Challenges Posted</div>
-                  <div className="text-[10px] text-neutral-500 mt-1">Posts created by this team</div>
-                </div>
-
-                {/* 2. How many booked their post challenges */}
-                <div
-                  className="rounded-2xl p-3.5 text-center transition-all hover:border-neutral-700"
-                  style={{ backgroundColor: "#171a17", border: "1px solid #282d28" }}
-                >
-                  <div className="w-8 h-8 rounded-full mx-auto flex items-center justify-center mb-2 bg-emerald-500/10 text-emerald-400">
-                    <CheckCircle className="w-4 h-4" />
-                  </div>
-                  <div className="text-2xl font-extrabold text-white">{stats.challenges_booked}</div>
-                  <div className="text-xs font-bold text-neutral-300 mt-0.5">Booked by Others</div>
-                  <div className="text-[10px] text-neutral-500 mt-1">Opponents accepted their post</div>
-                </div>
-
-                {/* 3. How they accepted their challenges */}
+                {/* 1. Matches they accepted from other teams */}
                 <div
                   className="rounded-2xl p-3.5 text-center transition-all hover:border-neutral-700"
                   style={{ backgroundColor: "#171a17", border: "1px solid #282d28" }}
@@ -379,6 +358,32 @@ export default function TeamDetailsModal({
                   <div className="text-xs font-bold text-neutral-300 mt-0.5">Accepted by Them</div>
                   <div className="text-[10px] text-neutral-500 mt-1">Accepted other team challenges</div>
                 </div>
+
+                {/* 2. How many opponents accepted their challenges */}
+                <div
+                  className="rounded-2xl p-3.5 text-center transition-all hover:border-neutral-700"
+                  style={{ backgroundColor: "#171a17", border: "1px solid #282d28" }}
+                >
+                  <div className="w-8 h-8 rounded-full mx-auto flex items-center justify-center mb-2 bg-emerald-500/10 text-emerald-400">
+                    <CheckCircle className="w-4 h-4" />
+                  </div>
+                  <div className="text-2xl font-extrabold text-white">{stats.challenges_booked}</div>
+                  <div className="text-xs font-bold text-neutral-300 mt-0.5">Accepted by Others</div>
+                  <div className="text-[10px] text-neutral-500 mt-1">Opponents accepted their challenges</div>
+                </div>
+
+                {/* 3. How many they cancelled of the accepted challenges */}
+                <div
+                  className="rounded-2xl p-3.5 text-center transition-all hover:border-neutral-700"
+                  style={{ backgroundColor: "#171a17", border: "1px solid #282d28" }}
+                >
+                  <div className="w-8 h-8 rounded-full mx-auto flex items-center justify-center mb-2 bg-rose-500/10 text-rose-400">
+                    <XCircle className="w-4 h-4" />
+                  </div>
+                  <div className="text-2xl font-extrabold text-white">{stats.challenges_cancelled}</div>
+                  <div className="text-xs font-bold text-neutral-300 mt-0.5">Cancelled by Them</div>
+                  <div className="text-[10px] text-neutral-500 mt-1">Accepted challenges they cancelled</div>
+                </div>
               </div>
             </div>
 
@@ -387,34 +392,41 @@ export default function TeamDetailsModal({
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <MessageSquare className="w-4 h-4 text-green-400" />
-                  <h3 className="text-sm font-bold text-white">
-                    Feedback & Reviews ({reviews.length})
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>Feedback & Reviews ({reviews.length})</span>
+                    {unreadReviewIds && unreadReviewIds.size > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                        {unreadReviewIds.size} unread
+                      </span>
+                    )}
                   </h3>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {isOwnTeam && (
-                    <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-neutral-800 text-neutral-400 border border-neutral-700">
-                      Your Team Profile
+                  {isOwnTeam ? (
+                    <span className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-neutral-800 text-neutral-400 border border-neutral-700/60">
+                      Opponents only can review
                     </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowReviewForm(prev => !prev);
+                        setReviewError(null);
+                        setReviewSuccess(null);
+                      }}
+                      className="px-3 py-1.5 rounded-xl text-xs font-semibold text-green-400 bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 transition-all flex items-center gap-1.5"
+                    >
+                      <ThumbsUp className="w-3.5 h-3.5" />
+                      <span>{showReviewForm ? "Cancel Review" : "Add Review"}</span>
+                    </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowReviewForm(prev => !prev);
-                      setReviewError(null);
-                      setReviewSuccess(null);
-                    }}
-                    className="px-3 py-1.5 rounded-xl text-xs font-semibold text-green-400 bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 transition-all flex items-center gap-1.5"
-                  >
-                    <ThumbsUp className="w-3.5 h-3.5" />
-                    <span>{showReviewForm ? "Cancel Review" : (isOwnTeam ? "Add Team Note / Review" : "Add Review")}</span>
-                  </button>
                 </div>
               </div>
 
               {/* Review submission form */}
-              {showReviewForm && (
+              {showReviewForm && !isOwnTeam && (
                 <form
                   onSubmit={handleSubmitReview}
                   className="rounded-2xl p-4 mb-4 space-y-3 animate-in fade-in duration-200"
@@ -487,53 +499,83 @@ export default function TeamDetailsModal({
                 </div>
               ) : (
                 <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
-                  {reviews.map(r => (
-                    <div
-                      key={r.id}
-                      className="rounded-2xl p-3.5 transition-colors"
-                      style={{ backgroundColor: "#161816", border: "1px solid #242724" }}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs"
-                            style={{ backgroundColor: "#242d24", border: "1px solid #334433" }}
-                          >
-                            {(r.reviewer_name || "P")[0].toUpperCase()}
-                          </div>
-                          <div>
-                            <div className="text-xs font-bold text-white leading-tight">
-                              {r.reviewer_name || "Cricket Player"}
-                              {r.reviewer_team_name && (
-                                <span className="font-normal text-neutral-400 text-[11px] ml-1.5">
-                                  ({r.reviewer_team_name})
-                                </span>
+                  {reviews.map(r => {
+                    const isUnread = Boolean(
+                      unreadReviewIds && (unreadReviewIds.has(String(r.id)) || unreadReviewIds.has(Number(r.id)))
+                    );
+                    return (
+                      <div
+                        key={r.id}
+                        className="rounded-2xl p-3.5 transition-colors relative"
+                        style={{
+                          backgroundColor: isUnread ? "rgba(239, 68, 68, 0.08)" : "#161816",
+                          border: isUnread ? "1px solid rgba(239, 68, 68, 0.4)" : "1px solid #242724"
+                        }}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs relative shrink-0"
+                              style={{ backgroundColor: "#242d24", border: "1px solid #334433" }}
+                            >
+                              {(r.reviewer_name || "P")[0].toUpperCase()}
+                              {isUnread && (
+                                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-[#161816] animate-pulse" />
                               )}
                             </div>
-                            <div className="text-[10px] text-neutral-500 mt-0.5">
-                              {r.created_at
-                                ? new Date(r.created_at).toLocaleString("en-IN", {
-                                    day: "numeric",
-                                    month: "short",
-                                    year: "numeric",
-                                    hour: "numeric",
-                                    minute: "2-digit",
-                                    hour12: true,
-                                    timeZone: "Asia/Kolkata"
-                                  })
-                                : "Recent"}
+                            <div>
+                              <div className="text-xs font-bold text-white leading-tight flex items-center gap-1.5 flex-wrap">
+                                <span>{r.reviewer_name || "Cricket Player"}</span>
+                                {r.reviewer_team_name && (
+                                  <span className="font-normal text-neutral-400 text-[11px]">
+                                    ({r.reviewer_team_name})
+                                  </span>
+                                )}
+                                {isUnread && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-red-500/20 border border-red-500/40 text-[9px] font-bold text-red-400">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                                    Unread msg
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-neutral-500 mt-0.5">
+                                {r.created_at
+                                  ? new Date(r.created_at).toLocaleString("en-IN", {
+                                      day: "numeric",
+                                      month: "short",
+                                      year: "numeric",
+                                      hour: "numeric",
+                                      minute: "2-digit",
+                                      hour12: true,
+                                      timeZone: "Asia/Kolkata"
+                                    })
+                                  : "Recent"}
+                              </div>
                             </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <StarRating rating={r.rating} size="w-3.5 h-3.5" />
+                            {user?.id && Number(r.reviewer_user_id) === Number(user.id) && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteReview(r.id)}
+                                disabled={deletingReviewId === r.id}
+                                title="Delete your review"
+                                className="p-1.5 rounded-lg text-neutral-400 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0 disabled:opacity-50"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </div>
 
-                        <StarRating rating={r.rating} size="w-3.5 h-3.5" />
+                        <p className="text-xs text-neutral-300 mt-2.5 pl-9 leading-relaxed">
+                          "{r.review_text}"
+                        </p>
                       </div>
-
-                      <p className="text-xs text-neutral-300 mt-2.5 pl-9 leading-relaxed">
-                        "{r.review_text}"
-                      </p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

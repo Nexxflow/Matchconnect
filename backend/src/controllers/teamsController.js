@@ -119,26 +119,60 @@ const getTeamDetails = asyncHandler(async (req, res) => {
   let challengesBooked = 0;
   try {
     const bookedRes = await pool.query(
-      `SELECT COUNT(*)::int AS count FROM challenges
-       WHERE LOWER(TRIM(team_name)) = LOWER(TRIM($1))
-         AND (status = 'accepted' OR accepted_by_team_name IS NOT NULL)`,
+      `SELECT COUNT(DISTINCT ch_id)::int AS count FROM (
+         SELECT id AS ch_id FROM challenges
+         WHERE (LOWER(TRIM(team_name)) = LOWER(TRIM($1))
+            OR REGEXP_REPLACE(LOWER(TRIM(team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM($1)), '[[:space:]]+', ' ', 'g'))
+           AND (status = 'accepted' OR accepted_by_team_name IS NOT NULL)
+         UNION
+         SELECT ca.challenge_id AS ch_id FROM challenge_acceptances ca
+         WHERE (LOWER(TRIM(ca.creator_team_name)) = LOWER(TRIM($1))
+            OR REGEXP_REPLACE(LOWER(TRIM(ca.creator_team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM($1)), '[[:space:]]+', ' ', 'g'))
+           AND NOT EXISTS (
+             SELECT 1 FROM challenge_cancellations cc
+             WHERE cc.challenge_id = ca.challenge_id
+           )
+       ) t`,
       [teamName]
     );
     challengesBooked = bookedRes.rows[0]?.count || 0;
   } catch (e) {
-    console.warn("Could not query challengesBooked:", e.message);
+    try {
+      const fallbackBooked = await pool.query(
+        `SELECT COUNT(*)::int AS count FROM challenges
+         WHERE (LOWER(TRIM(team_name)) = LOWER(TRIM($1))
+            OR REGEXP_REPLACE(LOWER(TRIM(team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM($1)), '[[:space:]]+', ' ', 'g'))
+           AND (status = 'accepted' OR accepted_by_team_name IS NOT NULL)`,
+        [teamName]
+      );
+      challengesBooked = fallbackBooked.rows[0]?.count || 0;
+    } catch {}
   }
 
   // C) Challenges Accepted: Challenges from other teams that THIS team accepted
+  // Note: if the team accepted another team's challenge and later cancelled it,
+  // that challenge is NOT counted in accepted count (only in cancel count).
   let challengesAccepted = 0;
   try {
     const acceptedRes = await pool.query(
       `SELECT COUNT(DISTINCT ch_id)::int AS count FROM (
+         -- Currently active accepted challenges
          SELECT id AS ch_id FROM challenges
-         WHERE LOWER(TRIM(accepted_by_team_name)) = LOWER(TRIM($1))
+         WHERE (LOWER(TRIM(accepted_by_team_name)) = LOWER(TRIM($1))
+            OR REGEXP_REPLACE(LOWER(TRIM(accepted_by_team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM($1)), '[[:space:]]+', ' ', 'g'))
+           AND status = 'accepted'
          UNION
-         SELECT challenge_id AS ch_id FROM challenge_acceptances
-         WHERE LOWER(TRIM(accepted_by_team_name)) = LOWER(TRIM($1))
+         -- Historical acceptances, EXCLUDING any that were cancelled by this team
+         SELECT ca.challenge_id AS ch_id FROM challenge_acceptances ca
+         WHERE (LOWER(TRIM(ca.accepted_by_team_name)) = LOWER(TRIM($1))
+            OR REGEXP_REPLACE(LOWER(TRIM(ca.accepted_by_team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM($1)), '[[:space:]]+', ' ', 'g'))
+           AND NOT EXISTS (
+             SELECT 1 FROM challenge_cancellations cc
+             WHERE cc.challenge_id = ca.challenge_id
+               AND (LOWER(TRIM(cc.cancelled_by_team_name)) = LOWER(TRIM($1))
+                 OR REGEXP_REPLACE(LOWER(TRIM(cc.cancelled_by_team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM($1)), '[[:space:]]+', ' ', 'g')
+                 OR cc.cancelled_by_user_id = ca.accepted_by_user_id)
+           )
        ) t`,
       [teamName]
     );
@@ -146,34 +180,36 @@ const getTeamDetails = asyncHandler(async (req, res) => {
   } catch {
     try {
       const fallbackAcc = await pool.query(
-        `SELECT COUNT(*)::int AS count FROM challenges WHERE LOWER(TRIM(accepted_by_team_name)) = LOWER(TRIM($1))`,
+        `SELECT COUNT(*)::int AS count FROM challenges
+         WHERE (LOWER(TRIM(accepted_by_team_name)) = LOWER(TRIM($1))
+            OR REGEXP_REPLACE(LOWER(TRIM(accepted_by_team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM($1)), '[[:space:]]+', ' ', 'g'))
+           AND status = 'accepted'`,
         [teamName]
       );
       challengesAccepted = fallbackAcc.rows[0]?.count || 0;
     } catch {}
   }
 
-  // D) Challenges Cancelled: Total cancellations by this team
+  // D) Challenges Cancelled: Total cancellations of accepted challenges by this team
   let challengesCancelled = 0;
   try {
     const cancelledRes = await pool.query(
       `SELECT COUNT(*)::int AS count FROM challenge_cancellations
-       WHERE LOWER(TRIM(cancelled_by_team_name)) = LOWER(TRIM($1))`,
+       WHERE LOWER(TRIM(cancelled_by_team_name)) = LOWER(TRIM($1))
+          OR REGEXP_REPLACE(LOWER(TRIM(cancelled_by_team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM($1)), '[[:space:]]+', ' ', 'g')
+          OR cancelled_by_user_id IN (
+            SELECT id FROM users
+            WHERE LOWER(TRIM(team_name)) = LOWER(TRIM($1))
+               OR REGEXP_REPLACE(LOWER(TRIM(team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM($1)), '[[:space:]]+', ' ', 'g')
+          )`,
       [teamName]
     );
     challengesCancelled = cancelledRes.rows[0]?.count || 0;
   } catch {}
 
-  // 3. Dynamic Rating Calculation
-  let reliabilityScore = 5.0;
-  if (challengesCancelled > 0) {
-    const ratio = challengesAccepted === 0
-      ? Math.max(0.2, 1.0 - (challengesCancelled * 0.25))
-      : challengesAccepted / (challengesAccepted + challengesCancelled * 1.25);
-    reliabilityScore = Math.max(1.0, Math.min(5.0, 5.0 * ratio));
-  } else if (challengesAccepted > 0) {
-    reliabilityScore = 5.0;
-  }
+  // 3. Reliability Score Calculation: Base 5.0, +0.1 for accept, -0.2 for cancel (range 1.0 to 5.0)
+  const calcReliability = 5.0 + (challengesAccepted * 0.1) - (challengesCancelled * 0.2);
+  const reliabilityScore = Math.max(1.0, Math.min(5.0, Number(calcReliability.toFixed(1))));
 
   // 4. Feedback Reviews
   let reviews = [];
@@ -192,16 +228,14 @@ const getTeamDetails = asyncHandler(async (req, res) => {
     console.warn("Could not query team_reviews in getTeamDetails:", err.message);
   }
 
-  let overallRating = reliabilityScore;
   let reviewsAvg = null;
   if (reviews.length > 0) {
     const sum = reviews.reduce((acc, r) => acc + (Number(r.rating) || 0), 0);
     reviewsAvg = Number((sum / reviews.length).toFixed(1));
-    // Composite rating: 50% reliability rating + 50% community reviews
-    overallRating = Number(((reliabilityScore * 0.5) + (reviewsAvg * 0.5)).toFixed(1));
-  } else {
-    overallRating = Number(reliabilityScore.toFixed(1));
   }
+
+  // Rating must be calculated by the user feedback ratings, not by cancel and accept challenges
+  const overallRating = reviewsAvg !== null ? reviewsAvg : 5.0;
 
   res.json({
     team: teamInfo,
@@ -263,21 +297,38 @@ const addTeamReview = asyncHandler(async (req, res) => {
   const reviewerName = user?.name || "Cricket Player";
   const reviewerTeam = user?.team_name || null;
 
+  // Block own team players/captains from posting feedback for their own team
   const isSelf = reviewerTeam && reviewerTeam.trim().toLowerCase() === team_name.trim().toLowerCase();
-  const displayReviewerName = isSelf ? `${reviewerName} (Captain/Member)` : reviewerName;
+  if (isSelf) {
+    return res.status(403).json({ error: "You cannot review your own team. Only opponent teams can leave feedback." });
+  }
+
+  // Also verify user is not a creator/captain of this team
+  const ownCheck = await pool.query(
+    `SELECT 1 FROM teams
+     WHERE created_by = $1 AND (
+       LOWER(TRIM(name)) = LOWER(TRIM($2))
+       OR REGEXP_REPLACE(LOWER(TRIM(name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM($2)), '[[:space:]]+', ' ', 'g')
+     )
+     LIMIT 1`,
+    [userId, team_name.trim()]
+  );
+  if (ownCheck.rows.length > 0) {
+    return res.status(403).json({ error: "You cannot review your own team. Only opponent teams can leave feedback." });
+  }
 
   const insertRes = await pool.query(
     `INSERT INTO team_reviews (team_name, reviewer_user_id, reviewer_name, reviewer_team_name, rating, review_text)
      VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING id, team_name, reviewer_user_id, reviewer_name, reviewer_team_name,
                rating::float AS rating, review_text, created_at`,
-    [team_name.trim(), userId, displayReviewerName, reviewerTeam, numRating, review_text.trim()]
+    [team_name.trim(), userId, reviewerName, reviewerTeam, numRating, review_text.trim()]
   );
 
   const savedReview = insertRes.rows[0];
 
-  // Send notification to all users in the reviewed team if reviewer is not self
-  if (!isSelf && typeof notifyTeamOfFeedback === "function") {
+  // Send notification to all users in the reviewed team
+  if (typeof notifyTeamOfFeedback === "function") {
     try {
       notifyTeamOfFeedback(
         team_name.trim(),
@@ -299,8 +350,40 @@ const addTeamReview = asyncHandler(async (req, res) => {
   });
 });
 
+// ============================================================
+// DELETE /api/teams/reviews/:id
+// Only the user who posted the review can delete it
+// ============================================================
+const deleteTeamReview = asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+  const { id } = req.params;
+
+  const reviewRes = await pool.query(`SELECT * FROM team_reviews WHERE id = $1`, [id]);
+  if (reviewRes.rows.length === 0) {
+    return res.status(404).json({ error: "Review not found" });
+  }
+
+  const review = reviewRes.rows[0];
+
+  // Strictly enforce that only the author who posted the review can delete it
+  if (Number(review.reviewer_user_id) !== Number(userId)) {
+    return res.status(403).json({ error: "Only the user who posted this feedback can delete it" });
+  }
+
+  await pool.query(`DELETE FROM team_reviews WHERE id = $1`, [id]);
+
+  res.json({
+    ok: true,
+    message: "Feedback review deleted successfully",
+    deletedId: Number(id),
+  });
+});
+
 module.exports = {
   getMyTeam,
   getTeamDetails,
   addTeamReview,
+  deleteTeamReview,
 };

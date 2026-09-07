@@ -43,8 +43,9 @@ const listChallenges = asyncHandler(async (req, res) => {
        LEFT JOIN LATERAL (
          SELECT COUNT(*)::int AS accepted_count
          FROM challenges
-         WHERE LOWER(TRIM(accepted_by_team_name)) = LOWER(TRIM(c.team_name))
-            OR REGEXP_REPLACE(LOWER(TRIM(accepted_by_team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '[[:space:]]+', ' ', 'g')
+         WHERE (LOWER(TRIM(accepted_by_team_name)) = LOWER(TRIM(c.team_name))
+            OR REGEXP_REPLACE(LOWER(TRIM(accepted_by_team_name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM(c.team_name)), '[[:space:]]+', ' ', 'g'))
+            AND status = 'accepted'
        ) acc ON true
        LEFT JOIN LATERAL (
          SELECT COUNT(*)::int AS cancelled_count
@@ -66,23 +67,17 @@ const listChallenges = asyncHandler(async (req, res) => {
     const challengesWithStats = rows.map(c => {
       const acc = Number(c.accepted_count) || 0;
       const can = Number(c.cancelled_count) || 0;
-      let reliability = 5.0;
-      if (can > 0) {
-        const ratio = acc === 0 ? Math.max(0.2, 1.0 - (can * 0.25)) : acc / (acc + can * 1.25);
-        reliability = Math.max(1.0, Math.min(5.0, 5.0 * ratio));
-      } else if (acc > 0) {
-        reliability = 5.0;
-      }
-      let overallRating = reliability;
-      if (c.reviews_count > 0 && c.reviews_avg != null) {
-        overallRating = Number(((reliability * 0.5) + (Number(c.reviews_avg) * 0.5)).toFixed(1));
-      } else {
-        overallRating = Number(reliability.toFixed(1));
-      }
+      // Reliability Score: Base 5.0, +0.1 per accept, -0.2 per cancel (range 1.0 to 5.0)
+      const reliability = Math.max(1.0, Math.min(5.0, Number((5.0 + (acc * 0.1) - (can * 0.2)).toFixed(1))));
+
+      // Rating must be calculated by user feedback ratings, not by cancel and accept challenges
+      const hasReviews = Number(c.reviews_count) > 0 && c.reviews_avg != null;
+      const overallRating = hasReviews ? Number(Number(c.reviews_avg).toFixed(1)) : 5.0;
+
       return {
         ...c,
         team_rating: overallRating,
-        reliability_score: Number(reliability.toFixed(1)),
+        reliability_score: reliability,
         latest_review: (c.latest_review_text || c.latest_reviewer_name) ? {
           id: c.latest_review_id,
           reviewer_name: c.latest_reviewer_name || "Cricket Player",

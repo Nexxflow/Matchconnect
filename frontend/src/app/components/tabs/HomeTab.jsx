@@ -3,7 +3,7 @@ import { MapPin, Star } from "lucide-react";
 import { C, cn, Tag, GhostButton } from "../../utils/helpers.jsx";
 import { GROUNDS, ALL_CHALLENGES } from "../../utils/constants";
 
-export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = ALL_CHALLENGES, tournaments = [], allChallenges = [], onCreateChallenge }) {
+export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = ALL_CHALLENGES, tournaments = [], allChallenges = [], onCreateChallenge, onCreateTournament }) {
   const matchesPlayedCount = allChallenges.filter(c => c.status === "accepted").length;
   const activeTeamsCount = new Set(
     allChallenges.flatMap(c => [c.team_name, c.accepted_by_team_name].filter(Boolean))
@@ -24,7 +24,7 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
         const { latitude, longitude } = position.coords;
         try {
           const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
           );
           const data = await res.json();
           const addr = data.address || {};
@@ -55,19 +55,22 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
           </div>
           <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">Find your next</h1>
           <h1 className="text-2xl md:text-3xl font-bold text-green-400 mb-5">cricket match</h1>
-          <div className="flex flex-col sm:flex-row flex-wrap gap-2.5 sm:gap-3">
-            <button onClick={() => setActiveTab("Find Match")} className="w-full sm:w-auto px-5 py-2.5 rounded-full border-2 border-green-400 text-green-300 text-sm font-semibold hover:bg-green-400/10 transition-colors text-center justify-center">
+          <div className="flex flex-row items-center flex-nowrap gap-2 sm:gap-2.5 md:gap-3 overflow-x-auto pb-1 sm:pb-0" style={{ scrollbarWidth: "none" }}>
+            <button onClick={() => setActiveTab("Find Match")} className="shrink-0 px-3.5 sm:px-4 md:px-5 py-2 sm:py-2.5 rounded-full border-2 border-green-400 text-green-300 text-xs sm:text-sm font-semibold hover:bg-green-400/10 transition-colors text-center justify-center whitespace-nowrap">
               🏏 Find a Match
             </button>
-            <button onClick={() => setActiveTab("Grounds")} className="w-full sm:w-auto px-5 py-2.5 rounded-full text-white/80 text-sm font-semibold hover:bg-white/5 transition-colors text-center justify-center" style={{ border: "2px solid rgba(255,255,255,0.3)" }}>
+            <button onClick={() => setActiveTab("Grounds")} className="shrink-0 px-3.5 sm:px-4 md:px-5 py-2 sm:py-2.5 rounded-full text-white/80 text-xs sm:text-sm font-semibold hover:bg-white/5 transition-colors text-center justify-center whitespace-nowrap" style={{ border: "2px solid rgba(255,255,255,0.3)" }}>
               🏟 Book a Ground
             </button>
-            <button onClick={onCreateChallenge} className="w-full sm:w-auto px-5 py-2.5 rounded-full bg-green-500 text-black text-sm font-semibold hover:bg-green-400 transition-colors text-center justify-center">
+            <button onClick={onCreateChallenge} className="shrink-0 px-3.5 sm:px  -4 md:px-5 py-2 sm:py-2.5 rounded-full bg-green-500 text-black text-xs sm:text-sm font-semibold hover:bg-green-400 transition-colors text-center justify-center whitespace-nowrap">
               ⚡ Create Challenge
+            </button>
+            <button onClick={onCreateTournament || (() => setActiveTab("Tournaments"))} className="shrink-0 px-3.5 sm:px-4 md:px-5 py-2 sm:py-2.5 rounded-full bg-green-500 text-black text-xs sm:text-sm font-semibold hover:bg-green-400 transition-colors text-center justify-center whitespace-nowrap">
+              🏆 Create Tournament
             </button>
           </div>
         </div>
-        <div className="absolute right-4 bottom-2 sm:right-6 sm:bottom-4 text-6xl sm:text-7xl opacity-20 select-none pointer-events-none">🏏</div>
+        <div className="absolute right-4 top-4 sm:right-6 sm:top-6 text-6xl sm:text-7xl opacity-20 select-none pointer-events-none">🏏</div>
       </div>
 
       {/* Stat cards */}

@@ -1143,10 +1143,31 @@ function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegis
   );
 }
 
-export default function TournamentsTab({ registeredIds = [], onRegister, onUnregister, tournaments, token, currentUser, myTeamId, teammates, onTournamentCreated, onTournamentUpdated, onTournamentDeleted }) {
+export default function TournamentsTab({
+  registeredIds = [],
+  onRegister,
+  onUnregister,
+  tournaments,
+  token,
+  currentUser,
+  myTeamId,
+  teammates,
+  onTournamentCreated,
+  onTournamentUpdated,
+  onTournamentDeleted,
+  autoOpenCreate = false,
+  onAutoOpenHandled,
+}) {
   const [viewingId, setViewingId] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingTournament, setEditingTournament] = useState(null);
+
+  useEffect(() => {
+    if (autoOpenCreate) {
+      setShowCreateForm(true);
+      onAutoOpenHandled?.();
+    }
+  }, [autoOpenCreate, onAutoOpenHandled]);
 
   const allTournaments = tournaments || [];
 
