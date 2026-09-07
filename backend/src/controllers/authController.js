@@ -88,15 +88,18 @@ async function sendResetEmail(toEmail, resetUrl) {
 }
 
 // POST /api/auth/signup
-// Body: { name, email, phone, password, team_name, village_name, team_year }
+// Body: { name, email, phone, password, team_name, village_name, team_year, terms_accepted }
 const signup = asyncHandler(async (req, res) => {
-  const { name, email, phone, password, team_name, village_name, team_year } = req.body;
+  const { name, email, phone, password, team_name, village_name, team_year, terms_accepted } = req.body;
 
-  // name, email, phone and password are all required. team_name, village_name
-  // and team_year are optional at signup time — the user can also add them
-  // later from Edit Profile — but if provided they're validated below.
+  // name, email, phone and password are all required.
   if (!name || !email || !phone || !password) {
     return res.status(400).json({ error: "name, email, phone and password are required" });
+  }
+
+  // Users must accept the Terms & Conditions to create an account
+  if (terms_accepted !== true && terms_accepted !== "true" && terms_accepted !== 1) {
+    return res.status(400).json({ error: "You must accept the Terms & Conditions to create an account." });
   }
 
   let parsedYear = null;
@@ -131,20 +134,43 @@ const signup = asyncHandler(async (req, res) => {
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const result = await pool.query(
-    `INSERT INTO users (name, email, phone, password_hash, team_name, village_name, team_year)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     RETURNING ${PUBLIC_USER_COLUMNS}`,
-    [
-      name,
-      email,
-      phone,
-      passwordHash,
-      team_name || null,
-      village_name || null,
-      parsedYear
-    ]
-  );
+  let result;
+  try {
+    result = await pool.query(
+      `INSERT INTO users (name, email, phone, password_hash, team_name, village_name, team_year, terms_accepted, terms_accepted_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true, now())
+       RETURNING ${PUBLIC_USER_COLUMNS}`,
+      [
+        name,
+        email,
+        phone,
+        passwordHash,
+        team_name || null,
+        village_name || null,
+        parsedYear
+      ]
+    );
+  } catch (dbErr) {
+    // Fallback if terms_accepted column doesn't exist yet
+    if (dbErr.message && dbErr.message.includes("terms_accepted")) {
+      result = await pool.query(
+        `INSERT INTO users (name, email, phone, password_hash, team_name, village_name, team_year)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING ${PUBLIC_USER_COLUMNS}`,
+        [
+          name,
+          email,
+          phone,
+          passwordHash,
+          team_name || null,
+          village_name || null,
+          parsedYear
+        ]
+      );
+    } else {
+      throw dbErr;
+    }
+  }
 
   // Try to link team_id immediately if a team with this name already exists
   // (e.g. D signs up and types the same team_name C already registered).

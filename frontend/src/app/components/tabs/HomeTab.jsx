@@ -3,7 +3,7 @@ import { MapPin, Star } from "lucide-react";
 import { C, cn, Tag, GhostButton } from "../../utils/helpers.jsx";
 import { GROUNDS, ALL_CHALLENGES } from "../../utils/constants";
 
-export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = ALL_CHALLENGES, tournaments = [], allChallenges = [], onCreateChallenge, onCreateTournament }) {
+export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = ALL_CHALLENGES, tournaments = [], allChallenges = [], onCreateChallenge, onCreateTournament, theme = "dark" }) {
   const matchesPlayedCount = allChallenges.filter(c => c.status === "accepted").length;
   const activeTeamsCount = new Set(
     allChallenges.flatMap(c => [c.team_name, c.accepted_by_team_name].filter(Boolean))
@@ -46,27 +46,80 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
   return (
     <div className="space-y-8">
       {/* Hero */}
-      <div className="relative rounded-2xl overflow-hidden p-6 md:p-8 border border-green-800/40" style={{ background: "linear-gradient(135deg, #14532d 0%, #166534 40%, #0d2a16 100%)" }}>
-        <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: "radial-gradient(circle at 70% 50%, #22c55e 0%, transparent 60%)" }} />
+      <div
+        className="relative rounded-2xl overflow-hidden p-6 md:p-8 transition-all"
+        style={{
+          background: theme === "light"
+            ? "linear-gradient(135deg, #15803d 0%, #16a34a 50%, #22c55e 100%)"
+            : "linear-gradient(135deg, #14532d 0%, #166534 40%, #0d2a16 100%)",
+          border: theme === "light" ? "1px solid #86efac" : "1px solid rgba(34,197,94,0.3)",
+          boxShadow: theme === "light"
+            ? "0 12px 30px -6px rgba(22, 163, 74, 0.28), 0 4px 12px -2px rgba(22, 163, 74, 0.15)"
+            : "0 8px 32px rgba(0,0,0,0.4)"
+        }}
+      >
+        <div className="absolute inset-0 opacity-15 pointer-events-none" style={{ backgroundImage: "radial-gradient(circle at 75% 45%, #ffffff 0%, transparent 60%)" }} />
         <div className="relative z-10">
-          <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 mb-4" style={{ backgroundColor: "rgba(13,15,13,0.5)", border: "1px solid rgba(34,197,94,0.3)" }}>
-            <MapPin className="w-3 h-3 text-green-400" />
-            <span className="text-green-300 text-xs font-medium">{locationLabel}</span>
+          <div
+            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 mb-4 backdrop-blur-sm shadow-sm"
+            style={{
+              backgroundColor: theme === "light" ? "rgba(255,255,255,0.22)" : "rgba(13,15,13,0.5)",
+              border: theme === "light" ? "1px solid rgba(255,255,255,0.45)" : "1px solid rgba(34,197,94,0.3)"
+            }}
+          >
+            <MapPin className="w-3.5 h-3.5 text-white" />
+            <span className="text-white text-xs font-semibold">{locationLabel}</span>
           </div>
-          <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">Find your next</h1>
-          <h1 className="text-2xl md:text-3xl font-bold text-green-400 mb-5">cricket match</h1>
-          <div className="flex flex-row items-center flex-nowrap gap-2 sm:gap-2.5 md:gap-3 overflow-x-auto pb-1 sm:pb-0" style={{ scrollbarWidth: "none" }}>
-            <button onClick={() => setActiveTab("Find Match")} className="shrink-0 px-3.5 sm:px-4 md:px-5 py-2 sm:py-2.5 rounded-full border-2 border-green-400 text-green-300 text-xs sm:text-sm font-semibold hover:bg-green-400/10 transition-colors text-center justify-center whitespace-nowrap">
-              🏏 Find a Match
+          <h1 className="text-2xl md:text-3xl font-black mb-1 tracking-tight" style={{ color: "#ffffff" }}>Find your next</h1>
+          <h1
+            className="text-2xl md:text-3xl font-black mb-5 tracking-tight"
+            style={{ color: theme === "light" ? "#f0fdf4" : "#4ade80", textShadow: "0 2px 10px rgba(0,0,0,0.15)" }}
+          >
+            cricket match
+          </h1>
+          <div className="flex flex-row items-center flex-nowrap gap-2 sm:gap-2.5 md:gap-3 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+            <button
+              onClick={() => setActiveTab("Find Match")}
+              className="shrink-0 px-3.5 sm:px-4 md:px-5 py-2 sm:py-2.5 rounded-full font-bold text-xs sm:text-sm hover:opacity-95 transition-all text-center justify-center whitespace-nowrap cursor-pointer shadow-md"
+              style={{
+                backgroundColor: theme === "light" ? "#ffffff" : "transparent",
+                color: theme === "light" ? "#000000" : "#86efac",
+                border: theme === "light" ? "2px solid #ffffff" : "2px solid #4ade80"
+              }}
+            >
+              <span style={{ color: theme === "light" ? "#000000" : "#86efac", fontWeight: 700 }}>🏏 Find a Match</span>
             </button>
-            <button onClick={() => setActiveTab("Grounds")} className="shrink-0 px-3.5 sm:px-4 md:px-5 py-2 sm:py-2.5 rounded-full text-white/80 text-xs sm:text-sm font-semibold hover:bg-white/5 transition-colors text-center justify-center whitespace-nowrap" style={{ border: "2px solid rgba(255,255,255,0.3)" }}>
-              🏟 Book a Ground
+            <button
+              onClick={() => setActiveTab("Grounds")}
+              className="shrink-0 px-3.5 sm:px-4 md:px-5 py-2 sm:py-2.5 rounded-full font-bold text-xs sm:text-sm hover:opacity-95 transition-all text-center justify-center whitespace-nowrap cursor-pointer shadow-md"
+              style={{
+                backgroundColor: theme === "light" ? "#ffffff" : "rgba(255,255,255,0.18)",
+                color: theme === "light" ? "#000000" : "#ffffff",
+                border: theme === "light" ? "2px solid #ffffff" : "2px solid rgba(255,255,255,0.45)"
+              }}
+            >
+              <span style={{ color: theme === "light" ? "#000000" : "#ffffff", fontWeight: 700 }}>🏟 Book a Ground</span>
             </button>
-            <button onClick={onCreateChallenge} className="shrink-0 px-3.5 sm:px  -4 md:px-5 py-2 sm:py-2.5 rounded-full bg-green-500 text-black text-xs sm:text-sm font-semibold hover:bg-green-400 transition-colors text-center justify-center whitespace-nowrap">
-              ⚡ Create Challenge
+            <button
+              onClick={onCreateChallenge}
+              className="shrink-0 px-3.5 sm:px-4 md:px-5 py-2 sm:py-2.5 rounded-full font-bold text-xs sm:text-sm hover:opacity-95 transition-all text-center justify-center whitespace-nowrap cursor-pointer shadow-md"
+              style={{
+                backgroundColor: theme === "light" ? "#ffffff" : "#22c55e",
+                color: theme === "light" ? "#000000" : "#ffffff",
+                border: theme === "light" ? "2px solid #ffffff" : "2px solid transparent"
+              }}
+            >
+              <span style={{ color: theme === "light" ? "#000000" : "#ffffff", fontWeight: 700 }}>⚡ Create Challenge</span>
             </button>
-            <button onClick={onCreateTournament || (() => setActiveTab("Tournaments"))} className="shrink-0 px-3.5 sm:px-4 md:px-5 py-2 sm:py-2.5 rounded-full bg-green-500 text-black text-xs sm:text-sm font-semibold hover:bg-green-400 transition-colors text-center justify-center whitespace-nowrap">
-              🏆 Create Tournament
+            <button
+              onClick={onCreateTournament || (() => setActiveTab("Tournaments"))}
+              className="shrink-0 px-3.5 sm:px-4 md:px-5 py-2 sm:py-2.5 rounded-full font-bold text-xs sm:text-sm hover:opacity-90 transition-all text-center justify-center whitespace-nowrap cursor-pointer shadow-md"
+              style={{
+                backgroundColor: theme === "light" ? "#ffffff" : "#22c55e",
+                color: theme === "light" ? "#000000" : "#000000"
+              }}
+            >
+              <span style={{ color: theme === "light" ? "#000000" : "#000000", fontWeight: 700 }}>🏆 Create Tournament</span>
             </button>
           </div>
         </div>
@@ -84,8 +137,8 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
           <div key={s.label} className={cn(C, "rounded-2xl p-3.5 sm:p-4")}>
             <div className="text-xl sm:text-2xl mb-1.5 sm:mb-2">{s.icon}</div>
             <div className="text-xl sm:text-2xl font-bold font-mono" style={{ color: s.color }}>{s.value}</div>
-            <div className="text-xs mt-0.5" style={{ color: "#6b7a6b" }}>{s.label}</div>
-            <div className="text-[11px] mt-0.5 truncate" style={{ color: "#4a5a4a" }}>{s.sub}</div>
+            <div className="text-xs mt-0.5 font-bold" style={{ color: theme === "light" ? "#000000" : "#6b7a6b" }}>{s.label}</div>
+            <div className="text-[11px] mt-0.5 truncate font-medium" style={{ color: theme === "light" ? "#000000" : "#4a5a4a" }}>{s.sub}</div>
           </div>
         ))}
       </div>
@@ -93,8 +146,8 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
       {/* Urgent match requests */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold text-white">Urgent Match Requests</h2>
-          <button onClick={() => setActiveTab("Find Match")} className="text-xs text-green-400 hover:text-green-300">View all →</button>
+          <h2 className="text-base font-semibold" style={{ color: theme === "light" ? "#000000" : "#ffffff" }}>Urgent Match Requests</h2>
+          <button onClick={() => setActiveTab("Find Match")} className="text-xs text-green-500 hover:text-green-600 font-medium">View all →</button>
         </div>
         <div className="space-y-3">
           {[...challenges]
@@ -109,7 +162,7 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
                         {req.team.split(" ").map(w => w[0]).slice(0, 2).join("")}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold text-white truncate">{req.team}</div>
+                        <div className="text-sm font-semibold truncate" style={{ color: theme === "light" ? "#000000" : "#ffffff" }}>{req.team}</div>
                         {(req.rating > 0 || req.reviewsCount > 0) && (
                           <div className="flex items-center gap-1 mt-0.5">
                             <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
@@ -122,15 +175,21 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
                       </div>
                     </div>
                     {req.latestReview && (
-                      <div className="mt-2 p-2 rounded-xl bg-[#0f120f] border border-[#222922] text-[11px]">
+                      <div
+                        className="mt-2 p-2 rounded-xl text-[11px]"
+                        style={{
+                          backgroundColor: theme === "light" ? "#f8fafc" : "#0f120f",
+                          border: `1px solid ${theme === "light" ? "#e2e8f0" : "#222922"}`
+                        }}
+                      >
                         <div className="flex items-center justify-between gap-1 text-[10px] text-neutral-400 mb-0.5">
-                          <span className="font-semibold text-neutral-200 truncate flex items-center gap-1">
+                          <span className="font-semibold truncate flex items-center gap-1" style={{ color: theme === "light" ? "#000000" : "#e2e8f0" }}>
                             <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400 shrink-0" />
                             <span>{Number(req.latestReview.rating || 5.0).toFixed(1)}★</span>
                             <span>by {req.latestReview.reviewer_name}</span>
                             {req.latestReview.reviewer_team_name ? ` (${req.latestReview.reviewer_team_name})` : ""}:
                           </span>
-                          <span className="shrink-0 text-neutral-500 text-[9px]">
+                          <span className="shrink-0 text-[9px]" style={{ color: theme === "light" ? "#000000" : "#737373" }}>
                             {req.latestReview.created_at
                               ? new Date(req.latestReview.created_at).toLocaleString("en-IN", {
                                   day: "numeric",
@@ -143,19 +202,19 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
                               : "Recent"}
                           </span>
                         </div>
-                        <p className="text-neutral-300 italic line-clamp-1 pl-2 border-l border-green-500/40">
+                        <p className="italic line-clamp-1 pl-2 border-l border-green-500/40" style={{ color: theme === "light" ? "#000000" : "#d4d4d4" }}>
                           "{req.latestReview.review_text}"
                         </p>
                       </div>
                     )}
                   </div>
                   <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-green-500 flex items-center justify-center shrink-0 self-center" style={{ backgroundColor: "rgba(34,197,94,0.1)" }}>
-                    <span className="text-green-400 font-bold text-[10px] sm:text-xs">VS</span>
+                    <span className="text-green-500 font-bold text-[10px] sm:text-xs">VS</span>
                   </div>
                   <div className="flex-1 min-w-0 w-full sm:w-auto">
-                    <div className="rounded-xl p-2.5 sm:p-3 text-center" style={{ border: "2px dashed #2a2a2a" }}>
-                      <div className="text-xs font-medium" style={{ color: "#4a5a4a" }}>Opponent needed</div>
-                      <div className="text-[11px] mt-0.5" style={{ color: "#6b7a6b" }}>11/11 players</div>
+                    <div className="rounded-xl p-2.5 sm:p-3 text-center" style={{ border: `2px dashed ${theme === "light" ? "#cbd5e1" : "#2a2a2a"}` }}>
+                      <div className="text-xs font-medium" style={{ color: theme === "light" ? "#000000" : "#4a5a4a" }}>Opponent needed</div>
+                      <div className="text-[11px] mt-0.5 font-semibold" style={{ color: theme === "light" ? "#000000" : "#6b7a6b" }}>11/11 players</div>
                     </div>
                   </div>
                 </div>
@@ -164,9 +223,17 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
                   <Tag color="blue">{req.format}</Tag>
                   <Tag color="green">{req.date} {req.time}</Tag>
                 </div>
-                <div className="text-xs mt-2" style={{ color: "#4a5a4a" }}>📍 {req.ground}</div>
+                <div className="text-xs mt-2 font-medium" style={{ color: theme === "light" ? "#000000" : "#4a5a4a" }}>📍 {req.ground}</div>
                 <div className="flex flex-col sm:flex-row gap-2 mt-3">
-                  <button onClick={() => setActiveTab("Find Match")} className="flex-1 py-2 rounded-xl bg-green-500 text-black text-xs font-bold hover:bg-green-400 transition-colors text-center">
+                  <button
+                    onClick={() => setActiveTab("Find Match")}
+                    className="flex-1 py-2 rounded-xl text-xs font-bold transition-all text-center cursor-pointer shadow-sm text-white"
+                    style={{
+                      backgroundColor: theme === "light" ? "#16a34a" : "#22c55e",
+                      color: "#ffffff",
+                      boxShadow: theme === "light" ? "0 2px 8px rgba(22, 163, 74, 0.2)" : "none"
+                    }}
+                  >
                     Accept Challenge
                   </button>
                   <GhostButton onClick={() => setActiveTab("Find Match")} className="flex-1 text-center">View Details</GhostButton>
@@ -179,25 +246,37 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
       {/* Nearby grounds */}
       <section>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-white">Nearby Grounds</h2>
-          <button onClick={() => setActiveTab("Grounds")} className="text-xs text-green-400 hover:text-green-300">View all →</button>
+          <h2 className="text-base font-semibold" style={{ color: theme === "light" ? "#000000" : "#ffffff" }}>Nearby Grounds</h2>
+          <button onClick={() => setActiveTab("Grounds")} className="text-xs text-green-600 dark:text-green-500 hover:underline font-semibold">View all →</button>
         </div>
         <div className="grid grid-cols-2 gap-3">
           {grounds.map(g => (
             <div key={g.name} className={cn(C, "rounded-2xl overflow-hidden")}>
-              <div className="h-16 flex items-center justify-center border-b border-[#2a2a2a]" style={{ backgroundColor: "rgba(22,101,52,0.15)" }}>
-                <span className="text-3xl opacity-50">🏟</span>
+              <div className="h-16 flex items-center justify-center border-b" style={{ backgroundColor: theme === "light" ? "#ecfdf5" : "rgba(22,101,52,0.15)", borderColor: theme === "light" ? "#e2e8f0" : "#2a2a2a" }}>
+                <span className="text-3xl opacity-60">🏟</span>
               </div>
               <div className="p-3">
-                <div className="font-semibold text-sm text-white leading-tight">{g.name}</div>
+                <div className="font-semibold text-sm leading-tight" style={{ color: theme === "light" ? "#000000" : "#ffffff" }}>{g.name}</div>
                 <div className="flex items-center gap-1 mt-1">
                   <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                  <span className="text-xs" style={{ color: "#6b7a6b" }}>{g.rating} · {g.area}</span>
+                  <span className="text-xs font-semibold" style={{ color: theme === "light" ? "#000000" : "#6b7a6b" }}>{g.rating} · {g.area}</span>
                 </div>
                 <div className="flex flex-wrap gap-1 mt-2">
-                  {g.amenities.map(a => <span key={a.label} className="text-xs px-1.5 py-0.5 rounded-md" style={{ backgroundColor: "#222", color: "#6b7a6b", border: "1px solid #2a2a2a" }}>{a.label}</span>)}
+                  {g.amenities.map(a => (
+                    <span
+                      key={a.label}
+                      className="text-xs px-1.5 py-0.5 rounded-md font-medium"
+                      style={{
+                        backgroundColor: theme === "light" ? "#f1f5f9" : "#222",
+                        color: theme === "light" ? "#000000" : "#6b7a6b",
+                        border: `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}`
+                      }}
+                    >
+                      {a.label}
+                    </span>
+                  ))}
                 </div>
-                <div className="font-bold text-sm mt-2 text-green-400">{g.price}</div>
+                <div className="font-bold text-sm mt-2 text-green-600 dark:text-green-500">{g.price}</div>
               </div>
             </div>
           ))}

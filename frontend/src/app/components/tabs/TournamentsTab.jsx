@@ -37,41 +37,48 @@ function TeamsRemainingBadge({ spotsLeft, maxTeams }) {
   );
 }
 
-function PrizesSummary({ prizes }) {
+function PrizesSummary({ prizes, theme = "dark" }) {
   if (!Array.isArray(prizes) || prizes.length === 0) return null;
+  const isLight = theme === "light";
   return (
     <div className="flex flex-wrap gap-2">
       {prizes.map((p) => (
         <div
           key={p.position}
           className="flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1.5"
-          style={{ backgroundColor: "#111", border: "1px solid #2a2a2a", color: "#c8ccc8" }}
+          style={isLight ? {
+            backgroundColor: "#fffbeb",
+            border: "1px solid #fde68a",
+            color: "#78350f"
+          } : { backgroundColor: "#111", border: "1px solid #2a2a2a", color: "#c8ccc8" }}
         >
-          <Award className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-          <span className="font-medium text-white">#{p.position}</span>
-          <span>{formatMoney(p.money)}</span>
-          {p.trophy && <span className="text-amber-400">+ trophy</span>}
+          <Award className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+          <span className={cn("font-bold", isLight ? "text-amber-950" : "text-white")}>#{p.position}</span>
+          <span className={isLight ? "font-semibold text-amber-900" : ""}>{formatMoney(p.money)}</span>
+          {p.trophy && <span className="text-amber-600 font-medium">+ trophy</span>}
         </div>
       ))}
     </div>
   );
 }
 
-function DetailRow({ icon: Icon, label, value }) {
+function DetailRow({ icon: Icon, label, value, theme = "dark" }) {
+  const isLight = theme === "light";
   return (
     <div className="flex items-start gap-2.5">
-      <Icon className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: "#6b7a6b" }} />
+      <Icon className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: isLight ? "#16a34a" : "#6b7a6b" }} />
       <div className="min-w-0">
-        <div className="text-[10px] uppercase tracking-wide" style={{ color: "#4a5a4a" }}>
+        <div className="text-[10px] uppercase tracking-wide font-semibold" style={{ color: isLight ? "#64748b" : "#4a5a4a" }}>
           {label}
         </div>
-        <div className="text-sm text-white truncate">{value}</div>
+        <div className={cn("text-sm truncate", isLight ? "text-slate-900 font-medium" : "text-white")}>{value}</div>
       </div>
     </div>
   );
 }
 
-function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTeams = [], token, onSaved }) {
+function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTeams = [], token, onSaved, theme = "dark" }) {
+  const isLight = theme === "light";
   const [team1Name, setTeam1Name] = useState("");
   const [team2Name, setTeam2Name] = useState("");
   const [team1Select, setTeam1Select] = useState("");
@@ -87,6 +94,12 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
   const [oversLimit, setOversLimit] = useState(20);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const fieldClass = isLight
+    ? "w-full p-2.5 rounded-xl bg-slate-50 text-slate-900 border border-slate-300 focus:border-emerald-500 focus:bg-white focus:outline-none transition-colors"
+    : "w-full p-2.5 rounded-xl bg-[#161816] text-white border border-[#2a2a2a] focus:border-emerald-500 focus:outline-none";
+
+  const labelStyle = { color: isLight ? "#475569" : "#a0aba0" };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -118,7 +131,7 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
       setScoreboardName("");
       setVenue(tournament?.venue || "");
       setRound("League Match");
-      setMatchDate(new Date().toISOString().slice(0, 16));
+      setMatchDate("");
       setOversLimit(20);
     }
     setError("");
@@ -129,18 +142,19 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     if (file.size > 20 * 1024 * 1024) {
-      setError("Document size must be under 20MB");
+      setError("File size exceeds 20MB limit.");
       return;
     }
+
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      setScoreboardUrl(ev.target.result);
+    reader.onload = () => {
+      setScoreboardUrl(reader.result);
       setScoreboardName(file.name);
-      setError("");
     };
     reader.onerror = () => {
-      setError("Failed to read document");
+      setError("Failed to read document. Please try another file.");
     };
     reader.readAsDataURL(file);
   };
@@ -152,15 +166,16 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
 
   const handleSave = async (e) => {
     e.preventDefault();
-    const finalTeam1 = (team1Select === "__custom__" ? team1Name : team1Select || team1Name).trim();
-    const finalTeam2 = (team2Select === "__custom__" ? team2Name : team2Select || team2Name).trim();
-
-    if (!finalTeam1 || !finalTeam2) {
-      setError("Please specify both Team 1 and Team 2");
+    if (!team1Name.trim()) {
+      setError("Please specify Team 1");
       return;
     }
-    if (finalTeam1.toLowerCase() === finalTeam2.toLowerCase()) {
-      setError("Team 1 and Team 2 cannot be the same team");
+    if (!team2Name.trim()) {
+      setError("Please specify Team 2");
+      return;
+    }
+    if (team1Name.trim().toLowerCase() === team2Name.trim().toLowerCase()) {
+      setError("Team 1 and Team 2 must be different teams.");
       return;
     }
 
@@ -169,33 +184,28 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
 
     try {
       const payload = {
-        team1_name: finalTeam1,
-        team2_name: finalTeam2,
+        team1_name: team1Name.trim(),
+        team2_name: team2Name.trim(),
         status,
-        result: result.trim() || null,
-        mom: mom.trim() || null,
+        result: result.trim(),
+        mom: mom.trim(),
         scoreboard_url: scoreboardUrl,
-        scoreboard_name: scoreboardName || null,
-        venue: venue.trim() || null,
-        round: round.trim() || null,
+        scoreboard_name: scoreboardName,
+        venue: venue.trim(),
+        round: round.trim(),
         match_date: matchDate ? new Date(matchDate).toISOString() : null,
         overs_limit: Number(oversLimit) || 20,
       };
 
-      let res;
-      if (match?.id) {
-        res = await apiRequest(`/tournaments/${tournament.id}/matches/${match.id}`, {
-          method: "PUT",
-          token,
-          body: payload,
-        });
-      } else {
-        res = await apiRequest(`/tournaments/${tournament.id}/matches`, {
-          method: "POST",
-          token,
-          body: payload,
-        });
-      }
+      const url = match
+        ? `/tournaments/${tournament.id}/matches/${match.id}`
+        : `/tournaments/${tournament.id}/matches`;
+
+      const res = await apiRequest(url, {
+        method: match ? "PUT" : "POST",
+        token,
+        body: payload,
+      });
 
       onSaved?.(res.match);
       onClose();
@@ -209,36 +219,43 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-[fadeIn_.15s_ease-out]"
-      style={{ backgroundColor: "rgba(0,0,0,0.75)", backdropFilter: "blur(3px)" }}
+      style={{ backgroundColor: isLight ? "rgba(15,23,42,0.6)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(3px)" }}
       onClick={onClose}
     >
       <div
         className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl p-6 space-y-4"
-        style={{
+        style={isLight ? {
+          backgroundColor: "#ffffff",
+          border: "1px solid #e2e8f0",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+        } : {
           backgroundColor: "#0d0f0d",
           border: "1px solid #2a2a2a",
           boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between pb-3 border-b border-[#1f221f]">
+        <div className={cn("flex items-center justify-between pb-3 border-b", isLight ? "border-slate-100" : "border-[#1f221f]")}>
           <div className="flex items-center gap-2">
-            <Swords className="w-5 h-5 text-emerald-400" />
-            <h3 className="text-lg font-bold text-white">
+            <Swords className="w-5 h-5 text-emerald-500" />
+            <h3 className={cn("text-lg font-bold", isLight ? "text-slate-900" : "text-white")}>
               {match ? "Edit Tournament Match" : "Add Tournament Match"}
             </h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-7 h-7 rounded-full flex items-center justify-center text-[#6b7a6b] hover:text-white hover:bg-[#1c1f1c] transition-colors"
+            className={cn(
+              "w-7 h-7 rounded-full flex items-center justify-center transition-colors",
+              isLight ? "text-slate-500 hover:text-slate-900 hover:bg-slate-100" : "text-[#6b7a6b] hover:text-white hover:bg-[#1c1f1c]"
+            )}
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {error && (
-          <div className="p-3 rounded-xl text-xs flex items-center gap-2 bg-red-500/10 border border-red-500/30 text-red-400">
+          <div className={cn("p-3 rounded-xl text-xs flex items-center gap-2 border", isLight ? "bg-red-50 border-red-200 text-red-700" : "bg-red-500/10 border-red-500/30 text-red-400")}>
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
@@ -248,7 +265,7 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
           {/* Teams Selection */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[#a0aba0] mb-1 font-semibold">Team 1 *</label>
+              <label className="block mb-1 font-semibold" style={labelStyle}>Team 1 *</label>
               {confirmedTeams.length > 0 ? (
                 <div className="space-y-1.5">
                   <select
@@ -257,7 +274,7 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
                       setTeam1Select(e.target.value);
                       if (e.target.value !== "__custom__") setTeam1Name(e.target.value);
                     }}
-                    className="w-full p-2.5 rounded-xl bg-[#161816] text-white border border-[#2a2a2a] focus:border-emerald-500 focus:outline-none"
+                    className={fieldClass}
                   >
                     <option value="">-- Select Team 1 --</option>
                     {confirmedTeams.map((ct) => (
@@ -273,7 +290,7 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
                       placeholder="Enter custom Team 1 name"
                       value={team1Name}
                       onChange={(e) => setTeam1Name(e.target.value)}
-                      className="w-full p-2.5 rounded-xl bg-[#161816] text-white border border-[#2a2a2a] focus:border-emerald-500 focus:outline-none"
+                      className={fieldClass}
                       required
                     />
                   )}
@@ -284,14 +301,14 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
                   placeholder="e.g. Royal Strikers"
                   value={team1Name}
                   onChange={(e) => setTeam1Name(e.target.value)}
-                  className="w-full p-2.5 rounded-xl bg-[#161816] text-white border border-[#2a2a2a] focus:border-emerald-500 focus:outline-none"
+                  className={fieldClass}
                   required
                 />
               )}
             </div>
 
             <div>
-              <label className="block text-[#a0aba0] mb-1 font-semibold">Team 2 *</label>
+              <label className="block mb-1 font-semibold" style={labelStyle}>Team 2 *</label>
               {confirmedTeams.length > 0 ? (
                 <div className="space-y-1.5">
                   <select
@@ -300,7 +317,7 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
                       setTeam2Select(e.target.value);
                       if (e.target.value !== "__custom__") setTeam2Name(e.target.value);
                     }}
-                    className="w-full p-2.5 rounded-xl bg-[#161816] text-white border border-[#2a2a2a] focus:border-emerald-500 focus:outline-none"
+                    className={fieldClass}
                   >
                     <option value="">-- Select Team 2 --</option>
                     {confirmedTeams.map((ct) => (
@@ -316,7 +333,7 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
                       placeholder="Enter custom Team 2 name"
                       value={team2Name}
                       onChange={(e) => setTeam2Name(e.target.value)}
-                      className="w-full p-2.5 rounded-xl bg-[#161816] text-white border border-[#2a2a2a] focus:border-emerald-500 focus:outline-none"
+                      className={fieldClass}
                       required
                     />
                   )}
@@ -327,7 +344,7 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
                   placeholder="e.g. Mumbai Warriors"
                   value={team2Name}
                   onChange={(e) => setTeam2Name(e.target.value)}
-                  className="w-full p-2.5 rounded-xl bg-[#161816] text-white border border-[#2a2a2a] focus:border-emerald-500 focus:outline-none"
+                  className={fieldClass}
                   required
                 />
               )}
@@ -337,11 +354,11 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
           {/* Status & Round */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[#a0aba0] mb-1 font-semibold">Match Status</label>
+              <label className="block mb-1 font-semibold" style={labelStyle}>Match Status</label>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
-                className="w-full p-2.5 rounded-xl bg-[#161816] text-white border border-[#2a2a2a] focus:border-emerald-500 focus:outline-none"
+                className={fieldClass}
               >
                 <option value="completed">Completed</option>
                 <option value="scheduled">Scheduled</option>
@@ -349,57 +366,57 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
               </select>
             </div>
             <div>
-              <label className="block text-[#a0aba0] mb-1 font-semibold">Round / Stage</label>
+              <label className="block mb-1 font-semibold" style={labelStyle}>Round / Stage</label>
               <input
                 type="text"
                 placeholder="e.g. League, Semi-Final, Final"
                 value={round}
                 onChange={(e) => setRound(e.target.value)}
-                className="w-full p-2.5 rounded-xl bg-[#161816] text-white border border-[#2a2a2a] focus:border-emerald-500 focus:outline-none"
+                className={fieldClass}
               />
             </div>
           </div>
 
           {/* Match Result */}
           <div>
-            <label className="block text-[#a0aba0] mb-1 font-semibold">Match Result</label>
+            <label className="block mb-1 font-semibold" style={labelStyle}>Match Result</label>
             <input
               type="text"
               placeholder="e.g. Team 1 won by 24 runs, or Match Tied"
               value={result}
               onChange={(e) => setResult(e.target.value)}
-              className="w-full p-2.5 rounded-xl bg-[#161816] text-white border border-[#2a2a2a] focus:border-emerald-500 focus:outline-none"
+              className={fieldClass}
             />
           </div>
 
           {/* Man of the Match (MOM) */}
           <div>
-            <label className="block text-[#a0aba0] mb-1 font-semibold">Man of the Match (MOM)</label>
+            <label className="block mb-1 font-semibold" style={labelStyle}>Man of the Match (MOM)</label>
             <input
               type="text"
               placeholder="e.g. Virat Sharma (74* off 42 & 2/16)"
               value={mom}
               onChange={(e) => setMom(e.target.value)}
-              className="w-full p-2.5 rounded-xl bg-[#161816] text-white border border-[#2a2a2a] focus:border-emerald-500 focus:outline-none"
+              className={fieldClass}
             />
           </div>
 
           {/* Scoreboard Document Upload */}
           <div className="space-y-1.5">
-            <label className="block text-[#a0aba0] font-semibold">Upload Scoreboard Document</label>
-            <div className="p-3.5 rounded-xl bg-[#131613] border border-dashed border-[#333] hover:border-emerald-500/50 transition-colors">
+            <label className="block font-semibold" style={labelStyle}>Upload Scoreboard Document</label>
+            <div className={cn("p-3.5 rounded-xl border border-dashed transition-colors", isLight ? "bg-slate-50 border-slate-300 hover:border-emerald-500" : "bg-[#131613] border-[#333] hover:border-emerald-500/50")}>
               {scoreboardUrl ? (
-                <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[#1a1e1a] border border-emerald-500/30">
+                <div className={cn("flex items-center justify-between gap-2 p-2 rounded-lg border", isLight ? "bg-emerald-50 border-emerald-200" : "bg-[#1a1e1a] border-emerald-500/30")}>
                   <div className="flex items-center gap-2 min-w-0">
-                    <FileText className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span className="text-white text-xs truncate font-medium">
+                    <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className={cn("text-xs truncate font-medium", isLight ? "text-slate-900" : "text-white")}>
                       {scoreboardName || "Scoreboard Document"}
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={handleRemoveFile}
-                    className="p-1 rounded text-[#6b7a6b] hover:text-red-400 transition-colors shrink-0"
+                    className="p-1 rounded text-slate-400 hover:text-red-500 transition-colors shrink-0"
                     title="Remove document"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -407,9 +424,9 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
                 </div>
               ) : (
                 <label className="flex flex-col items-center justify-center cursor-pointer py-2 text-center">
-                  <UploadCloud className="w-6 h-6 text-emerald-400 mb-1" />
-                  <span className="text-white font-medium">Click or browse to upload Scoreboard</span>
-                  <span className="text-[10px] text-[#6b7a6b] mt-0.5">
+                  <UploadCloud className="w-6 h-6 text-emerald-500 mb-1" />
+                  <span className={cn("font-medium", isLight ? "text-slate-800" : "text-white")}>Click or browse to upload Scoreboard</span>
+                  <span className={cn("text-[10px] mt-0.5", isLight ? "text-slate-500" : "text-[#6b7a6b]")}>
                     Supports PDF, PNG, JPG, JPEG, WEBP, DOCX (Max 20MB)
                   </span>
                   <input
@@ -426,39 +443,42 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
           {/* Venue & Date */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[#a0aba0] mb-1 font-semibold">Venue</label>
+              <label className="block mb-1 font-semibold" style={labelStyle}>Venue</label>
               <input
                 type="text"
                 placeholder="Ground name or pitch"
                 value={venue}
                 onChange={(e) => setVenue(e.target.value)}
-                className="w-full p-2.5 rounded-xl bg-[#161816] text-white border border-[#2a2a2a] focus:border-emerald-500 focus:outline-none"
+                className={fieldClass}
               />
             </div>
             <div>
-              <label className="block text-[#a0aba0] mb-1 font-semibold">Match Date & Time</label>
+              <label className="block mb-1 font-semibold" style={labelStyle}>Match Date & Time</label>
               <input
                 type="datetime-local"
                 value={matchDate}
                 onChange={(e) => setMatchDate(e.target.value)}
-                className="w-full p-2.5 rounded-xl bg-[#161816] text-white border border-[#2a2a2a] focus:border-emerald-500 focus:outline-none"
+                className={fieldClass}
               />
             </div>
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-3 pt-3 border-t border-[#1f221f]">
+          <div className={cn("flex items-center gap-3 pt-3 border-t", isLight ? "border-slate-100" : "border-[#1f221f]")}>
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl bg-[#1c1f1c] hover:bg-[#252825] text-[#c8ccc8] font-semibold transition-colors"
+              className={cn("flex-1 py-2.5 rounded-xl font-semibold transition-colors", isLight ? "bg-slate-100 hover:bg-slate-200 text-slate-700" : "bg-[#1c1f1c] hover:bg-[#252825] text-[#c8ccc8]")}
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              className={cn(
+                "flex-1 py-2.5 rounded-xl font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-2",
+                isLight ? "bg-[#16a34a] hover:bg-[#15803d] text-white shadow-sm" : "bg-emerald-500 hover:bg-emerald-400 text-black"
+              )}
             >
               {saving ? "Saving..." : match ? "Update Match" : "Add Match"}
             </button>
@@ -486,7 +506,9 @@ function TournamentDetailsModal({
   teammates,
   canManageMatches = false,
   onTournamentUpdated,
+  theme = "dark",
 }) {
+  const isLight = theme === "light";
   const [details, setDetails] = useState(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [showTeams, setShowTeams] = useState(false);
@@ -619,12 +641,16 @@ function TournamentDetailsModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-[fadeIn_.15s_ease-out]"
-      style={{ backgroundColor: "rgba(0,0,0,0.65)", backdropFilter: "blur(2px)" }}
+      style={{ backgroundColor: isLight ? "rgba(15,23,42,0.6)" : "rgba(0,0,0,0.65)", backdropFilter: "blur(2px)" }}
       onClick={onClose}
     >
       <div
         className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl"
-        style={{
+        style={isLight ? {
+          backgroundColor: "#ffffff",
+          border: "1px solid #e2e8f0",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+        } : {
           backgroundColor: "#0d0f0d",
           border: "1px solid #2a2a2a",
           boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
@@ -633,7 +659,7 @@ function TournamentDetailsModal({
       >
         <div
           className="sticky top-0 z-10 px-6 pt-5 pb-4 flex items-start justify-between gap-3"
-          style={{ backgroundColor: "#0d0f0d", borderBottom: "1px solid #1c1f1c" }}
+          style={isLight ? { backgroundColor: "#ffffff", borderBottom: "1px solid #f1f5f9" } : { backgroundColor: "#0d0f0d", borderBottom: "1px solid #1c1f1c" }}
         >
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1.5">
@@ -647,16 +673,16 @@ function TournamentDetailsModal({
               {t.format && <Tag color="blue">{t.format} Format</Tag>}
               {isMine && <Tag color="green">{roleLabel}</Tag>}
             </div>
-            <h2 className="text-xl font-bold text-white leading-snug truncate">{t.name}</h2>
-            <div className="text-xs mt-1 flex items-center gap-1" style={{ color: "#6b7a6b" }}>
+            <h2 className={cn("text-xl font-bold leading-snug truncate", isLight ? "text-slate-900" : "text-white")}>{t.name}</h2>
+            <div className="text-xs mt-1 flex items-center gap-1" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
               <Trophy className="w-3 h-3" /> {t.creator_team_name || "Unknown organizer"}
             </div>
           </div>
           <button
             onClick={onClose}
             className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors"
-            style={{ color: "#6b7a6b" }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1c1f1c")}
+            style={{ color: isLight ? "#64748b" : "#6b7a6b" }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = isLight ? "#f1f5f9" : "#1c1f1c")}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
             aria-label="Close"
           >
@@ -667,14 +693,14 @@ function TournamentDetailsModal({
         <div className="px-6 py-5 space-y-5">
           <div
             className="grid grid-cols-2 gap-x-4 gap-y-4 rounded-xl p-4"
-            style={{ backgroundColor: "rgba(255,255,255,0.02)", border: "1px solid #1c1f1c" }}
+            style={isLight ? { backgroundColor: "#f8fafc", border: "1px solid #e2e8f0" } : { backgroundColor: "rgba(255,255,255,0.02)", border: "1px solid #1c1f1c" }}
           >
-            <DetailRow icon={MapPin} label="Venue" value={t.venue || "TBD"} />
-            <DetailRow icon={CalendarDays} label="Starts" value={t.startDate || "TBD"} />
-            <DetailRow icon={Users} label="Teams" value={`${teamCount} / ${maxTeams} confirmed`} />
-            <DetailRow icon={DollarSign} label="Entry fee" value={formatMoney(t.entry_fee)} />
-            <DetailRow icon={Phone} label="Contact" value={t.phone || "-"} />
-            <DetailRow icon={Phone} label="Co-contact" value={t.co_phone || "-"} />
+            <DetailRow icon={MapPin} label="Venue" value={t.venue || "TBD"} theme={theme} />
+            <DetailRow icon={CalendarDays} label="Starts" value={t.startDate || "TBD"} theme={theme} />
+            <DetailRow icon={Users} label="Teams" value={`${teamCount} / ${maxTeams} confirmed`} theme={theme} />
+            <DetailRow icon={DollarSign} label="Entry fee" value={formatMoney(t.entry_fee)} theme={theme} />
+            <DetailRow icon={Phone} label="Contact" value={t.phone || "-"} theme={theme} />
+            <DetailRow icon={Phone} label="Co-contact" value={t.co_phone || "-"} theme={theme} />
           </div>
 
           {/* Confirmed Teams Button & List */}
@@ -682,35 +708,38 @@ function TournamentDetailsModal({
             <button
               type="button"
               onClick={() => setShowTeams(!showTeams)}
-              className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors bg-[#161816] hover:bg-[#1f221f] text-white border border-[#2a2a2a]"
+              className={cn(
+                "w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors border",
+                isLight ? "bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200 shadow-sm" : "bg-[#161816] hover:bg-[#1f221f] text-white border-[#2a2a2a]"
+              )}
             >
               <span className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-green-400" />
+                <Users className={cn("w-4 h-4", isLight ? "text-emerald-600" : "text-green-400")} />
                 Confirmed Teams ({teamCount})
               </span>
-              <span className="text-[10px] text-green-400 font-medium">
+              <span className={cn("text-[10px] font-bold", isLight ? "text-emerald-700" : "text-green-400")}>
                 {showTeams ? "Hide Teams ▲" : "View Teams ▼"}
               </span>
             </button>
 
             {showTeams && (
-              <div className="rounded-xl p-3 border border-[#2a2a2a] bg-[#111311] space-y-2 max-h-48 overflow-y-auto">
+              <div className={cn("rounded-xl p-3 border space-y-2 max-h-48 overflow-y-auto", isLight ? "border-slate-200 bg-slate-50/60" : "border-[#2a2a2a] bg-[#111311]")}>
                 {loadingDetails ? (
-                  <div className="text-xs text-center py-3" style={{ color: "#6b7a6b" }}>
+                  <div className="text-xs text-center py-3" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
                     Loading confirmed teams...
                   </div>
                 ) : confirmedTeams.length === 0 ? (
-                  <div className="text-xs text-center py-3" style={{ color: "#6b7a6b" }}>
+                  <div className="text-xs text-center py-3" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
                     No teams confirmed yet
                   </div>
                 ) : (
                   confirmedTeams.map((team, idx) => (
                     <div
                       key={team.id || idx}
-                      className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-[#161816] border border-[#1e201e]"
+                      className={cn("flex items-center justify-between py-2 px-3 rounded-lg border", isLight ? "bg-white border-slate-200 shadow-xs" : "bg-[#161816] border-[#1e201e]")}
                     >
-                      <span className="text-xs font-medium text-white flex items-center gap-2">
-                        <span className="text-[10px] font-mono w-4 text-[#6b7a6b]">{idx + 1}.</span>
+                      <span className={cn("text-xs font-bold flex items-center gap-2", isLight ? "text-slate-900" : "text-white")}>
+                        <span className="text-[10px] font-mono w-4" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>{idx + 1}.</span>
                         {team.name}
                       </span>
                       <Tag color="green">Confirmed</Tag>
@@ -726,34 +755,37 @@ function TournamentDetailsModal({
             <button
               type="button"
               onClick={() => setShowMatches(!showMatches)}
-              className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors bg-[#161816] hover:bg-[#1f221f] text-white border border-[#2a2a2a]"
+              className={cn(
+                "w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors border",
+                isLight ? "bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200 shadow-sm" : "bg-[#161816] hover:bg-[#1f221f] text-white border-[#2a2a2a]"
+              )}
             >
               <span className="flex items-center gap-2">
-                <Swords className="w-4 h-4 text-emerald-400" />
+                <Swords className={cn("w-4 h-4", isLight ? "text-emerald-600" : "text-emerald-400")} />
                 Tournament Match Details ({matches.length})
               </span>
-              <span className="text-[10px] text-emerald-400 font-medium">
+              <span className={cn("text-[10px] font-bold", isLight ? "text-emerald-700" : "text-emerald-400")}>
                 {showMatches ? "Hide Match Details ▲" : "View Match Details ▼"}
               </span>
             </button>
 
             {showMatches && (
-              <div className="rounded-xl p-3 border border-[#2a2a2a] bg-[#111311] space-y-3 max-h-96 overflow-y-auto">
+              <div className={cn("rounded-xl p-3.5 border space-y-3 max-h-96 overflow-y-auto", isLight ? "border-slate-200 bg-slate-50/60" : "border-[#2a2a2a] bg-[#111311]")}>
                 {/* Match Summary Badges */}
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-[#161816] border border-[#252825]">
-                    <span className="text-[10px] uppercase font-bold text-[#6b7a6b]">Total Matches</span>
-                    <span className="text-base font-extrabold text-white">{matches.length}</span>
+                  <div className={cn("flex flex-col items-center justify-center p-2.5 rounded-lg border", isLight ? "bg-white border-slate-200 shadow-xs" : "bg-[#161816] border-[#252825]")}>
+                    <span className={cn("text-[10px] uppercase font-bold", isLight ? "text-slate-500" : "text-[#6b7a6b]")}>Total Matches</span>
+                    <span className={cn("text-base font-extrabold", isLight ? "text-slate-900" : "text-white")}>{matches.length}</span>
                   </div>
-                  <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-[#142314] border border-green-500/30">
-                    <span className="text-[10px] uppercase font-bold text-green-400">Completed</span>
-                    <span className="text-base font-extrabold text-green-400">
+                  <div className={cn("flex flex-col items-center justify-center p-2.5 rounded-lg border", isLight ? "bg-emerald-50 border-emerald-200 shadow-xs" : "bg-[#142314] border-green-500/30")}>
+                    <span className={cn("text-[10px] uppercase font-bold", isLight ? "text-emerald-700" : "text-green-400")}>Completed</span>
+                    <span className={cn("text-base font-extrabold", isLight ? "text-emerald-700" : "text-green-400")}>
                       {matches.filter((m) => m.status && m.status.toLowerCase() === "completed").length}
                     </span>
                   </div>
-                  <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-[#241f12] border border-amber-500/30">
-                    <span className="text-[10px] uppercase font-bold text-amber-400">Scheduled / Live</span>
-                    <span className="text-base font-extrabold text-amber-400">
+                  <div className={cn("flex flex-col items-center justify-center p-2.5 rounded-lg border", isLight ? "bg-amber-50 border-amber-200 shadow-xs" : "bg-[#241f12] border-amber-500/30")}>
+                    <span className={cn("text-[10px] uppercase font-bold", isLight ? "text-amber-800" : "text-amber-400")}>Scheduled / Live</span>
+                    <span className={cn("text-base font-extrabold", isLight ? "text-amber-800" : "text-amber-400")}>
                       {matches.filter((m) => !m.status || m.status.toLowerCase() !== "completed").length}
                     </span>
                   </div>
@@ -770,18 +802,23 @@ function TournamentDetailsModal({
                     setSelectedMatch(null);
                     setShowMatchModal(true);
                   }}
-                  className="w-full py-2.5 px-3 rounded-xl text-xs font-bold transition-all bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 hover:text-emerald-200 border border-emerald-500/40 flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40"
+                  className={cn(
+                    "w-full py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2",
+                    isLight
+                      ? "bg-[#16a34a] hover:bg-[#15803d] text-white shadow-sm"
+                      : "bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 hover:text-emerald-200 border border-emerald-500/40 shadow-lg shadow-emerald-950/40"
+                  )}
                 >
                   <Plus className="w-4 h-4" /> Add Match, Scorecard & Results
                 </button>
 
                 {/* Matches List */}
                 {matches.length === 0 ? (
-                  <div className="text-xs text-center py-6 px-4 rounded-xl border border-dashed border-[#262a26] bg-[#0e100e] space-y-2.5 text-[#809080]">
-                    <Swords className="w-6 h-6 mx-auto text-emerald-500/50" />
+                  <div className={cn("text-xs text-center py-6 px-4 rounded-xl border border-dashed space-y-2.5", isLight ? "bg-white border-slate-300 text-slate-600 shadow-xs" : "border-[#262a26] bg-[#0e100e] text-[#809080]")}>
+                    <Swords className={cn("w-6 h-6 mx-auto", isLight ? "text-emerald-600" : "text-emerald-500/50")} />
                     <div>
-                      <p className="font-semibold text-white">No matches recorded for this tournament yet.</p>
-                      <p className="text-[11px] text-[#6b7a6b] mt-0.5">
+                      <p className={cn("font-bold text-sm", isLight ? "text-slate-900" : "text-white")}>No matches recorded for this tournament yet.</p>
+                      <p className={cn("text-[11px] mt-0.5", isLight ? "text-slate-500" : "text-[#6b7a6b]")}>
                         Record Team 1 vs Team 2, upload match scorecards (PDF/Image), set Man of the Match, and record winners!
                       </p>
                     </div>
@@ -795,7 +832,10 @@ function TournamentDetailsModal({
                         setSelectedMatch(null);
                         setShowMatchModal(true);
                       }}
-                      className="mt-1 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 text-black hover:bg-emerald-400 transition-all inline-flex items-center gap-1.5 shadow-md shadow-emerald-500/20"
+                      className={cn(
+                        "mt-1 px-4 py-2 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5",
+                        isLight ? "bg-[#16a34a] text-white hover:bg-[#15803d] shadow-sm" : "bg-emerald-500 text-black hover:bg-emerald-400 shadow-md shadow-emerald-500/20"
+                      )}
                     >
                       <Plus className="w-3.5 h-3.5" /> Add First Match & Scorecard
                     </button>
@@ -805,11 +845,11 @@ function TournamentDetailsModal({
                     {matches.map((m, idx) => (
                       <div
                         key={m.id || idx}
-                        className="p-3 rounded-xl bg-[#161816] border border-[#222522] space-y-2"
+                        className={cn("p-3.5 rounded-xl border space-y-2.5 transition-colors", isLight ? "bg-white border-slate-200 shadow-xs" : "bg-[#161816] border-[#222522]")}
                       >
                         <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
-                            <span className="text-[#6b7a6b] font-mono">#{idx + 1}</span>
+                          <span className={cn("font-bold flex items-center gap-1.5", isLight ? "text-emerald-700" : "text-emerald-400")}>
+                            <span className={isLight ? "text-slate-400 font-mono" : "text-[#6b7a6b] font-mono"}>#{idx + 1}</span>
                             {m.round || "Match"}
                           </span>
                           <Tag
@@ -825,24 +865,24 @@ function TournamentDetailsModal({
                           </Tag>
                         </div>
 
-                        <div className="flex items-center justify-between text-xs font-bold text-white px-1">
+                        <div className={cn("flex items-center justify-between text-xs font-bold px-1", isLight ? "text-slate-900" : "text-white")}>
                           <span className="truncate max-w-[42%]">{m.team1_name || "Team 1"}</span>
-                          <span className="text-[10px] font-normal text-[#6b7a6b]">VS</span>
+                          <span className={cn("text-[10px] font-normal", isLight ? "text-slate-400" : "text-[#6b7a6b]")}>VS</span>
                           <span className="truncate max-w-[42%] text-right">{m.team2_name || "Team 2"}</span>
                         </div>
 
                         {m.result && (
-                          <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-300 bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/20">
-                            <Trophy className="w-3 h-3 text-amber-400 shrink-0" />
+                          <div className={cn("flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-lg border", isLight ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "text-emerald-300 bg-emerald-500/10 border-emerald-500/20")}>
+                            <Trophy className="w-3 h-3 text-amber-500 shrink-0" />
                             <span className="truncate">{m.result}</span>
                           </div>
                         )}
 
                         {m.mom && (
-                          <div className="flex items-center gap-1.5 text-[11px] text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
-                            <Award className="w-3 h-3 text-amber-400 shrink-0" />
-                            <span className="truncate">
-                              MOM: <span className="text-white font-medium">{m.mom}</span>
+                          <div className={cn("flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg border", isLight ? "bg-amber-50 border-amber-200 text-amber-900" : "text-amber-300 bg-amber-500/10 border-amber-500/20")}>
+                            <Award className="w-3 h-3 text-amber-500 shrink-0" />
+                            <span className="truncate font-medium">
+                              MOM: <span className={cn("font-bold", isLight ? "text-amber-950" : "text-white")}>{m.mom}</span>
                             </span>
                           </div>
                         )}
@@ -852,38 +892,50 @@ function TournamentDetailsModal({
                             <button
                               type="button"
                               onClick={() => handleViewScoreboard(m)}
-                              className="flex-1 py-1 px-2 rounded-lg text-[11px] font-medium bg-[#202520] hover:bg-[#283028] text-emerald-400 border border-emerald-500/25 flex items-center justify-center gap-1.5 transition-colors truncate"
+                              className={cn(
+                                "flex-1 py-1.5 px-2.5 rounded-lg text-[11px] font-bold border flex items-center justify-center gap-1.5 transition-colors truncate",
+                                isLight ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200 shadow-xs" : "bg-[#202520] hover:bg-[#283028] text-emerald-400 border-emerald-500/25"
+                              )}
                             >
-                              <FileText className="w-3 h-3 shrink-0" />
+                              <FileText className="w-3.5 h-3.5 shrink-0" />
                               <span className="truncate">Scoreboard ({m.scoreboard_name || "Document"})</span>
                             </button>
                             <button
                               type="button"
                               onClick={() => handleDownloadScoreboard(m)}
                               title="Download Scoreboard"
-                              className="p-1 rounded-lg text-[11px] bg-[#202520] hover:bg-[#283028] text-[#c8ccc8] border border-[#333] transition-colors shrink-0"
+                              className={cn(
+                                "p-1.5 rounded-lg text-[11px] border transition-colors shrink-0",
+                                isLight ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200 shadow-xs" : "bg-[#202520] hover:bg-[#283028] text-[#c8ccc8] border-[#333]"
+                              )}
                             >
-                              <Download className="w-3 h-3" />
+                              <Download className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         )}
 
                         {canManage && (
-                          <div className="flex items-center justify-end gap-1.5 pt-1.5 border-t border-[#1f221f]">
+                          <div className={cn("flex items-center justify-end gap-1.5 pt-2 border-t", isLight ? "border-slate-100" : "border-[#1f221f]")}>
                             <button
                               type="button"
                               onClick={() => {
                                 setSelectedMatch(m);
                                 setShowMatchModal(true);
                               }}
-                              className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-[#222] hover:bg-[#2e2e2e] text-white border border-[#333] flex items-center gap-1 transition-colors"
+                              className={cn(
+                                "px-2.5 py-1 rounded-lg text-[11px] font-bold border flex items-center gap-1 transition-colors",
+                                isLight ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200" : "bg-[#222] hover:bg-[#2e2e2e] text-white border-[#333]"
+                              )}
                             >
-                              <Pencil className="w-3 h-3 text-emerald-400" /> Edit
+                              <Pencil className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> Edit
                             </button>
                             <button
                               type="button"
                               onClick={() => handleDeleteMatch(m.id)}
-                              className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 flex items-center gap-1 transition-colors"
+                              className={cn(
+                                "px-2.5 py-1 rounded-lg text-[11px] font-bold border flex items-center gap-1 transition-colors",
+                                isLight ? "bg-red-50 hover:bg-red-100 text-red-600 border-red-200" : "bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20"
+                              )}
                             >
                               <Trash2 className="w-3 h-3" /> Delete
                             </button>
@@ -899,19 +951,19 @@ function TournamentDetailsModal({
 
           {Array.isArray(t.prizes) && t.prizes.length > 0 && (
             <div className="space-y-2">
-              <div className="text-sm font-semibold text-white flex items-center gap-1.5">
-                <Award className="w-3.5 h-3.5 text-amber-400" /> Prizes
+              <div className={cn("text-sm font-bold flex items-center gap-1.5", isLight ? "text-slate-900" : "text-white")}>
+                <Award className="w-4 h-4 text-amber-500" /> Prizes
               </div>
-              <PrizesSummary prizes={t.prizes} />
+              <PrizesSummary prizes={t.prizes} theme={theme} />
             </div>
           )}
 
           {t.description && (
             <div className="space-y-2">
-              <div className="text-sm font-semibold text-white flex items-center gap-1.5">
-                <Info className="w-3.5 h-3.5" style={{ color: "#6b7a6b" }} /> Description
+              <div className={cn("text-sm font-bold flex items-center gap-1.5", isLight ? "text-slate-900" : "text-white")}>
+                <Info className="w-4 h-4 text-emerald-600 dark:text-[#6b7a6b]" /> Description
               </div>
-              <p className="text-sm leading-relaxed" style={{ color: "#c8ccc8" }}>
+              <p className={cn("text-sm leading-relaxed", isLight ? "text-slate-600" : "text-[#c8ccc8]")}>
                 {t.description}
               </p>
             </div>
@@ -919,16 +971,12 @@ function TournamentDetailsModal({
         </div>
 
         <div
-          className="sticky bottom-0 px-6 py-4 flex gap-3"
-          style={{ backgroundColor: "#0d0f0d", borderTop: "1px solid #1c1f1c" }}
+          className={cn("sticky bottom-0 px-6 py-4 flex gap-3", isLight ? "bg-white border-t border-slate-100" : "bg-[#0d0f0d] border-t border-[#1c1f1c]")}
         >
           <GhostButton onClick={onClose} className="flex-1 text-center">
             Close
           </GhostButton>
 
-          {/* Fixed: previously gated on `isMine && t.creator_team_name`, which is true
-              for anyone merely registered (not just the organizer). Now uses the same
-              isOrganizer check as the card, so only the actual organizer sees these. */}
           {(roleLabel === "Organizing" || isOrganizer) && (
             <div className="flex gap-2">
               <button
@@ -937,9 +985,12 @@ function TournamentDetailsModal({
                   onClose();
                   onEdit?.(t);
                 }}
-                className="px-3 py-2 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-colors bg-[#1c1f1c] hover:bg-[#252825] text-white border border-[#2a2a2a]"
+                className={cn(
+                  "px-3 py-2 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors border",
+                  isLight ? "bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200 shadow-xs" : "bg-[#1c1f1c] hover:bg-[#252825] text-white border-[#2a2a2a]"
+                )}
               >
-                <Pencil className="w-3.5 h-3.5" /> Edit
+                <Pencil className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> Edit
               </button>
               <button
                 type="button"
@@ -953,7 +1004,10 @@ function TournamentDetailsModal({
                     alert(err.message || "Failed to delete tournament");
                   }
                 }}
-                className="px-3 py-2 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-colors bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20"
+                className={cn(
+                  "px-3 py-2 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors border",
+                  isLight ? "bg-red-50 hover:bg-red-100 text-red-600 border-red-200 shadow-xs" : "bg-red-500/10 border-red-500/25 text-red-400 hover:bg-red-500/20"
+                )}
               >
                 <Trash2 className="w-3.5 h-3.5" /> Delete
               </button>
@@ -961,14 +1015,22 @@ function TournamentDetailsModal({
           )}
 
           {isMine ? (
-            <span className="flex-1 py-2 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1.5"
-              style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
+            <span
+              className={cn(
+                "flex-1 py-2 rounded-xl text-xs font-bold text-center flex items-center justify-center gap-1.5 border",
+                isLight ? "bg-emerald-50 border-emerald-300 text-emerald-700 shadow-xs" : "text-green-400 bg-[rgba(34,197,94,0.08)] border-[rgba(34,197,94,0.2)]"
+              )}
+            >
               <CheckCircle className="w-3.5 h-3.5" /> {roleLabel}
             </span>
           ) : registered ? (
             <div className="flex-1 flex gap-1.5">
-              <span className="flex-1 py-2 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1.5"
-                style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
+              <span
+                className={cn(
+                  "flex-1 py-2 rounded-xl text-xs font-bold text-center flex items-center justify-center gap-1.5 border",
+                  isLight ? "bg-emerald-50 border-emerald-300 text-emerald-700 shadow-xs" : "text-green-400 bg-[rgba(34,197,94,0.08)] border-[rgba(34,197,94,0.2)]"
+                )}
+              >
                 <CheckCircle className="w-3.5 h-3.5" /> Registered
               </span>
               {onUnregister && (
@@ -978,7 +1040,10 @@ function TournamentDetailsModal({
                     onUnregister(t.id);
                     onClose();
                   }}
-                  className="px-3 py-2 rounded-xl text-xs font-bold transition-colors text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20"
+                  className={cn(
+                    "px-3 py-2 rounded-xl text-xs font-bold transition-colors border",
+                    isLight ? "bg-red-50 hover:bg-red-100 text-red-600 border-red-200" : "text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20"
+                  )}
                 >
                   Cancel
                 </button>
@@ -993,8 +1058,12 @@ function TournamentDetailsModal({
                 }
               }}
               disabled={!canRegister}
-              className="flex-1 py-2 rounded-xl text-xs font-semibold transition-colors text-green-400 hover:opacity-80 disabled:opacity-50"
-              style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}
+              className={cn(
+                "flex-1 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50",
+                isLight
+                  ? "bg-[#16a34a] hover:bg-[#15803d] text-white shadow-sm"
+                  : "text-green-400 hover:opacity-80 bg-[rgba(34,197,94,0.08)] border border-[rgba(34,197,94,0.2)]"
+              )}
             >
               {full ? "Full" : t.status !== "registering" ? meta.label : "Register"}
             </button>
@@ -1013,48 +1082,70 @@ function TournamentDetailsModal({
         confirmedTeams={confirmedTeams}
         token={token}
         onSaved={handleMatchSaved}
+        theme={theme}
       />
     </div>
   );
 }
 
-function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegister, onUnregister, onView, onEdit, onDelete, token }) {
+function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegister, onUnregister, onView, onEdit, onDelete, token, theme = "dark" }) {
+  const isLight = theme === "light";
   const spotsLeft = t.spots_left ?? Math.max((t.max_teams || 0) - (t.team_count || 0), 0);
   const full = spotsLeft === 0;
   const canRegister = t.status === "registering" && !full && !registered && !isMine;
 
   return (
     <div
-      className={cn(C, "rounded-2xl p-4 transition-all duration-200 hover:border-[#3a3a3a]")}
+      className={cn(
+        C,
+        "rounded-2xl p-4.5 transition-all duration-200",
+        isLight
+          ? "hover:border-slate-300 hover:shadow-md"
+          : "hover:border-[#3a3a3a]"
+      )}
       style={
-        isMine
-          ? {
-              border: "1px solid rgba(34,197,94,0.35)",
-              background: "linear-gradient(135deg, rgba(22,101,52,0.12), rgba(13,15,13,0.4))",
-            }
-          : undefined
+        isLight
+          ? (isMine
+              ? {
+                  border: "1.5px solid #a7f3d0",
+                  background: "linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)",
+                  boxShadow: "0 4px 12px -2px rgba(22, 163, 74, 0.08)"
+                }
+              : {
+                  backgroundColor: "#ffffff",
+                  border: "1px solid #e2e8f0",
+                  boxShadow: "0 2px 8px -2px rgba(0, 0, 0, 0.05)"
+                }
+            )
+          : (isMine
+              ? {
+                  border: "1px solid rgba(34,197,94,0.35)",
+                  background: "linear-gradient(135deg, rgba(22,101,52,0.12), rgba(13,15,13,0.4))",
+                }
+              : undefined
+            )
       }
     >
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-white text-sm truncate">{t.name}</span>
+            <span className={cn("text-base font-bold truncate", isLight ? "text-slate-900" : "text-white")}>{t.name}</span>
             {isMine && <Tag color="green">{roleLabel}</Tag>}
           </div>
-          <div className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "#6b7a6b" }}>
-            <Trophy className="w-3 h-3" /> {t.creator_team_name || "Unknown organizer"}
+          <div className="text-xs mt-1 flex items-center gap-1.5 font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
+            <Trophy className="w-3.5 h-3.5 text-amber-500" /> {t.creator_team_name || "Unknown organizer"}
           </div>
         </div>
         <Tag color={statusMeta(t.status).color}>{statusMeta(t.status).label}</Tag>
       </div>
 
-      <div className="flex items-center gap-3 text-xs mb-3" style={{ color: "#c8ccc8" }}>
-        <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3" /> {t.startDate || "TBA"}</span>
-        <span style={{ color: "#3a3a3a" }}>·</span>
-        <span className="flex items-center gap-1 truncate"><MapPin className="w-3 h-3 shrink-0" /> {t.venue || "TBD"}</span>
+      <div className="flex items-center gap-3 text-xs mb-3.5 font-medium" style={{ color: isLight ? "#475569" : "#c8ccc8" }}>
+        <span className="flex items-center gap-1.5"><CalendarDays className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> {t.startDate || "TBA"}</span>
+        <span style={{ color: isLight ? "#cbd5e1" : "#3a3a3a" }}>·</span>
+        <span className="flex items-center gap-1.5 truncate"><MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" /> {t.venue || "TBD"}</span>
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-3">
+      <div className="flex flex-wrap gap-2 mb-3.5">
         {t.format && <Tag color="blue">{t.format} Format</Tag>}
         <TeamsRemainingBadge spotsLeft={spotsLeft} maxTeams={t.max_teams} />
         {t.matches_count !== undefined && t.matches_count > 0 && (
@@ -1068,8 +1159,12 @@ function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegis
         {isMine ? (
           <div className="flex-1 flex flex-wrap gap-1.5 min-w-[200px]">
             <span
-              className="flex-1 py-2 px-3 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1 min-w-[120px]"
-              style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}
+              className={cn(
+                "flex-1 py-2 px-3 rounded-xl text-xs font-bold text-center flex items-center justify-center gap-1 min-w-[120px] border",
+                isLight
+                  ? "bg-emerald-50 border-emerald-300 text-emerald-700 shadow-xs"
+                  : "text-green-400 bg-[rgba(34,197,94,0.08)] border-[rgba(34,197,94,0.2)]"
+              )}
             >
               <CheckCircle className="w-3.5 h-3.5 shrink-0" /> {roleLabel}
             </span>
@@ -1079,9 +1174,14 @@ function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegis
                   type="button"
                   onClick={() => onEdit?.(t)}
                   title="Edit Tournament"
-                  className="px-3 py-2 rounded-xl text-xs font-bold transition-colors text-white bg-green-500/10 border border-green-500/20 hover:bg-green-500/20 flex items-center gap-1.5"
+                  className={cn(
+                    "px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 border",
+                    isLight
+                      ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200 shadow-xs"
+                      : "text-white bg-green-500/10 border-green-500/20 hover:bg-green-500/20"
+                  )}
                 >
-                  <Pencil className="w-3.5 h-3.5" /> Edit
+                  <Pencil className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> Edit
                 </button>
                 <button
                   type="button"
@@ -1095,7 +1195,12 @@ function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegis
                     }
                   }}
                   title="Delete Tournament"
-                  className="px-3 py-2 rounded-xl text-xs font-bold transition-colors text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 flex items-center gap-1.5"
+                  className={cn(
+                    "px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 border",
+                    isLight
+                      ? "bg-red-50 hover:bg-red-100 text-red-600 border-red-200 shadow-xs"
+                      : "text-red-400 hover:text-red-300 bg-red-500/10 border-red-500/20 hover:bg-red-500/20"
+                  )}
                 >
                   <Trash2 className="w-3.5 h-3.5" /> Delete
                 </button>
@@ -1105,8 +1210,12 @@ function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegis
         ) : registered ? (
           <div className="flex-1 flex flex-wrap gap-1.5 min-w-[200px]">
             <span
-              className="flex-1 py-2 px-3 rounded-xl text-xs font-semibold text-center text-green-400 flex items-center justify-center gap-1 min-w-[120px]"
-              style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}
+              className={cn(
+                "flex-1 py-2 px-3 rounded-xl text-xs font-bold text-center flex items-center justify-center gap-1 min-w-[120px] border",
+                isLight
+                  ? "bg-emerald-50 border-emerald-300 text-emerald-700 shadow-xs"
+                  : "text-green-400 bg-[rgba(34,197,94,0.08)] border-[rgba(34,197,94,0.2)]"
+              )}
             >
               <CheckCircle className="w-3.5 h-3.5 shrink-0" /> Registered
             </span>
@@ -1115,7 +1224,12 @@ function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegis
                 type="button"
                 onClick={() => onUnregister(t.id)}
                 title="Cancel Registration"
-                className="px-3 py-2 rounded-xl text-xs font-bold transition-colors text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20"
+                className={cn(
+                  "px-3 py-2 rounded-xl text-xs font-bold transition-colors border",
+                  isLight
+                    ? "bg-red-50 hover:bg-red-100 text-red-600 border-red-200 shadow-xs"
+                    : "text-red-400 hover:text-red-300 bg-red-500/10 border-red-500/20 hover:bg-red-500/20"
+                )}
               >
                 Cancel
               </button>
@@ -1129,13 +1243,20 @@ function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegis
               }
             }}
             disabled={!canRegister}
-            className="flex-1 py-2 rounded-xl text-xs font-semibold transition-colors text-green-400 hover:opacity-80 disabled:opacity-50"
-            style={{ backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}
+            className={cn(
+              "flex-1 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50",
+              isLight
+                ? "bg-[#16a34a] hover:bg-[#15803d] text-white shadow-sm"
+                : "text-green-400 hover:opacity-80 bg-[rgba(34,197,94,0.08)] border border-[rgba(34,197,94,0.2)]"
+            )}
           >
             {full ? "Full" : t.status !== "registering" ? statusMeta(t.status).label : "Register"}
           </button>
         )}
-        <GhostButton onClick={onView} className="flex-1 text-center">
+        <GhostButton
+          onClick={onView}
+          className={cn("flex-1 text-center font-bold", isLight ? "bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200" : "")}
+        >
           View Tournament
         </GhostButton>
       </div>
@@ -1157,7 +1278,9 @@ export default function TournamentsTab({
   onTournamentDeleted,
   autoOpenCreate = false,
   onAutoOpenHandled,
+  theme = "dark",
 }) {
+  const isLight = theme === "light";
   const [viewingId, setViewingId] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingTournament, setEditingTournament] = useState(null);
@@ -1197,28 +1320,31 @@ export default function TournamentsTab({
   return (
     <div className="space-y-8">
       {/* Top Header with Title and Create Tournament Button */}
-      <div className="flex items-center justify-between flex-wrap gap-3 pb-2 border-b border-[#2a2a2a]">
+      <div className={cn("flex items-center justify-between flex-wrap gap-3 pb-3 border-b", isLight ? "border-slate-200" : "border-[#2a2a2a]")}>
         <div>
-          <h2 className="text-xl font-bold text-white">Tournaments</h2>
-          <p className="text-sm mt-0.5" style={{ color: "#6b7a6b" }}>Organize or register for local cricket tournaments</p>
+          <h2 className={cn("text-2xl font-bold tracking-tight", isLight ? "text-slate-900" : "text-white")}>Tournaments</h2>
+          <p className="text-sm mt-0.5" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Organize or register for local cricket tournaments</p>
         </div>
 
         <button
           onClick={() => setShowCreateForm(true)}
-          className="px-5 py-2.5 rounded-xl bg-green-500 text-black font-bold text-sm hover:bg-green-400 transition-colors flex items-center gap-2 shrink-0"
+          className={cn(
+            "px-5 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shrink-0",
+            isLight
+              ? "bg-[#16a34a] text-white hover:bg-[#15803d] shadow-sm"
+              : "bg-green-500 text-black hover:bg-green-400"
+          )}
         >
           <Plus className="w-4 h-4" /> Create Tournament
         </button>
       </div>
 
-
-
-      {/* Your Tournaments Section - only shown if user has published/organized or registered for a tournament */}
+      {/* Your Tournaments Section */}
       {myTournaments.length > 0 && (
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-base font-semibold text-white">Your Tournaments</h3>
-            <span className="text-xs" style={{ color: "#6b7a6b" }}>
+            <h3 className={cn("text-base font-bold", isLight ? "text-slate-900" : "text-white")}>Your Tournaments</h3>
+            <span className="text-xs font-semibold" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
               {myTournaments.length} active
             </span>
           </div>
@@ -1237,6 +1363,7 @@ export default function TournamentsTab({
                 onEdit={(item) => setEditingTournament(item)}
                 onDelete={(id) => onTournamentDeleted?.(id)}
                 token={token}
+                theme={theme}
               />
             ))}
           </div>
@@ -1246,13 +1373,13 @@ export default function TournamentsTab({
       {/* All Tournaments Section */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-semibold text-white">All Tournaments</h3>
-          <span className="text-xs" style={{ color: "#6b7a6b" }}>
+          <h3 className={cn("text-base font-bold", isLight ? "text-slate-900" : "text-white")}>All Tournaments</h3>
+          <span className="text-xs font-semibold" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
             {otherTournaments.length} available
           </span>
         </div>
         {otherTournaments.length === 0 ? (
-          <div className={cn(C, "rounded-2xl p-6 text-center text-sm")} style={{ color: "#4a5a4a" }}>
+          <div className={cn(C, "rounded-2xl p-6 text-center text-sm border", isLight ? "bg-white border-slate-200 text-slate-500 shadow-xs" : "")} style={{ color: isLight ? undefined : "#4a5a4a" }}>
             No other tournaments available right now.
           </div>
         ) : (
@@ -1271,6 +1398,7 @@ export default function TournamentsTab({
                 onEdit={(item) => setEditingTournament(item)}
                 onDelete={(id) => onTournamentDeleted?.(id)}
                 token={token}
+                theme={theme}
               />
             ))}
           </div>
@@ -1303,6 +1431,7 @@ export default function TournamentsTab({
               String(viewingTournament.creator_team_id) === String(myTeamId))
           }
           onTournamentUpdated={onTournamentUpdated}
+          theme={theme}
         />
       )}
 
@@ -1313,6 +1442,7 @@ export default function TournamentsTab({
           tournaments={allTournaments}
           onClose={() => setShowCreateForm(false)}
           onCreated={handleCreated}
+          theme={theme}
         />
       )}
 
@@ -1323,6 +1453,7 @@ export default function TournamentsTab({
           tournaments={allTournaments}
           initialTournament={editingTournament}
           onClose={() => setEditingTournament(null)}
+          theme={theme}
           onUpdated={(updated) => {
             onTournamentUpdated?.(updated);
             setEditingTournament(null);

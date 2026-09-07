@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { apiRequest } from "../api";
 
-export default function ChatModal({ challenge, token, onClose }) {
+export default function ChatModal({ challenge, token, onClose, theme = "dark" }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
@@ -54,25 +54,31 @@ export default function ChatModal({ challenge, token, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ backgroundColor: "rgba(0,0,0,0.75)" }} onClick={onClose}>
-      <div className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-4 sm:p-5 flex flex-col pb-[max(1.25rem,env(safe-area-inset-bottom))]" style={{ backgroundColor: "#151715", border: "1px solid #2a2a2a", height: "75vh", maxHeight: 560 }} onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ backgroundColor: theme === "light" ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)" }} onClick={onClose}>
+      <div className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-4 sm:p-5 flex flex-col pb-[max(1.25rem,env(safe-area-inset-bottom))]" style={{ backgroundColor: theme === "light" ? "#ffffff" : "#151715", border: `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}`, height: "75vh", maxHeight: 560 }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <div>
-            <div className="text-sm font-semibold text-white">Match Chat</div>
-            <div className="text-xs" style={{ color: "#6b7a6b" }}>{challenge.team_name} vs {challenge.accepted_by_team_name}</div>
+            <div className="text-sm font-semibold" style={{ color: theme === "light" ? "#0f172a" : "#ffffff" }}>Match Chat</div>
+            <div className="text-xs" style={{ color: theme === "light" ? "#64748b" : "#6b7a6b" }}>{challenge.team_name} vs {challenge.accepted_by_team_name}</div>
           </div>
-          <button onClick={onClose} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ backgroundColor: "#222" }}>
-            <X className="w-3.5 h-3.5 text-[#c8ccc8]" />
+          <button onClick={onClose} className="w-6 h-6 rounded-full flex items-center justify-center hover:opacity-80" style={{ backgroundColor: theme === "light" ? "#f1f5f9" : "#222" }}>
+            <X className="w-3.5 h-3.5" style={{ color: theme === "light" ? "#475569" : "#c8ccc8" }} />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto space-y-2 mb-3 pr-1">
-          {loading && <div className="text-xs text-center py-6" style={{ color: "#4a5a4a" }}>Loading chat history...</div>}
-          {!loading && messages.length === 0 && <div className="text-xs text-center py-6" style={{ color: "#4a5a4a" }}>No messages yet — say hello!</div>}
+          {loading && <div className="text-xs text-center py-6" style={{ color: theme === "light" ? "#94a3b8" : "#4a5a4a" }}>Loading chat history...</div>}
+          {!loading && messages.length === 0 && <div className="text-xs text-center py-6" style={{ color: theme === "light" ? "#94a3b8" : "#4a5a4a" }}>No messages yet — say hello!</div>}
           {messages.map(m => (
             <div key={m.id} className="max-w-[80%]" style={{ marginLeft: m.sender_team_name === challenge.myTeamName ? "auto" : 0 }}>
-              <div className="text-xs px-1 mb-0.5" style={{ color: "#4a5a4a" }}>{m.sender_team_name}</div>
-              <div className="rounded-xl px-3 py-2 text-xs" style={m.sender_team_name === challenge.myTeamName ? { backgroundColor: "#22c55e", color: "#000" } : { backgroundColor: "#1a1a1a", color: "#c8ccc8", border: "1px solid #2a2a2a" }}>
+              <div className="text-xs px-1 mb-0.5" style={{ color: theme === "light" ? "#64748b" : "#4a5a4a" }}>{m.sender_team_name}</div>
+              <div
+                className="rounded-xl px-3 py-2 text-xs font-medium"
+                style={m.sender_team_name === challenge.myTeamName
+                  ? { backgroundColor: theme === "light" ? "#16a34a" : "#22c55e", color: "#ffffff" }
+                  : { backgroundColor: theme === "light" ? "#f1f5f9" : "#1a1a1a", color: theme === "light" ? "#0f172a" : "#c8ccc8", border: `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}` }
+                }
+              >
                 {m.body}
               </div>
             </div>
@@ -80,10 +86,29 @@ export default function ChatModal({ challenge, token, onClose }) {
           <div ref={bottomRef} />
         </div>
 
-        {error && <div className="text-xs text-red-400 mb-2">{error}</div>}
+        {error && <div className="text-xs text-red-500 font-medium mb-2">{error}</div>}
         <div className="flex gap-2">
-          <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === "Enter" && send()} className="flex-1 rounded-xl px-3 py-2 text-sm text-white focus:outline-none" style={{ backgroundColor: "#111", border: "1px solid #2a2a2a" }} placeholder="Type a message..." />
-          <button onClick={send} disabled={sending} className="px-4 py-2 rounded-xl bg-green-500 text-black text-xs font-bold hover:bg-green-400 transition-colors" style={sending ? { opacity: 0.6, cursor: "not-allowed" } : {}}>Send</button>
+          <input
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && send()}
+            className="flex-1 rounded-xl px-3 py-2 text-sm focus:outline-none placeholder-slate-400"
+            style={{ backgroundColor: theme === "light" ? "#ffffff" : "#111", border: `1px solid ${theme === "light" ? "#cbd5e1" : "#2a2a2a"}`, color: theme === "light" ? "#0f172a" : "#ffffff" }}
+            placeholder="Type a message..."
+          />
+          <button
+            onClick={send}
+            disabled={sending}
+            className="px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+            style={{
+              backgroundColor: theme === "light" ? "#16a34a" : "#22c55e",
+              color: theme === "light" ? "#ffffff" : "#000",
+              opacity: sending ? 0.6 : 1,
+              cursor: sending ? "not-allowed" : "pointer"
+            }}
+          >
+            Send
+          </button>
         </div>
       </div>
     </div>

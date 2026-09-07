@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Bell, Pencil, LogOut, CheckCheck, Trash2, ExternalLink } from "lucide-react";
+import { Bell, Pencil, LogOut, CheckCheck, Trash2, ExternalLink, Sun, Moon } from "lucide-react";
 import EditProfileModal from "./Auth/EditProfileModal.jsx";
 import { cn } from "../utils/helpers.jsx";
 
@@ -15,6 +15,8 @@ export default function Navbar({
   onClearNotifications,
   onOpenNotifications,
   onNotificationClick,
+  theme = "dark",
+  onToggleTheme,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
@@ -96,13 +98,24 @@ export default function Navbar({
   };
 
   return (
-    <nav style={{ backgroundColor: "#0d0f0d" }} className="sticky top-0 z-50 border-b border-[#2a2a2a] backdrop-blur-sm">
+    <nav
+      style={{
+        backgroundColor: theme === "light" ? "#ffffff" : "#0d0f0d",
+        borderColor: theme === "light" ? "#e2e8f0" : "#2a2a2a"
+      }}
+      className="sticky top-0 z-50 border-b backdrop-blur-sm transition-colors duration-200"
+    >
       <div className="max-w-7xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between md:justify-start gap-2 sm:gap-6">
         <div className="flex items-center gap-2 shrink-0 cursor-pointer" onClick={() => setActive("Home")}>
           <div className="w-8 h-8 rounded-lg bg-green-500 flex items-center justify-center shadow-md shadow-green-500/20">
             <span className="text-black font-black text-sm">MC</span>
           </div>
-          <span className="font-bold text-white text-base tracking-tight hidden xs:inline">MatchConnect</span>
+          <span
+            className="font-bold text-base tracking-tight hidden xs:inline"
+            style={{ color: theme === "light" ? "#000000" : "#ffffff" }}
+          >
+            MatchConnect
+          </span>
         </div>
 
         {/* Desktop / Tablet Navigation Tabs */}
@@ -114,7 +127,11 @@ export default function Navbar({
                 onClick={() => setActive(tab)}
                 className={cn(
                   "relative px-3 py-4 text-sm font-medium transition-colors whitespace-nowrap",
-                  active === tab ? "text-green-400" : "text-[#6b7a6b] hover:text-[#c8ccc8]"
+                  active === tab
+                    ? "text-green-500 font-semibold"
+                    : theme === "light"
+                      ? "text-black font-bold hover:text-green-600"
+                      : "text-[#6b7a6b] hover:text-[#c8ccc8]"
                 )}
               >
                 {tab}
@@ -124,11 +141,31 @@ export default function Navbar({
           </div>
         </div>
 
-        {/* Actions (Notification Bell + Profile) */}
-        <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 ml-auto md:ml-0">
+        {/* Actions (Theme Toggle + Notification Bell + Profile) */}
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 ml-auto md:ml-0">
+          {/* Light / Dark Mode Toggle Button */}
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            style={{
+              backgroundColor: theme === "light" ? "#f1f5f9" : "#1e211e",
+              border: `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}`
+            }}
+            className="w-9 h-9 rounded-full flex items-center justify-center hover:opacity-85 active:scale-95 transition-all duration-150 cursor-pointer shadow-sm"
+            title={theme === "light" ? "Switch to Dark Mode" : "Switch to Light Mode"}
+            aria-label={theme === "light" ? "Switch to Dark Mode" : "Switch to Light Mode"}
+          >
+            {theme === "light" ? (
+              <Moon className="w-4 h-4 text-slate-700 transition-colors" />
+            ) : (
+              <Sun className="w-4 h-4 text-amber-400 transition-colors" />
+            )}
+          </button>
+
           {/* Notification Bell with Dropdown */}
           <div className="relative">
             <button
+              type="button"
               onClick={() => {
                 const next = !bellOpen;
                 setBellOpen(next);
@@ -136,15 +173,18 @@ export default function Navbar({
                   onOpenNotifications();
                 }
               }}
-              style={{ backgroundColor: "#1e211e" }}
-              className="relative w-9 h-9 rounded-full flex items-center justify-center hover:opacity-80 transition-opacity"
+              style={{
+                backgroundColor: theme === "light" ? "#f1f5f9" : "#1e211e",
+                border: `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}`
+              }}
+              className="relative w-9 h-9 rounded-full flex items-center justify-center hover:opacity-85 active:scale-95 transition-all duration-150 shadow-sm cursor-pointer"
               title="Notifications"
             >
-              <Bell className="w-4 h-4 text-[#c8ccc8]" />
+              <Bell className={cn("w-4 h-4", theme === "light" ? "text-slate-600" : "text-[#c8ccc8]")} />
               {unreadCount > 0 && (
                 <span
                   className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white font-extrabold text-[9px] flex items-center justify-center shadow-lg"
-                  style={{ border: "2px solid #0d0f0d" }}
+                  style={{ border: `2px solid ${theme === "light" ? "#ffffff" : "#0d0f0d"}` }}
                 >
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </span>
@@ -156,14 +196,22 @@ export default function Navbar({
                 <div className="fixed inset-0 z-40 bg-black/50 sm:bg-transparent" onClick={() => setBellOpen(false)} />
                 <div
                   className="fixed sm:absolute left-3 right-3 sm:left-auto sm:right-0 top-16 sm:top-11 w-auto sm:w-96 max-w-sm mx-auto sm:mx-0 rounded-2xl overflow-hidden z-50 shadow-2xl animate-in fade-in zoom-in-95 duration-150"
-                  style={{ backgroundColor: "#151715", border: "1px solid #2a2a2a" }}
+                  style={{
+                    backgroundColor: theme === "light" ? "#ffffff" : "#151715",
+                    border: `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}`
+                  }}
                 >
                   {/* Dropdown Header */}
-                  <div className="px-4 py-3 border-b border-[#242624] flex items-center justify-between">
+                  <div
+                    className="px-4 py-3 border-b flex items-center justify-between"
+                    style={{ borderColor: theme === "light" ? "#f1f5f9" : "#242624" }}
+                  >
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-white">Notifications</span>
+                      <span className="text-sm font-bold" style={{ color: theme === "light" ? "#0f172a" : "#ffffff" }}>
+                        Notifications
+                      </span>
                       {unreadCount > 0 && (
-                        <span className="px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-extrabold text-[10px]">
+                        <span className="px-2 py-0.5 rounded-full bg-red-500/20 text-red-500 font-extrabold text-[10px]">
                           {unreadCount} new
                         </span>
                       )}
@@ -206,26 +254,27 @@ export default function Navbar({
                           key={item.id}
                           onClick={() => handleNotificationClick(item)}
                           className={cn(
-                            "p-3.5 flex items-start gap-3 transition cursor-pointer hover:bg-white/5",
-                            !item.is_read ? "bg-green-500/[0.04]" : ""
+                            "p-3.5 flex items-start gap-3 transition cursor-pointer",
+                            theme === "light" ? "hover:bg-slate-50" : "hover:bg-white/5",
+                            !item.is_read ? (theme === "light" ? "bg-green-50/70" : "bg-green-500/[0.04]") : ""
                           )}
                         >
                           <span className="text-xl shrink-0 mt-0.5">{getNotificationIcon(item.type || item.data?.type)}</span>
                           <div className="flex-1 min-w-0 space-y-1">
                             <div className="flex items-center justify-between gap-1">
-                              <span className="text-xs font-bold text-white truncate">
+                              <span className="text-xs font-bold truncate" style={{ color: theme === "light" ? "#0f172a" : "#ffffff" }}>
                                 {item.title}
                               </span>
                               {!item.is_read && (
-                                <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
+                                <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
                               )}
                             </div>
-                            <p className="text-[11px] text-slate-300 leading-relaxed line-clamp-2">
+                            <p className="text-[11px] leading-relaxed line-clamp-2" style={{ color: theme === "light" ? "#475569" : "#cbd5e1" }}>
                               {item.body}
                             </p>
-                            <div className="flex items-center justify-between text-[10px] text-slate-500">
+                            <div className="flex items-center justify-between text-[10px]" style={{ color: theme === "light" ? "#64748b" : "#64748b" }}>
                               <span>{formatNotificationTime(item.created_at)}</span>
-                              <span className="text-green-400 hover:underline flex items-center gap-0.5 font-medium">
+                              <span className="text-green-500 hover:underline flex items-center gap-0.5 font-medium">
                                 {getNotificationActionText(item)} <ExternalLink className="w-2.5 h-2.5" />
                               </span>
                             </div>
@@ -251,12 +300,17 @@ export default function Navbar({
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
                 <div
-                  className="absolute right-0 top-11 w-48 rounded-xl overflow-hidden z-50"
-                  style={{ backgroundColor: "#151715", border: "1px solid #2a2a2a" }}
+                  className="absolute right-0 top-11 w-48 rounded-xl overflow-hidden z-50 shadow-xl"
+                  style={{
+                    backgroundColor: theme === "light" ? "#ffffff" : "#151715",
+                    border: `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}`
+                  }}
                 >
-                  <div className="px-3 py-2.5" style={{ borderBottom: "1px solid #2a2a2a" }}>
-                    <div className="text-sm font-semibold text-white truncate">{user?.name}</div>
-                    <div className="text-xs font-mono truncate" style={{ color: "#6b7a6b" }}>
+                  <div className="px-3 py-2.5" style={{ borderBottom: `1px solid ${theme === "light" ? "#f1f5f9" : "#2a2a2a"}` }}>
+                    <div className="text-sm font-semibold truncate" style={{ color: theme === "light" ? "#000000" : "#ffffff" }}>
+                      {user?.name}
+                    </div>
+                    <div className="text-xs font-mono truncate" style={{ color: theme === "light" ? "#000000" : "#6b7a6b" }}>
                       {user?.phone || "—"}
                     </div>
                   </div>
@@ -265,17 +319,21 @@ export default function Navbar({
                       setMenuOpen(false);
                       setEditing(true);
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-medium hover:bg-white/5 transition-colors"
-                    style={{ color: "#c8ccc8" }}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold transition-colors"
+                    style={{ color: theme === "light" ? "#000000" : "#c8ccc8" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = theme === "light" ? "#f8fafc" : "rgba(255,255,255,0.05)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
                   >
-                    <Pencil className="w-3.5 h-3.5 text-green-400" /> Edit Profile
+                    <Pencil className="w-3.5 h-3.5 text-green-500" /> Edit Profile
                   </button>
                   <button
                     onClick={() => {
                       setMenuOpen(false);
                       onLogout();
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-medium text-red-400 hover:bg-white/5 transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-medium text-red-500 transition-colors"
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = theme === "light" ? "#fef2f2" : "rgba(255,255,255,0.05)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
                   >
                     <LogOut className="w-3.5 h-3.5" /> Log out
                   </button>
@@ -295,6 +353,7 @@ export default function Navbar({
             onUserUpdated(updated);
             setEditing(false);
           }}
+          theme={theme}
         />
       )}
     </nav>

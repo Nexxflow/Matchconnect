@@ -80,6 +80,43 @@
   --sidebar-ring: #22c55e;
 }
 
+.light, html.light {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #16a34a;
+  --primary-foreground: #ffffff;
+  --secondary: #f0fdf4;
+  --secondary-foreground: #15803d;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #22c55e;
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #e2e8f0;
+  --input: #ffffff;
+  --input-background: #ffffff;
+  --switch-background: #cbd5e1;
+  --ring: #22c55e;
+  --chart-1: #16a34a;
+  --chart-2: #2563eb;
+  --chart-3: #d97706;
+  --chart-4: #dc2626;
+  --chart-5: #9333ea;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: #16a34a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f0fdf4;
+  --sidebar-accent-foreground: #15803d;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #22c55e;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -132,16 +169,17 @@
 
 @layer components {
   .mc-card {
-    background-color: #1a1a1a;
-    border: 1px solid #2a2a2a;
+    background-color: var(--card);
+    border: 1px solid var(--border);
+    color: var(--card-foreground);
   }
   .mc-card-inner {
-    background-color: #111111;
-    border: 1px solid #2a2a2a;
+    background-color: var(--popover);
+    border: 1px solid var(--border);
   }
   .mc-surface {
-    background-color: #222222;
-    border: 1px solid #2a2a2a;
+    background-color: var(--secondary);
+    border: 1px solid var(--border);
   }
 }
 
@@ -151,8 +189,8 @@
   }
 
   html, body, #root {
-    background-color: #0d0f0d;
-    color: #f0f2f0;
+    background-color: var(--background);
+    color: var(--foreground);
   }
 
   body {
@@ -205,3 +243,600 @@
     line-height: 1.5;
   }
 }
+
+/* ==========================================================================
+   Comprehensive Light Mode Rules & Overrides (html.light, body.light, [data-theme="light"])
+   ========================================================================== */
+
+html.light,
+html[data-theme="light"],
+body.light,
+body[data-theme="light"],
+html.light body,
+html.light #root {
+  background-color: #f8fafc !important;
+  color: #000000 !important;
+}
+
+/* Base text color in light mode */
+html.light {
+  color-scheme: light;
+}
+
+/* Cards & Surfaces with subtle elevation */
+html.light .mc-card,
+body.light .mc-card,
+[data-theme="light"] .mc-card,
+html.light [class*="bg-[#151715]"],
+html.light [class*="bg-[#1a1a1a]"],
+html.light [class*="bg-[#161616]"],
+html.light [class*="bg-[#171717]"],
+html.light [class*="bg-[#181a18]"],
+html.light [class*="bg-[#191c19]"],
+html.light .bg-\[\#151715\],
+html.light .bg-\[\#1a1a1a\],
+html.light .bg-\[\#161616\],
+html.light .bg-\[\#171717\] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.05), 0 1px 2px -1px rgba(15, 23, 42, 0.05) !important;
+}
+
+/* Sub-surfaces & nested cards -> Soft slate with clean border */
+html.light .mc-card-inner,
+body.light .mc-card-inner,
+[data-theme="light"] .mc-card-inner,
+html.light [class*="bg-[#0f120f]"],
+html.light [class*="bg-[#101210]"],
+html.light [class*="bg-[#111111]"],
+html.light [class*="bg-[#111]"],
+html.light [class*="bg-[#121412]"],
+html.light [class*="bg-[#121512]"],
+html.light [class*="bg-[#131413]"],
+html.light [class*="bg-[#131513]"],
+html.light .bg-\[\#0f120f\],
+html.light .bg-\[\#111\],
+html.light .bg-\[\#111111\],
+html.light .bg-\[\#131413\] {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+html.light .mc-surface,
+body.light .mc-surface,
+[data-theme="light"] .mc-surface {
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* ==========================================================================
+   All Tailwind Arbitrary Background Classes
+   ========================================================================== */
+
+/* Main outer page backgrounds */
+html.light [class*="bg-[#0d0f0d]"],
+html.light .bg-\[\#0d0f0d\],
+html.light [class*="bg-[#0b0f17]"],
+html.light .bg-\[\#0b0f17\] {
+  background-color: #f8fafc !important;
+}
+
+html.light [class*="bg-[#0d0f0d]/95"],
+html.light .bg-\[\#0d0f0d\]\/95 {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+}
+
+/* Sub-surfaces & elevated elements -> Light grey / slate */
+html.light [class*="bg-[#1e211e]"],
+html.light [class*="bg-[#1e1e1e]"],
+html.light [class*="bg-[#202420]"],
+html.light [class*="bg-[#222]"],
+html.light [class*="bg-[#222222]"],
+html.light [class*="bg-[#242624]"],
+html.light [class*="bg-[#242924]"],
+html.light [class*="bg-[#242d24]"],
+html.light [class*="bg-[#252525]"],
+html.light [class*="bg-[#252925]"],
+html.light [class*="bg-[#1c1c1c]"],
+html.light [class*="bg-[#1c1f1c]"],
+html.light [class*="bg-[#1c2536]"],
+html.light [class*="bg-slate-900/80"],
+html.light .bg-\[\#1e211e\],
+html.light .bg-\[\#222222\],
+html.light .bg-\[\#222\],
+html.light .bg-\[\#252525\],
+html.light .bg-\[\#202420\] {
+  background-color: #f1f5f9 !important;
+}
+
+/* Hover states in light mode */
+html.light [class*="hover:bg-[#1c1c1c]"]:hover,
+html.light [class*="hover:bg-[#333]"]:hover,
+html.light [class*="hover:bg-neutral-800"]:hover,
+html.light [class*="hover:bg-white/5"]:hover {
+  background-color: #f1f5f9 !important;
+}
+
+/* ==========================================================================
+   All Tailwind Arbitrary Border & Divider Classes
+   ========================================================================== */
+
+html.light [class*="border-[#2a2a2a]"],
+html.light [class*="border-[#2a332a]"],
+html.light [class*="border-[#242624]"],
+html.light [class*="border-[#222922]"],
+html.light [class*="border-[#1c1f1c]"],
+html.light [class*="border-[#1e211e]"],
+html.light [class*="border-[#1e1e1e]"],
+html.light [class*="border-[#242924]"],
+html.light [class*="border-[#283028]"],
+html.light [class*="border-[#282d28]"],
+html.light [class*="border-[#293329]"],
+html.light [class*="border-[#333333]"],
+html.light [class*="border-[#333]"],
+html.light [class*="border-[#222]"],
+html.light [class*="border-[#222222]"],
+html.light [class*="border-[#232f45]"],
+html.light [class*="border-[#334155]"],
+html.light [class*="border-slate-800"],
+html.light .border-\[\#2a2a2a\],
+html.light .border-\[\#242624\],
+html.light .border-\[\#222922\],
+html.light .border-\[\#1c1f1c\],
+html.light .border-\[\#1e211e\],
+html.light .border-\[\#1e1e1e\],
+html.light .border-\[\#333333\],
+html.light .border-\[\#333\],
+html.light .border-\[\#222\] {
+  border-color: #e2e8f0 !important;
+}
+
+html.light .divide-\[\#1e211e\] > :not([hidden]) ~ :not([hidden]),
+html.light .divide-\[\#2a2a2a\] > :not([hidden]) ~ :not([hidden]),
+html.light [class*="divide-[#1e211e]"] > :not([hidden]) ~ :not([hidden]),
+html.light [class*="divide-[#1e1e1e]"] > :not([hidden]) ~ :not([hidden]),
+html.light [class*="divide-[#2a2a2a]"] > :not([hidden]) ~ :not([hidden]),
+html.light [class*="divide-[#222]"] > :not([hidden]) ~ :not([hidden]) {
+  border-color: #f1f5f9 !important;
+}
+
+/* ==========================================================================
+   Inline Style Overrides (Matching both HEX and Chromium Serialized RGB values)
+   ========================================================================== */
+
+/* Outer page backgrounds */
+html.light [style*="rgb(13, 15, 13)"],
+html.light [style*="rgb(11, 15, 23)"],
+html.light [style*="#0d0f0d"],
+html.light [style*="#0b0f17"] {
+  background-color: #f8faf8 !important;
+}
+
+/* Card surfaces -> White */
+html.light [style*="rgb(26, 26, 26)"],
+html.light [style*="rgb(21, 23, 21)"],
+html.light [style*="rgb(17, 17, 17)"],
+html.light [style*="rgb(18, 20, 18)"],
+html.light [style*="rgb(18, 21, 18)"],
+html.light [style*="rgb(19, 20, 19)"],
+html.light [style*="rgb(19, 21, 19)"],
+html.light [style*="rgb(19, 26, 38)"],
+html.light [style*="rgb(20, 23, 20)"],
+html.light [style*="rgb(21, 21, 21)"],
+html.light [style*="rgb(22, 22, 22)"],
+html.light [style*="rgb(22, 25, 22)"],
+html.light [style*="rgb(23, 23, 23)"],
+html.light [style*="rgb(23, 26, 23)"],
+html.light [style*="rgb(24, 26, 24)"],
+html.light [style*="rgb(24, 27, 24)"],
+html.light [style*="rgb(25, 28, 25)"],
+html.light [style*="rgb(15, 18, 15)"],
+html.light [style*="rgb(16, 18, 16)"],
+html.light [style*="#111"],
+html.light [style*="#111111"],
+html.light [style*="#1a1a1a"],
+html.light [style*="#151715"],
+html.light [style*="#131413"],
+html.light [style*="#131513"],
+html.light [style*="#121412"],
+html.light [style*="#121512"],
+html.light [style*="#131a26"],
+html.light [style*="#141714"],
+html.light [style*="#151515"],
+html.light [style*="#161616"],
+html.light [style*="#161916"],
+html.light [style*="#171717"],
+html.light [style*="#171a17"],
+html.light [style*="#181a18"],
+html.light [style*="#181b18"],
+html.light [style*="#191c19"],
+html.light [style*="#0f120f"],
+html.light [style*="#101210"] {
+  background-color: #ffffff !important;
+}
+
+/* Secondary surfaces & sub-buttons -> Light slate */
+html.light [style*="rgb(30, 30, 30)"],
+html.light [style*="rgb(30, 33, 30)"],
+html.light [style*="rgb(32, 36, 32)"],
+html.light [style*="rgb(34, 34, 34)"],
+html.light [style*="rgb(36, 38, 36)"],
+html.light [style*="rgb(36, 41, 36)"],
+html.light [style*="rgb(36, 45, 36)"],
+html.light [style*="rgb(37, 37, 37)"],
+html.light [style*="rgb(37, 41, 37)"],
+html.light [style*="rgb(28, 28, 28)"],
+html.light [style*="rgb(28, 31, 28)"],
+html.light [style*="rgb(28, 37, 54)"],
+html.light [style*="#1e1e1e"],
+html.light [style*="#1e211e"],
+html.light [style*="#202420"],
+html.light [style*="#222"],
+html.light [style*="#222222"],
+html.light [style*="#242624"],
+html.light [style*="#242924"],
+html.light [style*="#242d24"],
+html.light [style*="#252525"],
+html.light [style*="#252925"],
+html.light [style*="#1c1c1c"],
+html.light [style*="#1c1f1c"],
+html.light [style*="#1c2536"] {
+  background-color: #f1f5f9 !important;
+}
+
+/* Inline borders */
+html.light [style*="rgb(42, 42, 42)"],
+html.light [style*="rgb(42, 51, 42)"],
+html.light [style*="rgb(36, 38, 36)"],
+html.light [style*="rgb(34, 41, 34)"],
+html.light [style*="rgb(28, 31, 28)"],
+html.light [style*="rgb(30, 33, 30)"],
+html.light [style*="rgb(30, 30, 30)"],
+html.light [style*="rgb(36, 41, 36)"],
+html.light [style*="rgb(40, 48, 40)"],
+html.light [style*="rgb(40, 45, 40)"],
+html.light [style*="rgb(41, 51, 41)"],
+html.light [style*="rgb(51, 51, 51)"],
+html.light [style*="rgb(34, 34, 34)"],
+html.light [style*="rgb(35, 47, 69)"],
+html.light [style*="rgb(51, 65, 85)"],
+html.light [style*="#2a2a2a"],
+html.light [style*="#2a332a"],
+html.light [style*="#242624"],
+html.light [style*="#222922"],
+html.light [style*="#1c1f1c"],
+html.light [style*="#1e1e1e"],
+html.light [style*="#1e211e"],
+html.light [style*="#242924"],
+html.light [style*="#283028"],
+html.light [style*="#282d28"],
+html.light [style*="#293329"],
+html.light [style*="#333"],
+html.light [style*="#333333"],
+html.light [style*="#222"],
+html.light [style*="#222222"],
+html.light [style*="#232f45"],
+html.light [style*="#334155"] {
+  border-color: #e2e8f0 !important;
+}
+
+/* ==========================================================================
+   Text & Typography Rules in Light Mode
+   ========================================================================== */
+
+/* All headings, titles, labels and text turn crisp black in Light Mode */
+html.light h1:not([class*="text-green"]):not([class*="text-emerald"]):not([class*="text-red"]):not([class*="text-blue"]):not([class*="text-amber"]):not([class*="text-purple"]):not([style*="color: #ffffff"]):not([style*="color:#ffffff"]):not([style*="color: white"]):not(.mc-banner-title),
+html.light h2:not([class*="text-green"]):not([class*="text-emerald"]):not([class*="text-red"]):not([class*="text-blue"]):not([class*="text-amber"]):not([class*="text-purple"]):not([style*="color: #ffffff"]):not([style*="color:#ffffff"]):not([style*="color: white"]),
+html.light h3:not([class*="text-green"]):not([class*="text-emerald"]):not([class*="text-red"]):not([class*="text-blue"]):not([class*="text-amber"]):not([class*="text-purple"]):not([style*="color: #ffffff"]):not([style*="color:#ffffff"]):not([style*="color: white"]),
+html.light h4:not([class*="text-green"]):not([class*="text-emerald"]):not([class*="text-red"]):not([class*="text-blue"]):not([class*="text-amber"]):not([class*="text-purple"]):not([style*="color: #ffffff"]):not([style*="color:#ffffff"]):not([style*="color: white"]),
+html.light h5,
+html.light h6,
+html.light p:not([class*="text-green"]):not([class*="text-emerald"]):not([class*="text-red"]):not([class*="text-blue"]):not([class*="text-amber"]):not([class*="text-purple"]):not(.text-white),
+html.light label,
+html.light th,
+html.light td,
+html.light .text-foreground,
+html.light .font-bold.text-white:not(button):not([class*="bg-"]):not([style*="background"]):not([style*="gradient"]),
+html.light .font-semibold.text-white:not(button):not([class*="bg-"]):not([style*="background"]):not([style*="gradient"]),
+html.light .text-sm.text-white:not(button):not([class*="bg-"]):not([style*="background"]):not([style*="gradient"]),
+html.light .text-xs.text-white:not(button):not([class*="bg-"]):not([style*="background"]):not([style*="gradient"]),
+html.light .text-base.text-white:not(button):not([class*="bg-"]):not([style*="background"]):not([style*="gradient"]),
+html.light .text-lg.text-white:not(button):not([class*="bg-"]):not([style*="background"]):not([style*="gradient"]),
+html.light .text-xl.text-white:not(button):not([class*="bg-"]):not([style*="background"]):not([style*="gradient"]),
+html.light .text-2xl.text-white:not(button):not([class*="bg-"]):not([style*="background"]):not([style*="gradient"]),
+html.light .text-white:not(button):not(a):not([class*="bg-"]):not([style*="background"]):not([style*="gradient"]) {
+  color: #000000 !important;
+}
+
+/* All white/light background buttons in light mode MUST have solid black text */
+html.light button[style*="#ffffff"],
+html.light button[style*="background: #ffffff"],
+html.light button[style*="background:#ffffff"],
+html.light button[style*="background-color: #ffffff"],
+html.light button[style*="background-color: rgb(255, 255, 255)"],
+html.light button[style*="backgroundColor: \"#ffffff\""],
+html.light button[style*="backgroundColor: '#ffffff'"],
+html.light button.bg-white,
+html.light .bg-white:is(button, a),
+html.light button[style*="#ffffff"] *,
+html.light button[style*="background: #ffffff"] *,
+html.light button[style*="background:#ffffff"] *,
+html.light button[style*="background-color: #ffffff"] *,
+html.light button[style*="background-color: rgb(255, 255, 255)"] *,
+html.light button[style*="backgroundColor: \"#ffffff\""] *,
+html.light button[style*="backgroundColor: '#ffffff'"] *,
+html.light .bg-white:is(button, a) * {
+  color: #000000 !important;
+}
+
+/* Explicit rule: Elements on/inside colored buttons, badges, chips KEEP crisp white text */
+html.light button.text-white,
+html.light button .text-white,
+html.light [class*="bg-green"] .text-white,
+html.light [class*="bg-green"].text-white,
+html.light [class*="bg-emerald"] .text-white,
+html.light [class*="bg-emerald"].text-white,
+html.light [class*="bg-red"] .text-white,
+html.light [class*="bg-red"].text-white,
+html.light [class*="bg-blue"] .text-white,
+html.light [class*="bg-purple"] .text-white,
+html.light [class*="bg-amber-500"] .text-white,
+html.light [style*="background-color: rgb(22, 163, 74)"] .text-white,
+html.light [style*="background-color: rgb(21, 128, 61)"] .text-white,
+html.light [style*="background-color: rgb(34, 197, 94)"] .text-white,
+html.light [style*="background-color: #22c55e"] .text-white,
+html.light [style*="background-color: #16a34a"] .text-white,
+html.light [style*="background-color: #15803d"] .text-white,
+html.light [style*="background-color: rgb(15, 23, 42)"] .text-white,
+html.light [style*="background-color: #0f172a"] .text-white,
+html.light [style*="background: #0f172a"] .text-white {
+  color: #ffffff !important;
+}
+
+/* Hero banners & linear gradients: ONLY titles, subheadings, and explicit text-white elements keep white text */
+html.light [style*="linear-gradient"] > h1,
+html.light [style*="linear-gradient"] h1.text-white,
+html.light [style*="linear-gradient"] > p,
+html.light [style*="linear-gradient"] p.text-white,
+html.light [style*="linear-gradient"] span.text-white:not(button *),
+html.light [style*="linear-gradient"] .mc-banner-title {
+  color: #ffffff !important;
+}
+
+/* Primary buttons in Light Mode: rich emerald (#16a34a) with crisp white text */
+html.light button.bg-green-500,
+html.light .bg-green-500:is(button, a),
+html.light [class*="bg-green-500"]:is(button, a),
+html.light button.bg-green-600,
+html.light [style*="background-color: rgb(34, 197, 94)"]:is(button, a),
+html.light [style*="backgroundColor: \"#22c55e\""]:is(button, a),
+html.light [style*="background-color: #22c55e"]:is(button, a),
+html.light [style*="background: #22c55e"]:is(button, a),
+html.light [style*="background: #16a34a"]:is(button, a) {
+  background-color: #16a34a !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.22) !important;
+}
+
+html.light button.bg-green-500:hover,
+html.light .bg-green-500:is(button, a):hover,
+html.light [class*="bg-green-500"]:is(button, a):hover,
+html.light [style*="background-color: rgb(34, 197, 94)"]:is(button, a):hover,
+html.light [style*="background-color: #22c55e"]:is(button, a):hover {
+  background-color: #15803d !important;
+  color: #ffffff !important;
+}
+
+/* Subtle border badges in Light Mode */
+html.light .mc-tag-green,
+html.light [class*="border-green-500/20"],
+html.light [class*="border-green-500/30"] {
+  background-color: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+  color: #047857 !important;
+}
+html.light .mc-tag-amber,
+html.light [class*="border-amber-500/20"],
+html.light [class*="border-amber-400/20"] {
+  background-color: #fffbeb !important;
+  border-color: #fde68a !important;
+  color: #b45309 !important;
+}
+html.light .mc-tag-blue,
+html.light [class*="border-blue-500/20"] {
+  background-color: #eff6ff !important;
+  border-color: #bfdbfe !important;
+  color: #1d4ed8 !important;
+}
+html.light .mc-tag-red,
+html.light [class*="border-red-500/20"],
+html.light [class*="border-red-500/30"],
+html.light [class*="border-red-500/25"] {
+  background-color: #fef2f2 !important;
+  border-color: #fecaca !important;
+  color: #b91c1c !important;
+}
+html.light .mc-tag-purple,
+html.light [class*="border-purple-500/20"] {
+  background-color: #faf5ff !important;
+  border-color: #e9d5ff !important;
+  color: #7e22ce !important;
+}
+html.light .mc-tag-sky,
+html.light [class*="border-sky-500/20"] {
+  background-color: #f0f9ff !important;
+  border-color: #bae6fd !important;
+  color: #0369a1 !important;
+}
+
+/* All inline text colors in Light Mode -> Solid Black */
+html.light [style*="rgb(240, 242, 240)"],
+html.light [style*="#f0f2f0"],
+html.light [style*="rgb(248, 250, 252)"],
+html.light [style*="#f8fafc"],
+html.light [style*="rgb(200, 204, 200)"],
+html.light [style*="#c8ccc8"],
+html.light [style*="rgb(200, 208, 200)"],
+html.light [style*="#c8d0c8"],
+html.light [style*="rgb(212, 212, 212)"],
+html.light [style*="#d4d4d4"],
+html.light [style*="rgb(107, 122, 107)"],
+html.light [style*="#6b7a6b"],
+html.light [style*="rgb(74, 90, 74)"],
+html.light [style*="#4a5a4a"],
+html.light [style*="rgb(138, 147, 138)"],
+html.light [style*="#8a938a"],
+html.light [style*="rgb(143, 160, 143)"],
+html.light [style*="#8fa08f"],
+html.light [style*="rgb(148, 163, 184)"],
+html.light [style*="#94a3b8"],
+html.light [style*="rgb(100, 116, 139)"],
+html.light [style*="#64748b"],
+html.light [style*="rgb(71, 85, 105)"],
+html.light [style*="#475569"],
+html.light [style*="rgb(51, 65, 85)"],
+html.light [style*="#334155"],
+html.light [style*="rgb(30, 41, 59)"],
+html.light [style*="#1e293b"],
+html.light [style*="rgb(15, 23, 42)"],
+html.light [style*="#0f172a"] {
+  color: #000000 !important;
+}
+
+html.light [style*="rgb(58, 58, 58)"],
+html.light [style*="#3a3a3a"] {
+  color: #475569 !important;
+}
+
+/* Neutral, slate, and gray text classes -> Solid Black */
+html.light .text-neutral-100,
+html.light .text-neutral-200,
+html.light .text-neutral-300,
+html.light .text-neutral-400,
+html.light .text-neutral-500,
+html.light .text-neutral-600,
+html.light .text-neutral-700,
+html.light .text-neutral-800,
+html.light .text-neutral-900,
+html.light .text-slate-100,
+html.light .text-slate-200,
+html.light .text-slate-300,
+html.light .text-slate-400,
+html.light .text-slate-500,
+html.light .text-slate-600,
+html.light .text-slate-700,
+html.light .text-slate-800,
+html.light .text-slate-900,
+html.light .text-gray-100,
+html.light .text-gray-200,
+html.light .text-gray-300,
+html.light .text-gray-400,
+html.light .text-gray-500,
+html.light .text-gray-600,
+html.light .text-gray-700,
+html.light .text-gray-800,
+html.light .text-gray-900,
+html.light .text-muted-foreground {
+  color: #000000 !important;
+}
+
+/* Status accent colors (high contrast in light mode) */
+html.light .text-green-400 { color: #16a34a !important; }
+html.light .text-green-300 { color: #15803d !important; }
+html.light .text-amber-400 { color: #d97706 !important; }
+html.light .text-amber-300 { color: #b45309 !important; }
+html.light .text-blue-400 { color: #2563eb !important; }
+html.light .text-blue-300 { color: #1d4ed8 !important; }
+html.light .text-red-400 { color: #dc2626 !important; }
+html.light .text-red-300 { color: #b91c1c !important; }
+html.light .text-purple-400 { color: #9333ea !important; }
+html.light .text-purple-300 { color: #7e22ce !important; }
+html.light .text-sky-400 { color: #0284c7 !important; }
+html.light .text-emerald-400 { color: #059669 !important; }
+
+/* Empty rating stars */
+html.light .text-\[\#333\],
+html.light .text-\[\#333333\] {
+  color: #cbd5e1 !important;
+}
+
+/* ==========================================================================
+   Inputs, Forms & Modals in Light Mode
+   ========================================================================== */
+
+html.light input:not([type="checkbox"]):not([type="radio"]),
+html.light select,
+html.light textarea,
+[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="light"] select,
+[data-theme="light"] textarea {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder,
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+html.light input:focus,
+html.light select:focus,
+html.light textarea:focus {
+  border-color: #22c55e !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2) !important;
+}
+
+/* Modal overlays & dialog containers */
+html.light .fixed.inset-0[style*="rgba(0"],
+html.light [style*="rgba(0,0,0,0.75)"],
+html.light [style*="rgba(0, 0, 0, 0.75)"],
+html.light [style*="rgba(0,0,0,0.8)"],
+html.light [style*="rgba(0, 0, 0, 0.8)"],
+html.light [style*="rgba(0, 0, 0, 0.82)"],
+html.light [style*="rgba(0,0,0,0.6)"],
+html.light [style*="rgba(0, 0, 0, 0.6)"] {
+  background-color: rgba(15, 23, 42, 0.5) !important;
+}
+
+html.light [style*="box-shadow: 0 24px 64px rgba(0,0,0,0.8)"],
+html.light [style*="boxShadow: \"0 24px 64px rgba(0,0,0,0.8)\""],
+html.light [style*="box-shadow: 0 20px 40px rgba(0,0,0,0.8)"] {
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Special Gradients in Light Mode */
+html.light [style*="#1a1a1a,#1a2a1a"] {
+  background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%) !important;
+  border-color: #bbf7d0 !important;
+  box-shadow: 0 4px 14px rgba(34, 197, 94, 0.08) !important;
+}
+
+html.light [style*="rgba(34, 197, 94, 0.14) 0%, #141714 100%"] {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, #ffffff 100%) !important;
+  border-color: #bbf7d0 !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Clean light scrollbars */
+html.light ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+html.light ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+html.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+

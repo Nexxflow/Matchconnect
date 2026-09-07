@@ -3,8 +3,9 @@ import { Plus, X, ChevronDown, Pencil, Trash2 } from "lucide-react";
 import { apiRequest } from "../../api";
 import { C, cn, normalizePhone } from "../../utils/helpers.jsx";
 
-function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpire = null, onClose }) {
+function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpire = null, onClose, theme = "dark" }) {
   const editing = !!initialUmpire;
+  const isLight = theme === "light";
 
   const buildForm = (ump, u) => ({
     name: ump?.name || u?.name || "",
@@ -115,68 +116,144 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
 
   if (!open && !editing) {
     return (
-      <button onClick={() => setOpen(true)} className="w-full py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors hover:bg-white/5" style={{ border: "1px dashed #2a2a2a", color: "#22c55e" }}>
+      <button
+        onClick={() => setOpen(true)}
+        className={cn(
+          "w-full py-3.5 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 transition-all",
+          isLight ? "hover:bg-emerald-50 text-emerald-700 shadow-sm" : "hover:bg-white/5 text-green-400"
+        )}
+        style={{
+          border: isLight ? "1.5px dashed #86efac" : "1px dashed #2a2a2a",
+          backgroundColor: isLight ? "#f0fdf4" : "transparent"
+        }}
+      >
         <Plus className="w-4 h-4" /> Register as Umpire / Scorer
       </button>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className={cn(C, "rounded-2xl p-4 space-y-3")}>
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-white">{editing ? "Edit Umpire / Scorer" : "Register as Umpire / Scorer"}</span>
-        <button type="button" onClick={() => { if (editing) onClose?.(); else { setOpen(false); setError(null); } }} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ backgroundColor: "#222" }}>
-          <X className="w-3.5 h-3.5 text-[#c8ccc8]" />
+    <form
+      onSubmit={handleSubmit}
+      className={cn(C, "rounded-2xl p-5 space-y-4")}
+      style={isLight ? {
+        backgroundColor: "#ffffff",
+        border: "1px solid #e2e8f0",
+        boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04)"
+      } : undefined}
+    >
+      <div className="flex items-center justify-between pb-1 border-b border-gray-100 dark:border-[#222]">
+        <span className={cn("text-base font-bold", isLight ? "text-slate-900" : "text-white")}>
+          {editing ? "Edit Umpire / Scorer" : "Register as Umpire / Scorer"}
+        </span>
+        <button
+          type="button"
+          onClick={() => { if (editing) onClose?.(); else { setOpen(false); setError(null); } }}
+          className="w-7 h-7 rounded-full flex items-center justify-center transition-colors"
+          style={{ backgroundColor: isLight ? "#f1f5f9" : "#222" }}
+        >
+          <X className={cn("w-4 h-4", isLight ? "text-slate-600" : "text-[#c8ccc8]")} />
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3.5">
         <div className="col-span-2">
-          <label className="text-xs mb-1 block" style={{ color: "#6b7a6b" }}>Full name</label>
-          <input value={user?.name || form.name} readOnly onChange={e => update("name", e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm text-white focus:outline-none" style={{ backgroundColor: "#111", border: "1px solid #2a2a2a" }} placeholder="Rahul Desai" />
+          <label className="text-xs font-semibold mb-1 block" style={{ color: isLight ? "#475569" : "#6b7a6b" }}>Full name</label>
+          <input
+            value={user?.name || form.name}
+            readOnly
+            onChange={e => update("name", e.target.value)}
+            className="w-full rounded-xl px-3.5 py-2.5 text-sm font-medium focus:outline-none transition-all"
+            style={isLight ? { backgroundColor: "#f8fafc", border: "1px solid #cbd5e1", color: "#0f172a" } : { backgroundColor: "#111", border: "1px solid #2a2a2a", color: "#fff" }}
+            placeholder="Rahul Desai"
+          />
         </div>
 
         <div>
-          <label className="text-xs mb-1 block" style={{ color: "#6b7a6b" }}>Mobile number</label>
+          <label className="text-xs font-semibold mb-1 block" style={{ color: isLight ? "#475569" : "#6b7a6b" }}>Mobile number</label>
           <input
             value={user?.phone || ""}
             readOnly
-            className="w-full rounded-xl px-3 py-2 text-sm font-mono cursor-not-allowed"
-            style={{ backgroundColor: "#151515", border: "1px solid #2a2a2a", color: "#6b7a6b" }}
+            className="w-full rounded-xl px-3.5 py-2.5 text-sm font-mono cursor-not-allowed"
+            style={isLight ? { backgroundColor: "#f1f5f9", border: "1px solid #e2e8f0", color: "#64748b" } : { backgroundColor: "#151515", border: "1px solid #2a2a2a", color: "#6b7a6b" }}
           />
-          <p className="text-xs mt-1" style={{ color: "#4a5a4a" }}>From your account. Update it in Edit Profile if it's wrong.</p>
+          <p className="text-[11px] mt-1" style={{ color: isLight ? "#64748b" : "#4a5a4a" }}>From your account profile.</p>
         </div>
 
         <div>
-          <label className="text-xs mb-1 block" style={{ color: "#6b7a6b" }}>Role</label>
+          <label className="text-xs font-semibold mb-1 block" style={{ color: isLight ? "#475569" : "#6b7a6b" }}>Role</label>
           <div className="relative">
-            <select value={form.role} onChange={e => update("role", e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm text-white appearance-none pr-7 focus:outline-none" style={{ backgroundColor: "#111", border: "1px solid #2a2a2a" }}>
+            <select
+              value={form.role}
+              onChange={e => update("role", e.target.value)}
+              className="w-full rounded-xl px-3.5 py-2.5 text-sm font-medium appearance-none pr-8 focus:outline-none transition-all"
+              style={isLight ? { backgroundColor: "#f8fafc", border: "1px solid #cbd5e1", color: "#0f172a" } : { backgroundColor: "#111", border: "1px solid #2a2a2a", color: "#fff" }}
+            >
               {["Umpire", "Scorer", "Umpire + Scorer"].map(r => <option key={r}>{r}</option>)}
             </select>
-            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: "#6b7a6b" }} />
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: isLight ? "#64748b" : "#6b7a6b" }} />
           </div>
         </div>
 
         <div>
-          <label className="text-xs mb-1 block" style={{ color: "#6b7a6b" }}>Experience (years)</label>
-          <input type="number" min="0" value={form.experience} onChange={e => update("experience", e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm text-white font-mono focus:outline-none" style={{ backgroundColor: "#111", border: "1px solid #2a2a2a" }} placeholder="5" />
+          <label className="text-xs font-semibold mb-1 block" style={{ color: isLight ? "#475569" : "#6b7a6b" }}>Experience (years)</label>
+          <input
+            type="number"
+            min="0"
+            value={form.experience}
+            onChange={e => update("experience", e.target.value)}
+            className="w-full rounded-xl px-3.5 py-2.5 text-sm font-mono focus:outline-none transition-all"
+            style={isLight ? { backgroundColor: "#f8fafc", border: "1px solid #cbd5e1", color: "#0f172a" } : { backgroundColor: "#111", border: "1px solid #2a2a2a", color: "#fff" }}
+            placeholder="5"
+          />
         </div>
 
         <div>
-          <label className="text-xs mb-1 block" style={{ color: "#6b7a6b" }}>Fee per match (₹)</label>
-          <input type="number" min="1" value={form.fee_per_match} onChange={e => update("fee_per_match", e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm text-white font-mono focus:outline-none" style={{ backgroundColor: "#111", border: "1px solid #2a2a2a" }} placeholder="800" />
+          <label className="text-xs font-semibold mb-1 block" style={{ color: isLight ? "#475569" : "#6b7a6b" }}>Fee per match (₹)</label>
+          <input
+            type="number"
+            min="1"
+            value={form.fee_per_match}
+            onChange={e => update("fee_per_match", e.target.value)}
+            className="w-full rounded-xl px-3.5 py-2.5 text-sm font-mono focus:outline-none transition-all"
+            style={isLight ? { backgroundColor: "#f8fafc", border: "1px solid #cbd5e1", color: "#0f172a" } : { backgroundColor: "#111", border: "1px solid #2a2a2a", color: "#fff" }}
+            placeholder="800"
+          />
         </div>
       </div>
 
-      {error && <div className="text-xs text-red-400 rounded-lg p-2" style={{ backgroundColor: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}>{error}</div>}
+      {error && (
+        <div className={cn("text-xs rounded-xl p-3 font-medium", isLight ? "bg-red-50 text-red-700 border border-red-200" : "text-red-400 bg-red-500/10 border border-red-500/20")}>
+          {error}
+        </div>
+      )}
 
-      <div className="flex gap-2">
+      <div className="flex gap-2.5 pt-1">
         {editing && (
-          <button type="button" onClick={handleDelete} disabled={submitting} className="flex-1 py-2.5 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 font-bold text-sm hover:bg-red-500/20 transition-colors" style={submitting ? { opacity: 0.6, cursor: "not-allowed" } : {}}>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={submitting}
+            className={cn(
+              "flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors",
+              isLight ? "bg-red-50 hover:bg-red-100 text-red-700 border border-red-200" : "bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20"
+            )}
+            style={submitting ? { opacity: 0.6, cursor: "not-allowed" } : {}}
+          >
             Delete Umpire
           </button>
         )}
-        <button type="submit" disabled={submitting || !normalizedPhone} className="flex-1 py-2.5 rounded-xl bg-green-500 text-black font-bold text-sm hover:bg-green-400 transition-colors" style={(submitting || !normalizedPhone) ? { opacity: 0.6, cursor: "not-allowed" } : {}}>
+        <button
+          type="submit"
+          disabled={submitting || !normalizedPhone}
+          className={cn(
+            "flex-1 py-2.5 rounded-xl font-bold text-sm transition-all",
+            isLight
+              ? "bg-[#16a34a] text-white hover:bg-[#15803d] shadow-sm"
+              : "bg-green-500 text-black hover:bg-green-400"
+          )}
+          style={(submitting || !normalizedPhone) ? { opacity: 0.6, cursor: "not-allowed" } : {}}
+        >
           {submitting ? (editing ? "Saving..." : "Registering...") : (editing ? "Save Changes" : "Register")}
         </button>
       </div>
@@ -184,7 +261,8 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
   );
 }
 
-export default function UmpiresTab({ umpires, onBook, token, user, onCreated, onUpdated, onDeleted }) {
+export default function UmpiresTab({ umpires, onBook, token, user, onCreated, onUpdated, onDeleted, theme = "dark" }) {
+  const isLight = theme === "light";
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("All");
   const [sortBy, setSortBy] = useState("default");
@@ -202,6 +280,11 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
   const myUmpire = umpires.find(isOwner);
 
   const roleColor = (role) => {
+    if (isLight) {
+      if (role === "Scorer") return { bg: "bg-blue-50 border border-blue-200", text: "text-blue-700" };
+      if (role === "Umpire + Scorer") return { bg: "bg-amber-50 border border-amber-200", text: "text-amber-800" };
+      return { bg: "bg-emerald-50 border border-emerald-200", text: "text-emerald-700" };
+    }
     if (role === "Scorer") return { bg: "bg-blue-900", text: "text-blue-300" };
     if (role === "Umpire + Scorer") return { bg: "bg-yellow-900", text: "text-yellow-300" };
     return { bg: "bg-emerald-900", text: "text-emerald-300" };
@@ -228,35 +311,60 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">
+          <h2 className={cn("text-2xl font-bold tracking-tight", isLight ? "text-slate-900" : "text-white")}>
             Umpires & Scorers
           </h2>
-          <p className="text-sm text-gray-400 mt-1">
+          <p className={cn("text-sm mt-1", isLight ? "text-slate-600" : "text-gray-400")}>
             Book experienced umpires and scorers for your cricket matches.
           </p>
         </div>
 
-        <div className="px-4 py-2 rounded-xl bg-[#171717] border border-[#2a2a2a]">
-          <div className="text-2xl font-bold text-green-400">
+        <div
+          className={cn(
+            "px-4 py-2 rounded-xl transition-all",
+            isLight
+              ? "bg-white border border-slate-200 shadow-sm"
+              : "bg-[#171717] border border-[#2a2a2a]"
+          )}
+        >
+          <div className={cn("text-2xl font-extrabold", isLight ? "text-emerald-600" : "text-green-400")}>
             {umpires.length}
           </div>
-          <div className="text-xs text-gray-500">
+          <div className={cn("text-xs font-medium", isLight ? "text-slate-500" : "text-gray-500")}>
             Available
           </div>
         </div>
       </div>
 
       {myUmpire ? (
-        <div className="w-full p-4 rounded-2xl flex items-center justify-between gap-3" style={{ backgroundColor: "#151715", border: "1px solid rgba(34,197,94,0.3)" }}>
+        <div
+          className="w-full p-4 rounded-2xl flex items-center justify-between gap-3 transition-all"
+          style={
+            isLight
+              ? {
+                  backgroundColor: "#f0fdf4",
+                  border: "1px solid #bbf7d0",
+                  boxShadow: "0 4px 12px -2px rgba(22, 163, 74, 0.08)"
+                }
+              : { backgroundColor: "#151715", border: "1px solid rgba(34,197,94,0.3)" }
+          }
+        >
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center bg-green-500/10 text-green-400 font-bold border border-green-500/20 shrink-0">
+            <div
+              className={cn(
+                "w-10 h-10 rounded-full flex items-center justify-center font-bold shrink-0",
+                isLight
+                  ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
+                  : "bg-green-500/10 text-green-400 border border-green-500/20"
+              )}
+            >
               ✓
             </div>
             <div className="min-w-0">
-              <div className="text-sm font-bold text-white flex items-center gap-2 truncate">
+              <div className={cn("text-sm font-bold flex items-center gap-2 truncate", isLight ? "text-slate-900" : "text-white")}>
                 You are registered as {myUmpire.role || "Umpire"}
               </div>
-              <div className="text-xs text-gray-400 mt-0.5 font-mono truncate">
+              <div className={cn("text-xs mt-0.5 font-mono truncate", isLight ? "text-slate-600" : "text-gray-400")}>
                 {myUmpire.name} • 📞 {myUmpire.mobile} • ₹{myUmpire.price || myUmpire.fee_per_match || 0}/match
               </div>
             </div>
@@ -264,44 +372,59 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
           <button
             type="button"
             onClick={() => setEditingUmpire(myUmpire)}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-[#252525] hover:bg-[#333] text-white flex items-center gap-1.5 transition-colors border border-[#333] shrink-0"
+            className={cn(
+              "px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shrink-0",
+              isLight
+                ? "bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 shadow-sm"
+                : "bg-[#252525] hover:bg-[#333] text-white border border-[#333]"
+            )}
           >
-            <Pencil className="w-3.5 h-3.5 text-green-400" /> Edit Registration
+            <Pencil className="w-3.5 h-3.5 text-emerald-600 dark:text-green-400" /> Edit Registration
           </button>
         </div>
       ) : (
-        <UmpireForm user={user} token={token} onCreated={onCreated} />
+        <UmpireForm user={user} token={token} onCreated={onCreated} theme={theme} />
       )}
 
       {umpires.length === 0 ? (
         <div
-          className="rounded-2xl p-10 text-center border border-dashed border-[#333]"
-          style={{ background: "#151515" }}
+          className={cn(
+            "rounded-2xl p-10 text-center border border-dashed",
+            isLight ? "bg-white border-slate-300 shadow-sm" : "border-[#333] bg-[#151515]"
+          )}
         >
           <div className="text-5xl mb-3">🧑‍⚖️</div>
-
-          <h3 className="text-white font-semibold text-lg">
+          <h3 className={cn("font-semibold text-lg", isLight ? "text-slate-900" : "text-white")}>
             No Umpires Registered
           </h3>
-
-          <p className="text-gray-500 mt-2">
+          <p className={cn("text-sm mt-2", isLight ? "text-slate-500" : "text-gray-500")}>
             Register yourself as an umpire or scorer.
           </p>
         </div>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search by name"
-              className="flex-1 min-w-[160px] rounded-xl px-3 py-2 text-sm text-white bg-[#171717] border border-[#2a2a2a] focus:outline-none focus:border-green-500"
+              className={cn(
+                "flex-1 min-w-[160px] rounded-xl px-3.5 py-2 text-sm focus:outline-none transition-all",
+                isLight
+                  ? "bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 shadow-sm"
+                  : "bg-[#171717] border border-[#2a2a2a] text-white focus:border-green-500"
+              )}
             />
 
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
-              className="rounded-xl px-3 py-2 text-sm text-white bg-[#171717] border border-[#2a2a2a] focus:outline-none"
+              className={cn(
+                "rounded-xl px-3 py-2 text-sm focus:outline-none transition-all",
+                isLight
+                  ? "bg-white border border-slate-200 text-slate-900 shadow-sm"
+                  : "bg-[#171717] border border-[#2a2a2a] text-white"
+              )}
             >
               {roles.map((r) => (
                 <option key={r} value={r}>{r}</option>
@@ -311,7 +434,12 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="rounded-xl px-3 py-2 text-sm text-white bg-[#171717] border border-[#2a2a2a] focus:outline-none"
+              className={cn(
+                "rounded-xl px-3 py-2 text-sm focus:outline-none transition-all",
+                isLight
+                  ? "bg-white border border-slate-200 text-slate-900 shadow-sm"
+                  : "bg-[#171717] border border-[#2a2a2a] text-white"
+              )}
             >
               <option value="default">Sort: default</option>
               <option value="price_low">Price: low to high</option>
@@ -321,20 +449,32 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
 
           {filtered.length === 0 ? (
             <div
-              className="rounded-2xl p-8 text-center border border-dashed border-[#333]"
-              style={{ background: "#151515" }}
+              className={cn(
+                "rounded-2xl p-8 text-center border border-dashed",
+                isLight ? "bg-white border-slate-300 text-slate-500 shadow-sm" : "border-[#333] bg-[#151515] text-gray-500"
+              )}
             >
-              <p className="text-gray-500">No umpires match your filters.</p>
+              <p>No umpires match your filters.</p>
             </div>
           ) : (
-            <div className="rounded-2xl overflow-hidden border border-[#2a2a2a] divide-y divide-[#2a2a2a]">
+            <div
+              className={cn(
+                "rounded-2xl overflow-hidden border divide-y transition-all",
+                isLight
+                  ? "bg-white border-slate-200 divide-slate-100 shadow-sm"
+                  : "border-[#2a2a2a] divide-[#2a2a2a]"
+              )}
+            >
               {filtered.map((u) => {
                 const role = u.role || "Umpire";
                 const rc = roleColor(role);
                 return (
                   <div
                     key={u.id ?? u.name}
-                    className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 bg-[#161616] hover:bg-[#1c1c1c] transition-colors"
+                    className={cn(
+                      "flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3.5 transition-colors",
+                      isLight ? "bg-white hover:bg-slate-50/80" : "bg-[#161616] hover:bg-[#1c1c1c]"
+                    )}
                   >
                     <div className="flex items-center gap-3 w-full sm:w-auto flex-1 min-w-0">
                       <div
@@ -346,35 +486,41 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-semibold text-white truncate">{u.name}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${rc.bg} ${rc.text}`}>
+                          <span className={cn("text-sm font-bold truncate", isLight ? "text-slate-900" : "text-white")}>{u.name}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold shrink-0 ${rc.bg} ${rc.text}`}>
                             {role}
                           </span>
                           <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
-                              u.avail ? "bg-green-900/60 text-green-300 border border-green-700/50" : "bg-red-900/60 text-red-300 border border-red-700/50"
-                            }`}
+                            className={cn(
+                              "px-2 py-0.5 rounded-full text-[11px] font-semibold shrink-0 border",
+                              u.avail
+                                ? (isLight ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-green-900/60 text-green-300 border-green-700/50")
+                                : (isLight ? "bg-red-50 text-red-700 border-red-200" : "bg-red-900/60 text-red-300 border-red-700/50")
+                            )}
                           >
                             {u.avail ? "Available" : "Busy"}
                           </span>
                         </div>
-                        <div className="sm:hidden text-xs text-gray-400 mt-1 flex items-center gap-3">
+                        <div className={cn("sm:hidden text-xs mt-1 flex items-center gap-3", isLight ? "text-slate-500" : "text-gray-400")}>
                           <span>📞 {u.mobile}</span>
                           <span>🏏 {u.exp}</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="hidden sm:block text-xs text-gray-400 font-mono w-28 shrink-0">
+                    <div className={cn("hidden sm:block text-xs font-mono w-28 shrink-0", isLight ? "text-slate-600" : "text-gray-400")}>
                       📞 {u.mobile}
                     </div>
 
-                    <div className="hidden sm:block text-xs text-gray-400 w-20 shrink-0">
+                    <div className={cn("hidden sm:block text-xs w-20 shrink-0 font-medium", isLight ? "text-slate-600" : "text-gray-400")}>
                       🏏 {u.exp}
                     </div>
 
-                    <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto pt-2 sm:pt-0 border-t border-[#222] sm:border-0">
-                      <div className="text-green-400 font-bold text-sm sm:w-20 text-left sm:text-right shrink-0">
+                    <div className={cn(
+                      "flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto pt-2 sm:pt-0 sm:border-0",
+                      isLight ? "border-t border-slate-100" : "border-t border-[#222]"
+                    )}>
+                      <div className={cn("font-bold text-sm sm:w-20 text-left sm:text-right shrink-0", isLight ? "text-emerald-700" : "text-green-400")}>
                         {u.price}
                       </div>
 
@@ -385,7 +531,12 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                               type="button"
                               onClick={() => setEditingUmpire(u)}
                               title="Edit Umpire"
-                              className="p-2 rounded-xl text-xs font-bold transition-colors text-gray-300 hover:text-white bg-[#252525] hover:bg-[#333]"
+                              className={cn(
+                                "p-2 rounded-xl text-xs font-bold transition-colors",
+                                isLight
+                                  ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 shadow-sm"
+                                  : "text-gray-300 hover:text-white bg-[#252525] hover:bg-[#333]"
+                              )}
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
@@ -401,7 +552,12 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                                 }
                               }}
                               title="Delete Umpire"
-                              className="p-2 rounded-xl text-xs font-bold transition-colors text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20"
+                              className={cn(
+                                "p-2 rounded-xl text-xs font-bold transition-colors",
+                                isLight
+                                  ? "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 shadow-sm"
+                                  : "text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20"
+                              )}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -410,9 +566,12 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                         <button
                           disabled={!u.avail}
                           onClick={() => u.avail && onBook(u)}
-                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors ${
-                            u.avail ? "bg-green-500 text-black hover:bg-green-400" : "bg-[#252525] text-gray-600 cursor-not-allowed"
-                          }`}
+                          className={cn(
+                            "px-4 py-1.5 rounded-xl text-xs font-bold transition-all",
+                            isLight
+                              ? (u.avail ? "bg-[#16a34a] text-white hover:bg-[#15803d] shadow-sm" : "bg-slate-100 text-slate-400 cursor-not-allowed")
+                              : (u.avail ? "bg-green-500 text-black hover:bg-green-400" : "bg-[#252525] text-gray-600 cursor-not-allowed")
+                          )}
                         >
                           {u.avail ? "Book" : "Busy"}
                         </button>
@@ -427,12 +586,17 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
       )}
 
       {editingUmpire && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.75)", backdropFilter: "blur(2px)" }} onClick={() => setEditingUmpire(null)}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: isLight ? "rgba(15, 23, 42, 0.6)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)" }}
+          onClick={() => setEditingUmpire(null)}
+        >
           <div className="w-full max-w-lg" onClick={e => e.stopPropagation()}>
             <UmpireForm
               user={user}
               token={token}
               initialUmpire={editingUmpire}
+              theme={theme}
               onUpdated={updated => {
                 onUpdated?.(updated);
                 setEditingUmpire(null);
@@ -448,8 +612,17 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
       )}
 
       <div className="pt-2">
-        <h3 className="text-lg font-bold text-white mb-3">📋 New Rules</h3>
-        <div className="rounded-2xl overflow-hidden border border-[#2a2a2a] divide-y divide-[#2a2a2a]">
+        <h3 className={cn("text-lg font-bold mb-3", isLight ? "text-slate-900" : "text-white")}>
+          📋 Cricket Updates & Rules
+        </h3>
+        <div
+          className={cn(
+            "rounded-2xl overflow-hidden border divide-y transition-all",
+            isLight
+              ? "bg-white border-slate-200 divide-slate-100 shadow-sm"
+              : "border-[#2a2a2a] divide-[#2a2a2a]"
+          )}
+        >
           {[
             {
               title: "New DRS review limit for T20 leagues",
@@ -467,16 +640,21 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
               date: "Jun 2026"
             }
           ].map((r, i) => (
-            <div key={i} className="px-4 py-3 bg-[#161616]">
+            <div
+              key={i}
+              className={cn("px-4 py-3.5 transition-colors", isLight ? "bg-white hover:bg-slate-50/80" : "bg-[#161616]")}
+            >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-white">{r.title}</span>
-                <span className="text-[10px] text-gray-500 shrink-0">{r.date}</span>
+                <span className={cn("text-sm font-bold", isLight ? "text-slate-900" : "text-white")}>{r.title}</span>
+                <span className={cn("text-[11px] font-semibold shrink-0", isLight ? "text-slate-500" : "text-gray-500")}>{r.date}</span>
               </div>
-              <p className="text-xs text-gray-400 mt-1">{r.desc}</p>
+              <p className={cn("text-xs mt-1", isLight ? "text-slate-600" : "text-gray-400")}>{r.desc}</p>
             </div>
           ))}
         </div>
-        <p className="text-[11px] text-gray-600 mt-2">Sample updates — real rule feed coming soon.</p>
+        <p className={cn("text-[11px] mt-2", isLight ? "text-slate-500" : "text-gray-600")}>
+          Sample updates — real rule feed coming soon.
+        </p>
       </div>
     </div>
   );

@@ -8,6 +8,24 @@
       <meta name="description" content="Connect with local cricket matches, find teams, book grounds, and track live scores with an intuitive interface designed for cricket enthusiasts." />
       <meta name="robots" content="noindex, nofollow" />
       <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
+      <script>
+        (function() {
+          try {
+            var t = localStorage.getItem("mc_theme");
+            if (t === "light") {
+              document.documentElement.classList.add("light");
+              document.documentElement.setAttribute("data-theme", "light");
+              document.documentElement.style.backgroundColor = "#f8faf8";
+              document.documentElement.style.color = "#0f172a";
+            } else {
+              document.documentElement.classList.add("dark");
+              document.documentElement.setAttribute("data-theme", "dark");
+              document.documentElement.style.backgroundColor = "#0d0f0d";
+              document.documentElement.style.color = "#f0f2f0";
+            }
+          } catch(e) {}
+        })();
+      </script>
       <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
       
     </head>

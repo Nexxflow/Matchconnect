@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { User, Phone, Pencil } from "lucide-react";
+import { User, Phone, Pencil, FileText } from "lucide-react";
 import EditProfileModal from "./EditProfileModal";
+import TermsModal from "../TermsModal";
 
 // Compact profile "card". On tap/click it only ever shows name + phone —
 // everything else (email, team name, village, year, password) lives behind
 // the Edit Profile button so the at-a-glance view stays minimal.
 export default function ProfileScreen({ user, onUserUpdated }) {
   const [editing, setEditing] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
 
   const missingFields = [];
   if (!user?.name?.trim()) missingFields.push("Name");
@@ -58,6 +60,15 @@ export default function ProfileScreen({ user, onUserUpdated }) {
         <Pencil className="w-3.5 h-3.5 text-green-400" /> {isProfileIncomplete ? "Complete Required Profile" : "Edit Profile"}
       </button>
 
+      <button
+        type="button"
+        onClick={() => setShowTerms(true)}
+        className="w-full mt-2.5 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors text-neutral-400 hover:text-neutral-200 hover:bg-white/5"
+        style={{ border: "1px dashed #282828" }}
+      >
+        <FileText className="w-3.5 h-3.5 text-green-400/80" /> View Terms &amp; Conditions
+      </button>
+
       {editing && (
         <EditProfileModal
           user={user}
@@ -68,6 +79,11 @@ export default function ProfileScreen({ user, onUserUpdated }) {
           }}
         />
       )}
+
+      <TermsModal
+        isOpen={showTerms}
+        onClose={() => setShowTerms(false)}
+      />
     </div>
   );
 }

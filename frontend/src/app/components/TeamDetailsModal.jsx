@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { X, Star, Users, CheckCircle, XCircle, AlertCircle, Send, Award, Phone, Calendar, MapPin, MessageSquare, ThumbsUp, Shield, Trash2 } from "lucide-react";
 import { apiRequest } from "../api";
-import { GhostButton } from "../utils/helpers.jsx";
+import { GhostButton, cn } from "../utils/helpers.jsx";
 
 function formatPhoneDisplay(phone) {
   if (!phone) return "";
@@ -93,7 +93,9 @@ export default function TeamDetailsModal({
   unreadReviewIds = null,
   contactFallback = null,
   postedByFallback = null,
+  theme = "dark",
 }) {
+  const isLight = theme === "light";
   const [teamData, setTeamData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -181,7 +183,11 @@ export default function TeamDetailsModal({
       return;
     }
     if (!reviewTextInput.trim()) {
-      setReviewError("Please enter a review description.");
+      setReviewError("Please enter your feedback comments.");
+      return;
+    }
+    if (ratingInput < 1 || ratingInput > 5) {
+      setReviewError("Please choose a rating between 1 and 5 stars.");
       return;
     }
 
@@ -190,7 +196,7 @@ export default function TeamDetailsModal({
     setReviewSuccess(null);
 
     try {
-      const res = await apiRequest("/teams/reviews", {
+      await apiRequest(`/teams/reviews`, {
         method: "POST",
         token,
         body: {
@@ -234,20 +240,20 @@ export default function TeamDetailsModal({
   return (
     <div
       className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
-      style={{ backgroundColor: "rgba(0,0,0,0.8)", backdropFilter: "blur(4px)" }}
+      style={{ backgroundColor: theme === "light" ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.8)", backdropFilter: "blur(4px)" }}
       onClick={onClose}
     >
       <div
         className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl p-5 sm:p-6 relative animate-in fade-in zoom-in-95 duration-150 custom-scrollbar"
         style={{
-          backgroundColor: "#121412",
-          border: "1px solid #2a2a2a",
-          boxShadow: "0 24px 64px rgba(0,0,0,0.8)"
+          backgroundColor: theme === "light" ? "#ffffff" : "#121412",
+          border: `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}`,
+          boxShadow: theme === "light" ? "0 20px 25px -5px rgba(0,0,0,0.1)" : "0 24px 64px rgba(0,0,0,0.8)"
         }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header with Close */}
-        <div className="flex items-start justify-between gap-4 pb-4 border-b" style={{ borderColor: "#222" }}>
+        <div className="flex items-start justify-between gap-4 pb-4 border-b" style={{ borderColor: theme === "light" ? "#f1f5f9" : "#222" }}>
           <div className="flex items-center gap-3.5 min-w-0">
             <div
               className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-bold text-xl shrink-0 shadow-lg"
@@ -257,7 +263,7 @@ export default function TeamDetailsModal({
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-xl font-bold text-white truncate">{teamName}</h2>
+                <h2 className="text-xl font-bold truncate" style={{ color: theme === "light" ? "#0f172a" : "#ffffff" }}>{teamName}</h2>
                 {isOwnTeam && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30">
                     Your Team
@@ -292,10 +298,13 @@ export default function TeamDetailsModal({
 
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full flex items-center justify-center transition-colors shrink-0"
-            style={{ backgroundColor: "#1e211e", border: "1px solid #2a2a2a" }}
+            className="w-8 h-8 rounded-full flex items-center justify-center transition-colors shrink-0 cursor-pointer"
+            style={{
+              backgroundColor: isLight ? "#f1f5f9" : "#1e211e",
+              border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`
+            }}
           >
-            <X className="w-4 h-4 text-neutral-400 hover:text-white" />
+            <X className={cn("w-4 h-4", isLight ? "text-slate-600 hover:text-slate-900" : "text-neutral-400 hover:text-white")} />
           </button>
         </div>
 
@@ -321,15 +330,15 @@ export default function TeamDetailsModal({
             <div
               className="rounded-2xl p-4 sm:p-5 relative overflow-hidden"
               style={{
-                background: "linear-gradient(135deg, rgba(34,197,94,0.12) 0%, rgba(20,83,45,0.06) 100%)",
-                border: "1px solid rgba(34,197,94,0.25)"
+                background: isLight ? "linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)" : "linear-gradient(135deg, rgba(34,197,94,0.12) 0%, rgba(20,83,45,0.06) 100%)",
+                border: isLight ? "1px solid #bbf7d0" : "1px solid rgba(34,197,94,0.25)"
               }}
             >
               <div className="flex items-center gap-3.5">
-                <span className="text-3xl sm:text-4xl font-black text-white">{ratingVal.toFixed(1)}</span>
+                <span className={cn("text-3xl sm:text-4xl font-black", isLight ? "text-slate-900" : "text-white")}>{ratingVal.toFixed(1)}</span>
                 <div className="space-y-1">
                   <StarRating rating={ratingVal} size="w-5 h-5" />
-                  <div className="text-xs font-medium text-neutral-400">
+                  <div className={cn("text-xs font-medium", isLight ? "text-slate-600" : "text-neutral-400")}>
                     {reviewsCount > 0
                       ? `User Feedback Rating (${reviewsCount} review${reviewsCount === 1 ? "" : "s"})`
                       : "User Feedback Rating (New Team)"}
@@ -338,51 +347,63 @@ export default function TeamDetailsModal({
               </div>
             </div>
 
-            {/* Match Challenge Statistics - 3 Requested Highlights */}
+            {/* Match Challenge Statistics */}
             <div>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-2.5 flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-green-400" />
+              <h3 className={cn("text-xs font-bold uppercase tracking-wider mb-2.5 flex items-center gap-1.5", isLight ? "text-slate-600" : "text-neutral-400")}>
+                <Users className={cn("w-3.5 h-3.5", isLight ? "text-emerald-600" : "text-green-400")} />
                 <span>Match Challenge Activity</span>
               </h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 {/* 1. Matches they accepted from other teams */}
                 <div
-                  className="rounded-2xl p-3.5 text-center transition-all hover:border-neutral-700"
-                  style={{ backgroundColor: "#171a17", border: "1px solid #282d28" }}
+                  className="rounded-2xl p-3.5 text-center transition-all"
+                  style={{
+                    backgroundColor: isLight ? "#ffffff" : "#171a17",
+                    border: `1px solid ${isLight ? "#e2e8f0" : "#282d28"}`,
+                    boxShadow: isLight ? "0 2px 6px -1px rgba(0,0,0,0.05)" : undefined
+                  }}
                 >
-                  <div className="w-8 h-8 rounded-full mx-auto flex items-center justify-center mb-2 bg-purple-500/10 text-purple-400">
+                  <div className="w-8 h-8 rounded-full mx-auto flex items-center justify-center mb-2 bg-purple-500/10 text-purple-500">
                     <Award className="w-4 h-4" />
                   </div>
-                  <div className="text-2xl font-extrabold text-white">{stats.challenges_accepted}</div>
-                  <div className="text-xs font-bold text-neutral-300 mt-0.5">Accepted by Them</div>
-                  <div className="text-[10px] text-neutral-500 mt-1">Accepted other team challenges</div>
+                  <div className={cn("text-2xl font-extrabold", isLight ? "text-slate-900" : "text-white")}>{stats.challenges_accepted}</div>
+                  <div className={cn("text-xs font-bold mt-0.5", isLight ? "text-slate-700" : "text-neutral-300")}>Accepted by Them</div>
+                  <div className={cn("text-[10px] mt-1", isLight ? "text-slate-500" : "text-neutral-500")}>Accepted other team challenges</div>
                 </div>
 
                 {/* 2. How many opponents accepted their challenges */}
                 <div
-                  className="rounded-2xl p-3.5 text-center transition-all hover:border-neutral-700"
-                  style={{ backgroundColor: "#171a17", border: "1px solid #282d28" }}
+                  className="rounded-2xl p-3.5 text-center transition-all"
+                  style={{
+                    backgroundColor: isLight ? "#ffffff" : "#171a17",
+                    border: `1px solid ${isLight ? "#e2e8f0" : "#282d28"}`,
+                    boxShadow: isLight ? "0 2px 6px -1px rgba(0,0,0,0.05)" : undefined
+                  }}
                 >
-                  <div className="w-8 h-8 rounded-full mx-auto flex items-center justify-center mb-2 bg-emerald-500/10 text-emerald-400">
+                  <div className="w-8 h-8 rounded-full mx-auto flex items-center justify-center mb-2 bg-emerald-500/10 text-emerald-600">
                     <CheckCircle className="w-4 h-4" />
                   </div>
-                  <div className="text-2xl font-extrabold text-white">{stats.challenges_booked}</div>
-                  <div className="text-xs font-bold text-neutral-300 mt-0.5">Accepted by Others</div>
-                  <div className="text-[10px] text-neutral-500 mt-1">Opponents accepted their challenges</div>
+                  <div className={cn("text-2xl font-extrabold", isLight ? "text-slate-900" : "text-white")}>{stats.challenges_booked}</div>
+                  <div className={cn("text-xs font-bold mt-0.5", isLight ? "text-slate-700" : "text-neutral-300")}>Accepted by Others</div>
+                  <div className={cn("text-[10px] mt-1", isLight ? "text-slate-500" : "text-neutral-500")}>Opponents accepted their challenges</div>
                 </div>
 
                 {/* 3. How many they cancelled of the accepted challenges */}
                 <div
-                  className="rounded-2xl p-3.5 text-center transition-all hover:border-neutral-700"
-                  style={{ backgroundColor: "#171a17", border: "1px solid #282d28" }}
+                  className="rounded-2xl p-3.5 text-center transition-all"
+                  style={{
+                    backgroundColor: isLight ? "#ffffff" : "#171a17",
+                    border: `1px solid ${isLight ? "#e2e8f0" : "#282d28"}`,
+                    boxShadow: isLight ? "0 2px 6px -1px rgba(0,0,0,0.05)" : undefined
+                  }}
                 >
-                  <div className="w-8 h-8 rounded-full mx-auto flex items-center justify-center mb-2 bg-rose-500/10 text-rose-400">
+                  <div className="w-8 h-8 rounded-full mx-auto flex items-center justify-center mb-2 bg-rose-500/10 text-rose-500">
                     <XCircle className="w-4 h-4" />
                   </div>
-                  <div className="text-2xl font-extrabold text-white">{stats.challenges_cancelled}</div>
-                  <div className="text-xs font-bold text-neutral-300 mt-0.5">Cancelled by Them</div>
-                  <div className="text-[10px] text-neutral-500 mt-1">Accepted challenges they cancelled</div>
+                  <div className={cn("text-2xl font-extrabold", isLight ? "text-slate-900" : "text-white")}>{stats.challenges_cancelled}</div>
+                  <div className={cn("text-xs font-bold mt-0.5", isLight ? "text-slate-700" : "text-neutral-300")}>Cancelled by Them</div>
+                  <div className={cn("text-[10px] mt-1", isLight ? "text-slate-500" : "text-neutral-500")}>Accepted challenges they cancelled</div>
                 </div>
               </div>
             </div>
@@ -391,11 +412,11 @@ export default function TeamDetailsModal({
             <div className="pt-2">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-green-400" />
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <MessageSquare className={cn("w-4 h-4", isLight ? "text-emerald-600" : "text-green-400")} />
+                  <h3 className={cn("text-sm font-bold flex items-center gap-2", isLight ? "text-slate-900" : "text-white")}>
                     <span>Feedback & Reviews ({reviews.length})</span>
                     {unreadReviewIds && unreadReviewIds.size > 0 && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-500 border border-red-500/30 flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                         {unreadReviewIds.size} unread
                       </span>
@@ -405,7 +426,7 @@ export default function TeamDetailsModal({
 
                 <div className="flex items-center gap-2">
                   {isOwnTeam ? (
-                    <span className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-neutral-800 text-neutral-400 border border-neutral-700/60">
+                    <span className={cn("text-[11px] font-medium px-2.5 py-1 rounded-full", isLight ? "bg-slate-100 text-slate-600 border border-slate-200" : "bg-neutral-800 text-neutral-400 border border-neutral-700/60")}>
                       Opponents only can review
                     </span>
                   ) : (
@@ -416,7 +437,12 @@ export default function TeamDetailsModal({
                         setReviewError(null);
                         setReviewSuccess(null);
                       }}
-                      className="px-3 py-1.5 rounded-xl text-xs font-semibold text-green-400 bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 transition-all flex items-center gap-1.5"
+                      className={cn(
+                        "px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer",
+                        isLight
+                          ? "text-emerald-700 bg-emerald-50 border border-emerald-300 hover:bg-emerald-100"
+                          : "text-green-400 bg-green-500/10 border border-green-500/30 hover:bg-green-500/20"
+                      )}
                     >
                       <ThumbsUp className="w-3.5 h-3.5" />
                       <span>{showReviewForm ? "Cancel Review" : "Add Review"}</span>
@@ -430,10 +456,14 @@ export default function TeamDetailsModal({
                 <form
                   onSubmit={handleSubmitReview}
                   className="rounded-2xl p-4 mb-4 space-y-3 animate-in fade-in duration-200"
-                  style={{ backgroundColor: "#181a18", border: "1px solid rgba(34,197,94,0.3)" }}
+                  style={{
+                    backgroundColor: isLight ? "#ffffff" : "#181a18",
+                    border: `1px solid ${isLight ? "#86efac" : "rgba(34,197,94,0.3)"}`,
+                    boxShadow: isLight ? "0 4px 12px rgba(0,0,0,0.05)" : undefined
+                  }}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="text-xs font-semibold text-white">Rate this team:</div>
+                    <div className={cn("text-xs font-semibold", isLight ? "text-slate-900" : "text-white")}>Rate this team:</div>
                     <StarPicker value={ratingInput} onChange={setRatingInput} disabled={submittingReview} />
                   </div>
 
@@ -443,14 +473,17 @@ export default function TeamDetailsModal({
                       value={reviewTextInput}
                       onChange={e => setReviewTextInput(e.target.value)}
                       placeholder="Write your feedback about this team (e.g. sportsmanship, punctuality, fair play)..."
-                      className="w-full rounded-xl p-3 text-xs text-white focus:outline-none focus:border-green-500 transition-colors placeholder-neutral-500 resize-none"
-                      style={{ backgroundColor: "#101210", border: "1px solid #2a2a2a" }}
+                      className={cn(
+                        "w-full rounded-xl p-3 text-xs focus:outline-none focus:border-green-500 transition-colors resize-none",
+                        isLight ? "bg-slate-50 text-slate-900 placeholder-slate-400 border border-slate-200" : "text-white placeholder-neutral-500 resize-none"
+                      )}
+                      style={isLight ? undefined : { backgroundColor: "#101210", border: "1px solid #2a2a2a" }}
                       disabled={submittingReview}
                     />
                   </div>
 
                   {reviewError && (
-                    <div className="text-xs text-red-400 flex items-center gap-1.5">
+                    <div className="text-xs text-red-500 flex items-center gap-1.5 font-medium">
                       <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                       <span>{reviewError}</span>
                     </div>
@@ -468,7 +501,7 @@ export default function TeamDetailsModal({
                     <button
                       type="submit"
                       disabled={submittingReview || !reviewTextInput.trim()}
-                      className="px-4 py-2 rounded-xl text-xs font-bold text-black bg-green-500 hover:bg-green-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-md"
+                      className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#16a34a] hover:bg-[#15803d] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
                     >
                       {submittingReview ? "Submitting..." : "Submit Review"}
                     </button>
@@ -477,7 +510,7 @@ export default function TeamDetailsModal({
               )}
 
               {reviewSuccess && (
-                <div className="p-3 mb-3 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-xs flex items-center gap-2">
+                <div className={cn("p-3 mb-3 rounded-xl text-xs flex items-center gap-2", isLight ? "bg-emerald-50 border border-emerald-300 text-emerald-800" : "bg-green-500/10 border border-green-500/30 text-green-400")}>
                   <CheckCircle className="w-4 h-4 shrink-0" />
                   <span>{reviewSuccess}</span>
                 </div>
@@ -487,11 +520,15 @@ export default function TeamDetailsModal({
               {reviews.length === 0 ? (
                 <div
                   className="rounded-2xl p-6 text-center text-xs"
-                  style={{ backgroundColor: "#151715", border: "1px dashed #2a2a2a", color: "#6b7a6b" }}
+                  style={{
+                    backgroundColor: isLight ? "#ffffff" : "#151715",
+                    border: `1px dashed ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
+                    color: isLight ? "#64748b" : "#6b7a6b"
+                  }}
                 >
-                  <MessageSquare className="w-6 h-6 mx-auto mb-2 opacity-50 text-neutral-500" />
-                  <p className="font-semibold text-neutral-300">No reviews yet for {teamName}</p>
-                  <p className="mt-1 text-neutral-500">
+                  <MessageSquare className="w-6 h-6 mx-auto mb-2 opacity-50 text-neutral-400" />
+                  <p className={cn("font-semibold", isLight ? "text-slate-800" : "text-neutral-300")}>No reviews yet for {teamName}</p>
+                  <p className={cn("mt-1", isLight ? "text-slate-500" : "text-neutral-500")}>
                     {isOwnTeam
                       ? "Feedback reviews and ratings from opponents in Find Match will appear here."
                       : "Be the first team to leave a feedback review!"}
@@ -508,37 +545,43 @@ export default function TeamDetailsModal({
                         key={r.id}
                         className="rounded-2xl p-3.5 transition-colors relative"
                         style={{
-                          backgroundColor: isUnread ? "rgba(239, 68, 68, 0.08)" : "#161816",
-                          border: isUnread ? "1px solid rgba(239, 68, 68, 0.4)" : "1px solid #242724"
+                          backgroundColor: isUnread
+                            ? (isLight ? "rgba(239, 68, 68, 0.06)" : "rgba(239, 68, 68, 0.08)")
+                            : (isLight ? "#f8fafc" : "#161816"),
+                          border: isUnread ? "1px solid rgba(239, 68, 68, 0.4)" : `1px solid ${isLight ? "#e2e8f0" : "#242724"}`
                         }}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-2">
                             <div
-                              className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs relative shrink-0"
-                              style={{ backgroundColor: "#242d24", border: "1px solid #334433" }}
+                              className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs relative shrink-0"
+                              style={{
+                                backgroundColor: isLight ? "#e2e8f0" : "#242d24",
+                                border: `1px solid ${isLight ? "#cbd5e1" : "#334433"}`,
+                                color: isLight ? "#0f172a" : "#ffffff"
+                              }}
                             >
                               {(r.reviewer_name || "P")[0].toUpperCase()}
                               {isUnread && (
-                                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-[#161816] animate-pulse" />
+                                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-white animate-pulse" />
                               )}
                             </div>
                             <div>
-                              <div className="text-xs font-bold text-white leading-tight flex items-center gap-1.5 flex-wrap">
+                              <div className={cn("text-xs font-bold leading-tight flex items-center gap-1.5 flex-wrap", isLight ? "text-slate-900" : "text-white")}>
                                 <span>{r.reviewer_name || "Cricket Player"}</span>
                                 {r.reviewer_team_name && (
-                                  <span className="font-normal text-neutral-400 text-[11px]">
+                                  <span className={cn("font-normal text-[11px]", isLight ? "text-slate-500" : "text-neutral-400")}>
                                     ({r.reviewer_team_name})
                                   </span>
                                 )}
                                 {isUnread && (
-                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-red-500/20 border border-red-500/40 text-[9px] font-bold text-red-400">
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-red-500/20 border border-red-500/40 text-[9px] font-bold text-red-500">
                                     <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                                     Unread msg
                                   </span>
                                 )}
                               </div>
-                              <div className="text-[10px] text-neutral-500 mt-0.5">
+                              <div className={cn("text-[10px] mt-0.5", isLight ? "text-slate-500" : "text-neutral-500")}>
                                 {r.created_at
                                   ? new Date(r.created_at).toLocaleString("en-IN", {
                                       day: "numeric",
@@ -562,7 +605,7 @@ export default function TeamDetailsModal({
                                 onClick={() => handleDeleteReview(r.id)}
                                 disabled={deletingReviewId === r.id}
                                 title="Delete your review"
-                                className="p-1.5 rounded-lg text-neutral-400 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0 disabled:opacity-50"
+                                className="p-1.5 rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0 disabled:opacity-50 cursor-pointer"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -570,7 +613,7 @@ export default function TeamDetailsModal({
                           </div>
                         </div>
 
-                        <p className="text-xs text-neutral-300 mt-2.5 pl-9 leading-relaxed">
+                        <p className={cn("text-xs mt-2.5 pl-9 leading-relaxed", isLight ? "text-slate-700 font-medium" : "text-neutral-300")}>
                           "{r.review_text}"
                         </p>
                       </div>

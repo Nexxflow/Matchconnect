@@ -4,16 +4,24 @@ import { apiRequest } from "../../api";
 import { C, cn, Tag, normalizePhone } from "../../utils/helpers.jsx";
 import TeamDetailsModal from "../TeamDetailsModal.jsx";
 
-function SquadSection({ members = [], loading, error, currentUserId, effectiveTeam }) {
-  if (loading) return <div className="text-sm text-center py-8" style={{ color: "#4a5a4a" }}>Loading squad...</div>;
-  if (error) return <div className="text-sm text-center py-8" style={{ color: "#4a5a4a" }}>{error}</div>;
+function SquadSection({ members = [], loading, error, currentUserId, effectiveTeam, theme = "dark" }) {
+  const isLight = theme === "light";
+  if (loading) return <div className="text-sm text-center py-8" style={{ color: isLight ? "#64748b" : "#4a5a4a" }}>Loading squad...</div>;
+  if (error) return <div className="text-sm text-center py-8" style={{ color: isLight ? "#dc2626" : "#4a5a4a" }}>{error}</div>;
 
   if (!effectiveTeam) {
     return (
-      <div className="rounded-2xl p-8 text-center border border-dashed" style={{ borderColor: "#2a2a2a", backgroundColor: "#131413" }}>
+      <div
+        className="rounded-2xl p-8 text-center border border-dashed transition-all"
+        style={{
+          borderColor: isLight ? "#cbd5e1" : "#2a2a2a",
+          backgroundColor: isLight ? "#ffffff" : "#131413",
+          boxShadow: isLight ? "0 2px 8px -2px rgba(0,0,0,0.05)" : undefined,
+        }}
+      >
         <div className="text-4xl mb-3 opacity-60">🧑‍🤝‍🧑</div>
-        <div className="text-sm font-semibold text-white">No squad yet</div>
-        <p className="text-xs mt-1.5 max-w-[26ch] mx-auto" style={{ color: "#6b7a6b" }}>
+        <div className={cn("text-sm font-bold", isLight ? "text-slate-900" : "text-white")}>No squad yet</div>
+        <p className="text-xs mt-1.5 max-w-[26ch] mx-auto font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
           Add your team name, village and the year formed in Edit Profile — anyone with the same three values is grouped with you automatically.
         </p>
       </div>
@@ -24,30 +32,59 @@ function SquadSection({ members = [], loading, error, currentUserId, effectiveTe
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Users className="w-4 h-4 text-green-400" />
-          <h3 className="text-sm font-bold text-white">Squad Members ({members.length})</h3>
+          <Users className={cn("w-4 h-4", isLight ? "text-emerald-600" : "text-green-400")} />
+          <h3 className={cn("text-sm font-bold", isLight ? "text-slate-900" : "text-white")}>
+            Squad Members ({members.length})
+          </h3>
         </div>
       </div>
 
-      <div className="rounded-2xl overflow-hidden border divide-y" style={{ borderColor: "#2a2a2a" }}>
+      <div
+        className="rounded-2xl overflow-hidden border divide-y transition-all"
+        style={{
+          borderColor: isLight ? "#e2e8f0" : "#2a2a2a",
+          backgroundColor: isLight ? "#ffffff" : "#161616",
+          boxShadow: isLight ? "0 2px 8px -2px rgba(0,0,0,0.05)" : undefined,
+        }}
+      >
         {members.length === 0 ? (
-          <div className="p-4 text-center text-xs text-neutral-500">
+          <div className="p-4 text-center text-xs font-medium" style={{ color: isLight ? "#64748b" : "#737373" }}>
             No teammates registered yet with team "{effectiveTeam.team_name}".
           </div>
         ) : (
           members.map(m => (
-            <div key={m.id} className="flex items-center gap-3 px-4 py-3" style={{ backgroundColor: "#161616" }}>
-              <div className="w-9 h-9 rounded-full bg-green-500/15 text-green-400 flex items-center justify-center text-xs font-bold shrink-0">
+            <div
+              key={m.id}
+              className="flex items-center gap-3 px-4 py-3 transition-colors"
+              style={{
+                backgroundColor: isLight ? "#ffffff" : "#161616",
+                borderBottom: isLight ? "1px solid #f1f5f9" : undefined,
+              }}
+            >
+              <div
+                className={cn(
+                  "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0",
+                  isLight ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-green-500/15 text-green-400"
+                )}
+              >
                 {m.name?.split(" ").map(w => w[0]).slice(0, 2).join("")}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-sm text-white truncate flex items-center gap-1.5">
+                <div className={cn("text-sm font-bold truncate flex items-center gap-1.5", isLight ? "text-slate-900" : "text-white")}>
                   {m.name}
                   {m.id === currentUserId && (
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "rgba(34,197,94,0.15)", color: "#22c55e" }}>You</span>
+                    <span
+                      className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                      style={isLight
+                        ? { backgroundColor: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" }
+                        : { backgroundColor: "rgba(34,197,94,0.15)", color: "#22c55e" }
+                      }
+                    >
+                      You
+                    </span>
                   )}
                 </div>
-                <div className="text-xs font-mono" style={{ color: "#6b7a6b" }}>{m.phone}</div>
+                <div className="text-xs font-mono" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>{m.phone}</div>
               </div>
             </div>
           ))
@@ -74,7 +111,9 @@ export default function MyTeamTab({
   teammateIds = [],
   user,
   token,
+  theme = "dark",
 }) {
+  const isLight = theme === "light";
   const [activeSection, setActiveSection] = useState("bookings");
   const [team, setTeam] = useState(null);
   const [members, setMembers] = useState([]);
@@ -305,11 +344,11 @@ export default function MyTeamTab({
       {/* 1. Team Banner Card ABOVE the Three Tabs */}
       {effectiveTeam && (
         <div
-          className="rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-4 transition-all"
+          className={cn("rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-4 transition-all", isLight ? "bg-white shadow-sm" : "")}
           style={{
-            background: "linear-gradient(135deg, rgba(34, 197, 94, 0.14) 0%, #141714 100%)",
-            border: "1px solid rgba(34, 197, 94, 0.35)",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.35)"
+            background: isLight ? "linear-gradient(135deg, #ecfdf5 0%, #ffffff 100%)" : "linear-gradient(135deg, rgba(34, 197, 94, 0.14) 0%, #141714 100%)",
+            border: isLight ? "1px solid #a7f3d0" : "1px solid rgba(34, 197, 94, 0.35)",
+            boxShadow: isLight ? "0 10px 25px -5px rgba(22, 163, 74, 0.12)" : "0 8px 24px rgba(0,0,0,0.35)"
           }}
         >
           <div className="flex items-center gap-3.5 min-w-0">
@@ -321,10 +360,10 @@ export default function MyTeamTab({
             </div>
 
             <div className="min-w-0">
-              <div className="text-xl font-black text-white tracking-wide truncate drop-shadow-sm flex items-center gap-2">
+              <div className={cn("text-xl font-black tracking-wide truncate drop-shadow-sm flex items-center gap-2", isLight ? "text-slate-900" : "text-white")}>
                 <span>{effectiveTeam.team_name}</span>
                 {teamStats?.rating != null && (
-                  <span className="flex items-center gap-1 text-xs font-bold text-amber-400 px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/20 shrink-0">
+                  <span className={cn("flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full shrink-0", isLight ? "bg-amber-100 text-amber-800 border border-amber-300" : "text-amber-400 bg-amber-400/10 border border-amber-400/20")}>
                     <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                     <span>{Number(teamStats.rating).toFixed(1)}</span>
                   </span>
@@ -333,30 +372,30 @@ export default function MyTeamTab({
                   type="button"
                   onClick={() => effectiveTeam?.team_name && loadTeamStats(effectiveTeam.team_name)}
                   disabled={refreshingStats}
-                  className="p-1 rounded-lg hover:bg-neutral-800 text-neutral-400 hover:text-green-400 transition-colors"
+                  className={cn("p-1 rounded-lg transition-colors cursor-pointer", isLight ? "hover:bg-slate-100 text-slate-400 hover:text-emerald-600" : "hover:bg-neutral-800 text-neutral-400 hover:text-green-400")}
                   title="Refresh team stats and reviews"
                 >
-                  <RotateCw className={cn("w-3 h-3", refreshingStats && "animate-spin text-green-400")} />
+                  <RotateCw className={cn("w-3 h-3", refreshingStats && cn("animate-spin", isLight ? "text-emerald-600" : "text-green-400"))} />
                 </button>
               </div>
 
-              <div className="text-xs mt-0.5 text-neutral-300 font-medium flex items-center gap-2 flex-wrap">
+              <div className={cn("text-xs mt-0.5 font-medium flex items-center gap-2 flex-wrap", isLight ? "text-slate-600" : "text-neutral-300")}>
                 {effectiveTeam.village_name && <span>📍 {effectiveTeam.village_name}</span>}
                 {effectiveTeam.team_year && <span>· 🗓️ Formed {effectiveTeam.team_year}</span>}
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30">
+                <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold", isLight ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-green-500/20 text-green-400 border border-green-500/30")}>
                   {members.length} member{members.length !== 1 ? "s" : ""}
                 </span>
-                <span className="text-[11px] text-neutral-300 flex items-center gap-1.5 flex-wrap">
+                <span className={cn("text-[11px] flex items-center gap-1.5 flex-wrap", isLight ? "text-slate-600" : "text-neutral-300")}>
                   <span>· {reviewsCount} feedback review{reviewsCount !== 1 ? "s" : ""}</span>
                   {unopenedCount > 0 ? (
                     <button
                       type="button"
                       onClick={handleOpenViewTeam}
-                      className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1.5 hover:bg-red-500/30 transition-all cursor-pointer shadow-sm"
+                      className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-500 border border-red-500/30 flex items-center gap-1.5 hover:bg-red-500/30 transition-all cursor-pointer shadow-sm"
                       title={`${unopenedCount} unopened review message${unopenedCount !== 1 ? "s" : ""}`}
                     >
                       <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
-                      <MessageSquare className="w-3 h-3 text-red-400" />
+                      <MessageSquare className="w-3 h-3 text-red-500" />
                       <span>Review ({unopenedCount})</span>
                       <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-red-500 text-white animate-pulse">
                         NEW
@@ -366,7 +405,7 @@ export default function MyTeamTab({
                     <button
                       type="button"
                       onClick={handleOpenViewTeam}
-                      className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30 flex items-center gap-1 hover:bg-green-500/30 transition-all cursor-pointer"
+                      className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer", isLight ? "bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200" : "bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30")}
                       title="View feedback reviews"
                     >
                       <MessageSquare className="w-3 h-3" />
@@ -382,11 +421,11 @@ export default function MyTeamTab({
           <button
             type="button"
             onClick={handleOpenViewTeam}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-lg hover:scale-105 active:scale-95"
+            className="px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-md hover:scale-105 active:scale-95 cursor-pointer"
             style={{
-              backgroundColor: "#22c55e",
-              color: "#051305",
-              boxShadow: "0 4px 14px rgba(34, 197, 94, 0.35)",
+              backgroundColor: isLight ? "#16a34a" : "#22c55e",
+              color: isLight ? "#ffffff" : "#051305",
+              boxShadow: isLight ? "0 4px 14px rgba(22, 163, 74, 0.35)" : "0 4px 14px rgba(34, 197, 94, 0.35)",
             }}
             title="View your team performance, rating & feedback reviews"
           >
@@ -411,6 +450,7 @@ export default function MyTeamTab({
           unreadReviewIds={modalUnreadReviewIds}
           contactFallback={members.find(m => m.id === user?.id)?.phone || user?.phone}
           postedByFallback={members.find(m => m.id === user?.id)?.name || user?.name}
+          theme={theme}
           onClose={() => {
             setViewSelfTeam(false);
             if (effectiveTeam.team_name) {
@@ -433,10 +473,18 @@ export default function MyTeamTab({
             <button
               key={t.key}
               onClick={() => setActiveSection(t.key)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-full text-xs font-semibold transition-all"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-full text-xs font-semibold transition-all cursor-pointer"
               style={isActive
-                ? { backgroundColor: "#22c55e", color: "#000", boxShadow: "0 2px 10px rgba(34,197,94,0.35)" }
-                : { backgroundColor: "#151715", color: "#c8ccc8", border: "1px solid #2a2a2a" }}
+                ? {
+                    backgroundColor: isLight ? "#16a34a" : "#22c55e",
+                    color: isLight ? "#ffffff" : "#000",
+                    boxShadow: isLight ? "0 2px 10px rgba(22,163,74,0.35)" : "0 2px 10px rgba(34,197,94,0.35)"
+                  }
+                : {
+                    backgroundColor: isLight ? "#ffffff" : "#151715",
+                    color: isLight ? "#475569" : "#c8ccc8",
+                    border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`
+                  }}
             >
               <Icon className="w-3.5 h-3.5" />
               {t.label}
@@ -448,22 +496,39 @@ export default function MyTeamTab({
       {activeSection === "bookings" && bookings.length > 0 && (
         <section>
           <div className="flex items-center gap-2 mb-3">
-            <CalendarCheck className="w-4 h-4 text-green-400" />
-            <h3 className="text-base font-semibold text-white">My Bookings</h3>
+            <CalendarCheck className={cn("w-4 h-4", isLight ? "text-emerald-600" : "text-green-400")} />
+            <h3 className={cn("text-base font-semibold", isLight ? "text-slate-900" : "text-white")}>My Bookings</h3>
           </div>
           <div className="space-y-2">
             {bookings.map(b => (
-              <div key={b.id} className={cn(C, "rounded-xl p-3 flex items-center justify-between gap-3")}>
+              <div
+                key={b.id}
+                className={cn(
+                  C,
+                  "rounded-xl p-3 flex items-center justify-between gap-3 border transition-all",
+                  isLight ? "bg-white border-slate-200 shadow-sm" : ""
+                )}
+              >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}>
-                    {b.type === "ground" ? <MapPin className="w-4 h-4 text-green-400" /> : <Trophy className="w-4 h-4 text-green-400" />}
+                  <div
+                    className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                    style={{
+                      backgroundColor: isLight ? "rgba(22,163,74,0.12)" : "rgba(34,197,94,0.1)",
+                      border: isLight ? "1px solid rgba(22,163,74,0.25)" : "1px solid rgba(34,197,94,0.2)"
+                    }}
+                  >
+                    {b.type === "ground" ? (
+                      <MapPin className={cn("w-4 h-4", isLight ? "text-emerald-600" : "text-green-400")} />
+                    ) : (
+                      <Trophy className={cn("w-4 h-4", isLight ? "text-emerald-600" : "text-green-400")} />
+                    )}
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold text-white truncate">{b.name}</div>
-                    <div className="text-xs" style={{ color: "#6b7a6b" }}>{b.date} · {b.time}</div>
+                    <div className={cn("text-sm font-semibold truncate", isLight ? "text-slate-900" : "text-white")}>{b.name}</div>
+                    <div className="text-xs" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>{b.date} · {b.time}</div>
                   </div>
                 </div>
-                <div className="text-sm font-mono text-green-400 shrink-0">₹{b.amount}</div>
+                <div className={cn("text-sm font-mono font-bold shrink-0", isLight ? "text-emerald-700" : "text-green-400")}>₹{b.amount}</div>
               </div>
             ))}
           </div>
@@ -471,10 +536,13 @@ export default function MyTeamTab({
       )}
 
       {activeSection === "bookings" && bookings.length === 0 && (
-        <div className="rounded-2xl p-8 text-center border border-dashed" style={{ borderColor: "#2a2a2a", backgroundColor: "#131413" }}>
+        <div
+          className="rounded-2xl p-8 text-center border border-dashed"
+          style={{ borderColor: isLight ? "#cbd5e1" : "#2a2a2a", backgroundColor: isLight ? "#ffffff" : "#131413" }}
+        >
           <div className="text-4xl mb-3 opacity-60">🎟️</div>
-          <div className="text-sm font-semibold text-white">No bookings yet</div>
-          <p className="text-xs mt-1.5 max-w-[26ch] mx-auto" style={{ color: "#6b7a6b" }}>
+          <div className={cn("text-sm font-semibold", isLight ? "text-slate-900" : "text-white")}>No bookings yet</div>
+          <p className="text-xs mt-1.5 max-w-[26ch] mx-auto" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
             Book a ground or an umpire and it'll show up here.
           </p>
         </div>
@@ -487,6 +555,7 @@ export default function MyTeamTab({
           error={squadError}
           currentUserId={user?.id}
           effectiveTeam={effectiveTeam}
+          theme={theme}
         />
       )}
 
@@ -494,33 +563,66 @@ export default function MyTeamTab({
         <section className="space-y-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-green-400" />
-              <h3 className="text-base font-semibold text-white">Schedule</h3>
+              <Calendar className={cn("w-4 h-4", isLight ? "text-emerald-600" : "text-green-400")} />
+              <h3 className={cn("text-base font-semibold", isLight ? "text-slate-900" : "text-white")}>Schedule</h3>
             </div>
             {scheduleCount > 0 && (
-              <span className="text-xs font-mono px-2 py-0.5 rounded-full" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
+              <span
+                className="text-xs font-mono px-2 py-0.5 rounded-full"
+                style={{
+                  backgroundColor: isLight ? "#f1f5f9" : "#1a1a1a",
+                  border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
+                  color: isLight ? "#475569" : "#6b7a6b"
+                }}
+              >
                 {scheduleCount} upcoming
               </span>
             )}
           </div>
 
           {postedChallenges.length === 0 && acceptedChallengesFinal.length === 0 && registeredTournaments.length === 0 && (
-            <div className="rounded-2xl p-8 text-center border border-dashed" style={{ borderColor: "#2a2a2a", backgroundColor: "#131413" }}>
+            <div
+              className="rounded-2xl p-8 text-center border border-dashed"
+              style={{ borderColor: isLight ? "#cbd5e1" : "#2a2a2a", backgroundColor: isLight ? "#ffffff" : "#131413" }}
+            >
               <div className="text-4xl mb-3 opacity-60">🗓️</div>
-              <div className="text-sm font-semibold text-white">Nothing on the calendar yet</div>
-              <p className="text-xs mt-1.5 max-w-[26ch] mx-auto" style={{ color: "#6b7a6b" }}>
+              <div className={cn("text-sm font-semibold", isLight ? "text-slate-900" : "text-white")}>Nothing on the calendar yet</div>
+              <p className="text-xs mt-1.5 max-w-[26ch] mx-auto" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
                 Post or accept a challenge in Find Match, or register your team for a tournament, to see it here.
               </p>
             </div>
           )}
 
           <div className="space-y-4">
-            <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: "#151715", border: "1px solid rgba(56,189,248,0.22)" }}>
-              <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid #1e1e1e" }}>
-                <Megaphone className="w-3.5 h-3.5 text-sky-400" />
-                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: "#8fa08f" }}>Posted Challenges</h4>
+            {/* Card 1: Posted Challenges */}
+            <div
+              className="rounded-2xl overflow-hidden"
+              style={{
+                backgroundColor: isLight ? "#ffffff" : "#151715",
+                border: isLight ? "1px solid #e2e8f0" : "1px solid rgba(56,189,248,0.22)",
+                boxShadow: isLight ? "0 2px 8px -2px rgba(0,0,0,0.05)" : undefined
+              }}
+            >
+              <div
+                className="flex items-center gap-2 px-4 py-3"
+                style={{
+                  borderBottom: `1px solid ${isLight ? "#f1f5f9" : "#1e1e1e"}`,
+                  backgroundColor: isLight ? "#f8fafc" : "transparent"
+                }}
+              >
+                <Megaphone className={cn("w-3.5 h-3.5", isLight ? "text-sky-600" : "text-sky-400")} />
+                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: isLight ? "#475569" : "#8fa08f" }}>
+                  Posted Challenges
+                </h4>
                 {postedChallenges.length > 0 && (
-                  <span className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
+                  <span
+                    className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-full"
+                    style={{
+                      backgroundColor: isLight ? "#f1f5f9" : "#1a1a1a",
+                      border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
+                      color: isLight ? "#475569" : "#6b7a6b"
+                    }}
+                  >
                     {postedChallenges.length}
                   </span>
                 )}
@@ -528,16 +630,16 @@ export default function MyTeamTab({
 
               {postedChallenges.length === 0 ? (
                 <div className="px-4 py-6 text-center">
-                  <p className="text-xs" style={{ color: "#6b7a6b" }}>No posted challenges yet</p>
+                  <p className="text-xs" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>No posted challenges yet</p>
                 </div>
               ) : (
-                <div className="divide-y" style={{ borderColor: "#1e1e1e" }}>
+                <div className="divide-y" style={{ borderColor: isLight ? "#f1f5f9" : "#1e1e1e" }}>
                   {postedChallenges.map(pc => (
                     <div key={pc.id} className="p-4">
                       <div className="flex items-start justify-between gap-3 mb-2">
                         <div className="min-w-0">
-                          <div className="text-sm font-semibold text-white truncate">{pc.team_name}</div>
-                          <div className="text-xs mt-0.5" style={{ color: "#6b7a6b" }}>
+                          <div className={cn("text-sm font-semibold truncate", isLight ? "text-slate-900" : "text-white")}>{pc.team_name}</div>
+                          <div className="text-xs mt-0.5" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
                             {pc.match_date} · {pc.time_slot}
                           </div>
                         </div>
@@ -546,36 +648,50 @@ export default function MyTeamTab({
 
                       <div className="flex flex-wrap items-center gap-1.5 mb-2">
                         <Tag color="blue">{pc.format}</Tag>
-                        <span className="text-xs flex items-center gap-1" style={{ color: "#6b7a6b" }}>
-                          <MapPin className="w-3 h-3" style={{ color: "#4a5a4a" }} />
+                        <span className="text-xs flex items-center gap-1" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
+                          <MapPin className="w-3 h-3" style={{ color: isLight ? "#94a3b8" : "#4a5a4a" }} />
                           {pc.ground_name || "Ground TBD"}
                         </span>
                       </div>
 
                       {pc.note && (
-                        <p className="text-xs mb-2 line-clamp-2" style={{ color: "#8fa08f" }}>{pc.note}</p>
+                        <p className="text-xs mb-2 line-clamp-2" style={{ color: isLight ? "#475569" : "#8fa08f" }}>{pc.note}</p>
                       )}
-
-                      {/* <button
-                        disabled={deleting}
-                        onClick={() => onDeleteChallenge?.(pc.id)}
-                        className="w-full py-2 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1.5"
-                        style={deleting ? { opacity: 0.6, cursor: "not-allowed" } : {}}
-                      >
-                        <XCircle className="w-3.5 h-3.5" /> {deleting ? "Withdrawing..." : "Withdraw Challenge"}
-                      </button> */}
                     </div>
                   ))}
                 </div>
               )}
             </div>
 
-            <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: "#151715", border: "1px solid rgba(245,158,11,0.25)" }}>
-              <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid #1e1e1e" }}>
-                <Swords className="w-3.5 h-3.5 text-amber-400" />
-                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: "#8fa08f" }}>Accepted Challenges</h4>
+            {/* Card 2: Accepted Challenges */}
+            <div
+              className="rounded-2xl overflow-hidden"
+              style={{
+                backgroundColor: isLight ? "#ffffff" : "#151715",
+                border: isLight ? "1px solid #e2e8f0" : "1px solid rgba(245,158,11,0.25)",
+                boxShadow: isLight ? "0 2px 8px -2px rgba(0,0,0,0.05)" : undefined
+              }}
+            >
+              <div
+                className="flex items-center gap-2 px-4 py-3"
+                style={{
+                  borderBottom: `1px solid ${isLight ? "#f1f5f9" : "#1e1e1e"}`,
+                  backgroundColor: isLight ? "#f8fafc" : "transparent"
+                }}
+              >
+                <Swords className={cn("w-3.5 h-3.5", isLight ? "text-amber-600" : "text-amber-400")} />
+                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: isLight ? "#475569" : "#8fa08f" }}>
+                  Accepted Challenges
+                </h4>
                 {acceptedChallengesFinal.length > 0 && (
-                  <span className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
+                  <span
+                    className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-full"
+                    style={{
+                      backgroundColor: isLight ? "#f1f5f9" : "#1a1a1a",
+                      border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
+                      color: isLight ? "#475569" : "#6b7a6b"
+                    }}
+                  >
                     {acceptedChallengesFinal.length}
                   </span>
                 )}
@@ -583,10 +699,10 @@ export default function MyTeamTab({
 
               {acceptedChallengesFinal.length === 0 ? (
                 <div className="px-4 py-6 text-center">
-                  <p className="text-xs" style={{ color: "#6b7a6b" }}>No accepted challenges yet</p>
+                  <p className="text-xs" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>No accepted challenges yet</p>
                 </div>
               ) : (
-                <div className="divide-y" style={{ borderColor: "#1e1e1e" }}>
+                <div className="divide-y" style={{ borderColor: isLight ? "#f1f5f9" : "#1e1e1e" }}>
                   {acceptedChallengesFinal.map(ac => {
                     const iAmCreator = isTeamCreator(ac);
                     const opponentName = iAmCreator ? ac.accepted_by_team_name : ac.team_name;
@@ -594,8 +710,8 @@ export default function MyTeamTab({
                       <div key={ac.id} className="p-4">
                         <div className="flex items-start justify-between gap-3 mb-2">
                           <div className="min-w-0">
-                            <div className="text-sm font-semibold text-white truncate">vs {opponentName}</div>
-                            <div className="text-xs mt-0.5" style={{ color: "#6b7a6b" }}>
+                            <div className={cn("text-sm font-semibold truncate", isLight ? "text-slate-900" : "text-white")}>vs {opponentName}</div>
+                            <div className="text-xs mt-0.5" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
                               {ac.match_date} · {ac.time_slot}
                             </div>
                           </div>
@@ -604,34 +720,58 @@ export default function MyTeamTab({
 
                         <div className="flex flex-wrap items-center gap-1.5 mb-2">
                           <Tag color="blue">{ac.format}</Tag>
-                          <span className="text-xs flex items-center gap-1" style={{ color: "#6b7a6b" }}>
-                            <MapPin className="w-3 h-3" style={{ color: "#4a5a4a" }} />
+                          <span className="text-xs flex items-center gap-1" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
+                            <MapPin className="w-3 h-3" style={{ color: isLight ? "#94a3b8" : "#4a5a4a" }} />
                             {ac.ground_name || "Ground TBD"}
                           </span>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
-                          <a href={`tel:${ac.contact_no}`} className="rounded-xl p-2.5 flex items-center gap-2 transition-colors hover:bg-white/5" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}>
-                            <Phone className="w-3.5 h-3.5 text-green-400 shrink-0" />
+                          <a
+                            href={`tel:${ac.contact_no}`}
+                            className={cn("rounded-xl p-2.5 flex items-center gap-2 transition-colors", isLight ? "hover:bg-slate-50" : "hover:bg-white/5")}
+                            style={{ backgroundColor: isLight ? "#f8fafc" : "#1a1a1a", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}` }}
+                          >
+                            <Phone className={cn("w-3.5 h-3.5 shrink-0", isLight ? "text-emerald-600" : "text-green-400")} />
                             <div className="min-w-0">
-                              <div className="text-xs truncate" style={{ color: "#6b7a6b" }}>{ac.team_name}</div>
-                              <div className="text-xs font-mono text-white">{ac.contact_no}</div>
+                              <div className="text-xs truncate" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>{ac.team_name}</div>
+                              <div className={cn("text-xs font-mono", isLight ? "text-slate-900 font-bold" : "text-white")}>{ac.contact_no}</div>
                             </div>
                           </a>
-                          <a href={`tel:${ac.accepted_by_contact_no}`} className="rounded-xl p-2.5 flex items-center gap-2 transition-colors hover:bg-white/5" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}>
-                            <Phone className="w-3.5 h-3.5 text-green-400 shrink-0" />
+                          <a
+                            href={`tel:${ac.accepted_by_contact_no}`}
+                            className={cn("rounded-xl p-2.5 flex items-center gap-2 transition-colors", isLight ? "hover:bg-slate-50" : "hover:bg-white/5")}
+                            style={{ backgroundColor: isLight ? "#f8fafc" : "#1a1a1a", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}` }}
+                          >
+                            <Phone className={cn("w-3.5 h-3.5 shrink-0", isLight ? "text-emerald-600" : "text-green-400")} />
                             <div className="min-w-0">
-                              <div className="text-xs truncate" style={{ color: "#6b7a6b" }}>{ac.accepted_by_team_name}</div>
-                              <div className="text-xs font-mono text-white">{ac.accepted_by_contact_no}</div>
+                              <div className="text-xs truncate" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>{ac.accepted_by_team_name}</div>
+                              <div className={cn("text-xs font-mono", isLight ? "text-slate-900 font-bold" : "text-white")}>{ac.accepted_by_contact_no}</div>
                             </div>
                           </a>
                         </div>
 
                         <div className="flex flex-col sm:flex-row gap-2">
-                          <button onClick={() => onOpenChat(ac)} className="flex-1 py-2.5 sm:py-2 rounded-xl bg-green-500 text-black text-xs font-bold hover:bg-green-400 transition-colors flex items-center justify-center gap-1.5 text-center">
+                          <button
+                            type="button"
+                            onClick={() => onOpenChat(ac)}
+                            className={cn(
+                              "flex-1 py-2.5 sm:py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 text-center shadow-sm cursor-pointer",
+                              isLight ? "bg-[#16a34a] hover:bg-[#15803d] text-white" : "bg-green-500 text-black hover:bg-green-400"
+                            )}
+                          >
                             💬 Chat
                           </button>
-                          <button disabled={cancelling} onClick={() => onCancelChallenge(ac.id)} className="flex-1 py-2.5 sm:py-2 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1.5 text-center" style={cancelling ? { opacity: 0.6, cursor: "not-allowed" } : {}}>
+                          <button
+                            type="button"
+                            disabled={cancelling}
+                            onClick={() => onCancelChallenge(ac.id)}
+                            className={cn(
+                              "flex-1 py-2.5 sm:py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 text-center cursor-pointer",
+                              isLight ? "bg-red-50 hover:bg-red-100 text-red-600 border border-red-200" : "bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20"
+                            )}
+                            style={cancelling ? { opacity: 0.6, cursor: "not-allowed" } : {}}
+                          >
                             <XCircle className="w-3.5 h-3.5" /> {cancelling ? "Cancelling..." : "Cancel Match"}
                           </button>
                         </div>
@@ -644,15 +784,35 @@ export default function MyTeamTab({
           </div>
 
           <div className="space-y-4">
-            {/* Card 1: Our Team Published Tournaments */}
-            <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: "#151715", border: "1px solid rgba(34,197,94,0.25)" }}>
-              <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid #1e1e1e" }}>
-                <Trophy className="w-3.5 h-3.5 text-green-400" />
-                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: "#8fa08f" }}>
+            {/* Card 3: Our Team Published Tournaments */}
+            <div
+              className="rounded-2xl overflow-hidden"
+              style={{
+                backgroundColor: isLight ? "#ffffff" : "#151715",
+                border: isLight ? "1px solid #e2e8f0" : "1px solid rgba(34,197,94,0.25)",
+                boxShadow: isLight ? "0 2px 8px -2px rgba(0,0,0,0.05)" : undefined
+              }}
+            >
+              <div
+                className="flex items-center gap-2 px-4 py-3"
+                style={{
+                  borderBottom: `1px solid ${isLight ? "#f1f5f9" : "#1e1e1e"}`,
+                  backgroundColor: isLight ? "#f8fafc" : "transparent"
+                }}
+              >
+                <Trophy className={cn("w-3.5 h-3.5", isLight ? "text-emerald-600" : "text-green-400")} />
+                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: isLight ? "#475569" : "#8fa08f" }}>
                   Our Team Published Tournaments
                 </h4>
                 {ourPublishedTournaments.length > 0 && (
-                  <span className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
+                  <span
+                    className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-full"
+                    style={{
+                      backgroundColor: isLight ? "#f1f5f9" : "#1a1a1a",
+                      border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
+                      color: isLight ? "#475569" : "#6b7a6b"
+                    }}
+                  >
                     {ourPublishedTournaments.length}
                   </span>
                 )}
@@ -660,19 +820,25 @@ export default function MyTeamTab({
 
               {ourPublishedTournaments.length === 0 ? (
                 <div className="px-4 py-6 text-center">
-                  <p className="text-xs" style={{ color: "#6b7a6b" }}>No active tournament published by your team yet</p>
+                  <p className="text-xs" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>No active tournament published by your team yet</p>
                 </div>
               ) : (
-                <div className="divide-y" style={{ borderColor: "#1e1e1e" }}>
+                <div className="divide-y" style={{ borderColor: isLight ? "#f1f5f9" : "#1e1e1e" }}>
                   {ourPublishedTournaments.map(t => (
                     <div key={t.id} className="p-4 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}>
-                          <Trophy className="w-4 h-4 text-green-400" />
+                        <div
+                          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                          style={{
+                            backgroundColor: isLight ? "rgba(22,163,74,0.12)" : "rgba(34,197,94,0.1)",
+                            border: isLight ? "1px solid rgba(22,163,74,0.25)" : "1px solid rgba(34,197,94,0.2)"
+                          }}
+                        >
+                          <Trophy className={cn("w-4 h-4", isLight ? "text-emerald-600" : "text-green-400")} />
                         </div>
                         <div className="min-w-0">
-                          <div className="text-sm font-semibold text-white truncate">{t.name}</div>
-                          <div className="text-xs mt-0.5 truncate" style={{ color: "#6b7a6b" }}>
+                          <div className={cn("text-sm font-semibold truncate", isLight ? "text-slate-900" : "text-white")}>{t.name}</div>
+                          <div className="text-xs mt-0.5 truncate" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
                             Starts {t.startDate || "TBA"} · {t.format} · 📍 {t.venue || "TBD"}
                           </div>
                         </div>
@@ -684,15 +850,35 @@ export default function MyTeamTab({
               )}
             </div>
 
-            {/* Card 2: Registered Tournaments */}
-            <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: "#151715", border: "1px solid rgba(59,130,246,0.25)" }}>
-              <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid #1e1e1e" }}>
-                <Trophy className="w-3.5 h-3.5 text-blue-400" />
-                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: "#8fa08f" }}>
+            {/* Card 4: Registered Tournaments */}
+            <div
+              className="rounded-2xl overflow-hidden"
+              style={{
+                backgroundColor: isLight ? "#ffffff" : "#151715",
+                border: isLight ? "1px solid #e2e8f0" : "1px solid rgba(59,130,246,0.25)",
+                boxShadow: isLight ? "0 2px 8px -2px rgba(0,0,0,0.05)" : undefined
+              }}
+            >
+              <div
+                className="flex items-center gap-2 px-4 py-3"
+                style={{
+                  borderBottom: `1px solid ${isLight ? "#f1f5f9" : "#1e1e1e"}`,
+                  backgroundColor: isLight ? "#f8fafc" : "transparent"
+                }}
+              >
+                <Trophy className={cn("w-3.5 h-3.5", isLight ? "text-blue-600" : "text-blue-400")} />
+                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: isLight ? "#475569" : "#8fa08f" }}>
                   Registered Tournaments
                 </h4>
                 {registeredTournaments.length > 0 && (
-                  <span className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#6b7a6b" }}>
+                  <span
+                    className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-full"
+                    style={{
+                      backgroundColor: isLight ? "#f1f5f9" : "#1a1a1a",
+                      border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
+                      color: isLight ? "#475569" : "#6b7a6b"
+                    }}
+                  >
                     {registeredTournaments.length}
                   </span>
                 )}
@@ -700,19 +886,25 @@ export default function MyTeamTab({
 
               {registeredTournaments.length === 0 ? (
                 <div className="px-4 py-6 text-center">
-                  <p className="text-xs" style={{ color: "#6b7a6b" }}>No tournament registrations yet</p>
+                  <p className="text-xs" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>No tournament registrations yet</p>
                 </div>
               ) : (
-                <div className="divide-y" style={{ borderColor: "#1e1e1e" }}>
+                <div className="divide-y" style={{ borderColor: isLight ? "#f1f5f9" : "#1e1e1e" }}>
                   {registeredTournaments.map(t => (
                     <div key={t.id} className="p-4 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)" }}>
-                          <Trophy className="w-4 h-4 text-blue-400" />
+                        <div
+                          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                          style={{
+                            backgroundColor: isLight ? "rgba(59,130,246,0.12)" : "rgba(59,130,246,0.1)",
+                            border: isLight ? "1px solid rgba(59,130,246,0.25)" : "1px solid rgba(59,130,246,0.2)"
+                          }}
+                        >
+                          <Trophy className={cn("w-4 h-4", isLight ? "text-blue-600" : "text-blue-400")} />
                         </div>
                         <div className="min-w-0">
-                          <div className="text-sm font-semibold text-white truncate">{t.name}</div>
-                          <div className="text-xs mt-0.5 truncate" style={{ color: "#6b7a6b" }}>
+                          <div className={cn("text-sm font-semibold truncate", isLight ? "text-slate-900" : "text-white")}>{t.name}</div>
+                          <div className="text-xs mt-0.5 truncate" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
                             Starts {t.startDate || "TBA"} · {t.format} · 📍 {t.venue || "TBD"}
                           </div>
                         </div>
@@ -723,7 +915,10 @@ export default function MyTeamTab({
                           <button
                             type="button"
                             onClick={() => onUnregisterTournament(t.id)}
-                            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20 transition-colors"
+                            className={cn(
+                              "px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer",
+                              isLight ? "bg-red-50 border border-red-200 text-red-600 hover:bg-red-100" : "bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20"
+                            )}
                           >
                             Cancel
                           </button>

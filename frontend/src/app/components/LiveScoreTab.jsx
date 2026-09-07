@@ -156,47 +156,100 @@ function computeExtrasBreakdown(innings) {
 const FONT_DISPLAY = "'Inter', 'Outfit', ui-sans-serif, system-ui, sans-serif";
 const FONT_MONO = "'JetBrains Mono', 'Roboto Mono', ui-monospace, SFMono-Regular, monospace";
 
+const isLightMode = () =>
+  typeof document !== "undefined" &&
+  (document.documentElement.classList.contains("light") ||
+   document.documentElement.getAttribute("data-theme") === "light");
+
 const COLOR = {
-  bg: "#0b0f17",
-  surface: "#131a26",
-  surfaceRaised: "#1c2536",
-  heroGradient: "linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)",
-  border: "#232f45",
-  borderStrong: "#334155",
-  ink: "#f8fafc",
-  inkDim: "#94a3b8",
-  inkFaint: "#64748b",
-  accent: "#10b981", // Cricbuzz Green
-  accentGlow: "rgba(16, 185, 129, 0.2)",
-  blue: "#38bdf8",   // Google Blue
-  purple: "#a855f7", // 6 Boundary Purple
-  red: "#ef4444",    // Wicket Red
-  amber: "#f59e0b",  // Extra/Warning Amber
+  get bg() {
+    return isLightMode() ? "#f8faf8" : "#0b0f17";
+  },
+  get surface() {
+    return isLightMode() ? "#ffffff" : "#131a26";
+  },
+  get surfaceRaised() {
+    return isLightMode() ? "#f1f5f9" : "#1c2536";
+  },
+  get heroGradient() {
+    return isLightMode()
+      ? "linear-gradient(135deg, #f0fdf4 0%, #f8fafc 50%, #f0fdf4 100%)"
+      : "linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)";
+  },
+  get border() {
+    return isLightMode() ? "#e2e8f0" : "#232f45";
+  },
+  get borderStrong() {
+    return isLightMode() ? "#cbd5e1" : "#334155";
+  },
+  get ink() {
+    return isLightMode() ? "#0f172a" : "#f8fafc";
+  },
+  get inkDim() {
+    return isLightMode() ? "#475569" : "#94a3b8";
+  },
+  get inkFaint() {
+    return isLightMode() ? "#64748b" : "#64748b";
+  },
+  get accent() {
+    return "#10b981"; // Cricbuzz Green
+  },
+  get accentGlow() {
+    return isLightMode() ? "rgba(16, 185, 129, 0.15)" : "rgba(16, 185, 129, 0.2)";
+  },
+  get blue() {
+    return isLightMode() ? "#0284c7" : "#38bdf8"; // Google Blue
+  },
+  get purple() {
+    return isLightMode() ? "#9333ea" : "#a855f7"; // 6 Boundary Purple
+  },
+  get red() {
+    return isLightMode() ? "#dc2626" : "#ef4444"; // Wicket Red
+  },
+  get amber() {
+    return isLightMode() ? "#d97706" : "#f59e0b"; // Extra/Warning Amber
+  },
 };
 
 const BALL_COLORS = {
-  wicket: { bg: "#ef4444", fg: "#ffffff", label: "W" },
-  six: { bg: "#8b5cf6", fg: "#ffffff", label: "6" },
-  boundary: { bg: "#10b981", fg: "#ffffff", label: "4" },
-  noball: { bg: "#f59e0b", fg: "#000000", label: "NB" },
-  wide: { bg: "#f59e0b", fg: "#000000", label: "WD" },
-  extra: { bg: "rgba(245,158,11,0.2)", fg: "#f59e0b", label: "EX" },
-  dot: { bg: "#1e293b", fg: "#64748b", label: "•" },
-  single: { bg: "#334155", fg: "#f8fafc", label: "1" },
+  get wicket() { return { bg: "#ef4444", fg: "#ffffff", label: "W" }; },
+  get six() { return { bg: "#8b5cf6", fg: "#ffffff", label: "6" }; },
+  get boundary() { return { bg: "#10b981", fg: "#ffffff", label: "4" }; },
+  get noball() { return { bg: "#f59e0b", fg: "#000000", label: "NB" }; },
+  get wide() { return { bg: "#f59e0b", fg: "#000000", label: "WD" }; },
+  get extra() { return { bg: "rgba(245,158,11,0.2)", fg: "#f59e0b", label: "EX" }; },
+  get dot() {
+    return isLightMode()
+      ? { bg: "#e2e8f0", fg: "#475569", label: "•" }
+      : { bg: "#1e293b", fg: "#64748b", label: "•" };
+  },
+  get single() {
+    return isLightMode()
+      ? { bg: "#f1f5f9", fg: "#0f172a", label: "1" }
+      : { bg: "#334155", fg: "#f8fafc", label: "1" };
+  },
 };
 
 const WICKET_TYPES = ["bowled", "caught", "lbw", "run_out", "stumped", "hit_wicket", "other"];
 const NEEDS_FIELDER = new Set(["caught", "run_out", "stumped"]);
 
 const cardStyle = {
-  backgroundColor: COLOR.surface,
-  border: `1px solid ${COLOR.border}`,
-  boxShadow: "0 4px 20px -2px rgba(0, 0, 0, 0.3)",
+  get backgroundColor() {
+    return COLOR.surface;
+  },
+  get border() {
+    return `1px solid ${COLOR.border}`;
+  },
+  get boxShadow() {
+    return isLightMode()
+      ? "0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05)"
+      : "0 4px 20px -2px rgba(0, 0, 0, 0.3)";
+  },
 };
 
 const BTN_TRANSITION = "transition-all duration-150 ease-out active:scale-[0.97]";
 
-export default function ScoringApp({ user }) {
+export default function ScoringApp({ user, theme = "dark" }) {
   const [view, setView] = useState("home");
   const [activeMatchId, setActiveMatchId] = useState(null);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
@@ -209,6 +262,7 @@ export default function ScoringApp({ user }) {
 
   return (
     <div
+      key={theme}
       className="max-w-2xl mx-auto space-y-5 px-2 py-3"
       style={{ backgroundColor: COLOR.bg, color: COLOR.ink, fontFamily: FONT_DISPLAY }}
     >

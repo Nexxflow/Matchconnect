@@ -17,6 +17,7 @@ import { getFirebaseMessaging } from "../firebase";
 import { onMessage } from "firebase/messaging";
 import { GROUNDS } from "./utils/constants";
 import {
+  useTheme,
   useForceDark,
   normalizePhone,
   transformGround,
@@ -68,7 +69,7 @@ function normalizeChallenge(c) {
 }
 
 export default function App() {
-  useForceDark();
+  const { theme, toggleTheme } = useTheme();
   const getInitialTab = () => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -749,15 +750,15 @@ export default function App() {
   };
 
   if (resetToken) {
-    return <AuthScreen onAuthSuccess={handleAuthSuccess} resetToken={resetToken} initialMode="reset" />;
+    return <AuthScreen onAuthSuccess={handleAuthSuccess} resetToken={resetToken} initialMode="reset" theme={theme} />;
   }
 
   if (!authChecked) {
-    return <div style={{ minHeight: "100vh", backgroundColor: "#0d0f0d" }} />;
+    return <div style={{ minHeight: "100vh", backgroundColor: theme === "light" ? "#f8faf8" : "#0d0f0d" }} />;
   }
 
   if (!auth.user) {
-    return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
+    return <AuthScreen onAuthSuccess={handleAuthSuccess} theme={theme} />;
   }
 
   const content = {
@@ -770,6 +771,7 @@ export default function App() {
         allChallenges={challenges}
         onCreateChallenge={goCreateChallenge}
         onCreateTournament={goCreateTournament}
+        theme={theme}
       />
     ),
     "Find Match": (
@@ -786,6 +788,7 @@ export default function App() {
         autoOpenForm={autoOpenChallengeForm}
         onAutoOpenHandled={() => setAutoOpenChallengeForm(false)}
         entryMode={findMatchEntryMode}
+        theme={theme}
       />
     ),
     "Grounds": (
@@ -798,6 +801,7 @@ export default function App() {
         onGroundUpdated={handleGroundUpdated}
         onGroundDeleted={handleGroundDeleted}
         onBook={g => setBookingModal({ type: "ground", item: g })}
+        theme={theme}
       />
     ),
     "Umpires": (
@@ -809,9 +813,10 @@ export default function App() {
         onUpdated={handleUmpireUpdated}
         onDeleted={handleUmpireDeleted}
         onBook={u => setBookingModal({ type: "umpire", item: u })}
+        theme={theme}
       />
     ),
-    "Live Score": <LiveScoreTab user={auth.user} />,
+    "Live Score": <LiveScoreTab user={auth.user} theme={theme} />,
     "Tournaments": (
       <TournamentsTab
         tournaments={tournaments}
@@ -827,6 +832,7 @@ export default function App() {
         onTournamentDeleted={handleTournamentDeleted}
         autoOpenCreate={autoOpenTournamentForm}
         onAutoOpenHandled={() => setAutoOpenTournamentForm(false)}
+        theme={theme}
       />
     ),
     "My Team": (
@@ -845,12 +851,21 @@ export default function App() {
         teammateIds={teammates.ids}
         user={auth.user}
         token={auth.token}
+        theme={theme}
       />
     )
   };
 
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#0d0f0d", fontFamily: "Inter, sans-serif" }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        backgroundColor: theme === "light" ? "#f8faf8" : "#0d0f0d",
+        color: theme === "light" ? "#0f172a" : "#f0f2f0",
+        fontFamily: "Inter, sans-serif"
+      }}
+      className="transition-colors duration-200"
+    >
       <Navbar
         active={activeTab}
         setActive={handleNavTabClick}
@@ -868,6 +883,8 @@ export default function App() {
           setAuth(prev => ({ ...prev, user: updatedUser }));
           if (auth.token) loadTeammates(auth.token);
         }}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
       {backendStatus === "offline" && (
         <div className="max-w-3xl mx-auto px-4 pt-3">
@@ -881,7 +898,13 @@ export default function App() {
       </main>
 
       {/* Mobile Bottom Navigation Bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0d0f0d]/95 backdrop-blur-md border-t border-[#242624] px-1 py-1 flex items-center justify-around pb-[max(0.375rem,env(safe-area-inset-bottom))] shadow-2xl">
+      <div
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 backdrop-blur-md border-t px-1 py-1 flex items-center justify-around pb-[max(0.375rem,env(safe-area-inset-bottom))] shadow-2xl transition-colors duration-200"
+        style={{
+          backgroundColor: theme === "light" ? "rgba(255, 255, 255, 0.95)" : "rgba(13, 15, 13, 0.95)",
+          borderColor: theme === "light" ? "#e2e8f0" : "#242624"
+        }}
+      >
         {[
           { id: "Home", label: "Home", icon: Home },
           { id: "Find Match", label: "Matches", icon: Swords },
@@ -904,7 +927,11 @@ export default function App() {
               <div className="relative">
                 <Icon
                   className={`w-5 h-5 transition-transform group-active:scale-90 ${
-                    isSelected ? "text-green-400" : "text-[#6b7a6b]"
+                    isSelected
+                      ? "text-green-500"
+                      : theme === "light"
+                        ? "text-slate-500 group-hover:text-slate-900"
+                        : "text-[#6b7a6b] group-hover:text-[#c8ccc8]"
                   }`}
                 />
                 {item.isLive && (
@@ -912,8 +939,12 @@ export default function App() {
                 )}
               </div>
               <span
-                className={`text-[10px] font-semibold mt-1 tracking-tight ${
-                  isSelected ? "text-green-400" : "text-[#6b7a6b]"
+                className={`text-[10px] font-semibold mt-1 tracking-tight transition-colors ${
+                  isSelected
+                    ? "text-green-500 font-bold"
+                    : theme === "light"
+                      ? "text-slate-500 group-hover:text-slate-900"
+                      : "text-[#6b7a6b] group-hover:text-[#c8ccc8]"
                 }`}
               >
                 {item.label}
@@ -930,6 +961,7 @@ export default function App() {
           token={auth.token}
           onClose={() => setBookingModal(null)}
           onConfirm={handleBookingConfirm}
+          theme={theme}
         />
       )}
       {chatChallenge && (
@@ -940,6 +972,7 @@ export default function App() {
           }}
           token={auth.token}
           onClose={() => setChatChallenge(null)}
+          theme={theme}
         />
       )}
     </div>

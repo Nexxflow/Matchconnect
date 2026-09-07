@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Star, Droplets } from "lucide-react";
 import { AMENITY_ICON, TAG_COLOR, UMPIRE_GRADIENTS } from "./constants";
 
@@ -8,7 +8,7 @@ export function cn(...classes) {
   return classes.filter(Boolean).join(" ");
 }
 
-export function Tag({ color, children }) {
+export function Tag({ color = "green", children }) {
   const map = {
     green: "bg-green-500/15 text-green-400 border-green-500/20",
     amber: "bg-amber-500/15 text-amber-400 border-amber-500/20",
@@ -17,7 +17,11 @@ export function Tag({ color, children }) {
     purple: "bg-purple-500/15 text-purple-400 border-purple-500/20",
     sky: "bg-sky-500/15 text-sky-400 border-sky-500/20"
   };
-  return <span className={cn("text-xs px-2 py-0.5 rounded-full border font-medium", map[color])}>{children}</span>;
+  return (
+    <span className={cn("mc-tag", `mc-tag-${color}`, "text-xs px-2.5 py-0.5 rounded-full border font-semibold inline-flex items-center gap-1", map[color])}>
+      {children}
+    </span>
+  );
 }
 
 export function StarRow({ count, max = 5 }) {
@@ -35,15 +39,11 @@ export function GhostButton({ children, onClick, disabled, className = "" }) {
     <button
       disabled={disabled}
       onClick={onClick}
-      className={cn("py-2 rounded-xl text-xs font-medium transition-colors", className)}
+      className={cn("py-2 rounded-xl text-xs font-medium transition-colors border border-border text-foreground hover:bg-secondary/80 disabled:opacity-40 disabled:cursor-not-allowed", className)}
       style={{
-        border: "1px solid #2a2a2a",
-        color: disabled ? "#3a3a3a" : "#c8ccc8",
         backgroundColor: "transparent",
         cursor: disabled ? "not-allowed" : "pointer"
       }}
-      onMouseEnter={e => !disabled && (e.currentTarget.style.backgroundColor = "#222")}
-      onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
     >
       {children}
     </button>
@@ -152,12 +152,59 @@ export function buildGroundMapsLink(ground) {
   return query ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}` : "";
 }
 
-export function useForceDark() {
+export function useTheme() {
+  const [theme, setTheme] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("mc_theme");
+        if (stored === "light" || stored === "dark") return stored;
+      } catch {}
+    }
+    return "dark";
+  });
+
   useEffect(() => {
-    document.documentElement.style.backgroundColor = "#0d0f0d";
-    document.body.style.backgroundColor = "#0d0f0d";
-    document.body.style.color = "#f0f2f0";
-  }, []);
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem("mc_theme", theme);
+    } catch {}
+
+    const root = document.documentElement;
+    const body = document.body;
+    if (theme === "light") {
+      root.classList.add("light");
+      root.classList.remove("dark");
+      body.classList.add("light");
+      body.classList.remove("dark");
+      root.setAttribute("data-theme", "light");
+      body.setAttribute("data-theme", "light");
+      root.style.colorScheme = "light";
+      root.style.backgroundColor = "#f8faf8";
+      body.style.backgroundColor = "#f8faf8";
+      body.style.color = "#0f172a";
+    } else {
+      root.classList.add("dark");
+      root.classList.remove("light");
+      body.classList.add("dark");
+      body.classList.remove("light");
+      root.setAttribute("data-theme", "dark");
+      body.setAttribute("data-theme", "dark");
+      root.style.colorScheme = "dark";
+      root.style.backgroundColor = "#0d0f0d";
+      body.style.backgroundColor = "#0d0f0d";
+      body.style.color = "#f0f2f0";
+    }
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  };
+
+  return { theme, setTheme, toggleTheme, isDark: theme === "dark" };
+}
+
+export function useForceDark() {
+  return useTheme();
 }
 
 export function getNext7Days() {

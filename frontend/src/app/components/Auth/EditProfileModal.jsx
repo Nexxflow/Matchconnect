@@ -26,7 +26,7 @@ function Field({ icon: Icon, ...props }) {
 // App.jsx / wherever this modal is opened). Without it, apiRequest sends
 // the PUT with no Authorization header and the backend's authRequired
 // middleware rejects it with 401 "Missing or invalid Authorization header".
-export default function EditProfileModal({ user, token, onClose, onSaved }) {
+export default function EditProfileModal({ user, token, onClose, onSaved, theme = "dark" }) {
   const [name, setName] = useState(user.name || "");
   const [email, setEmail] = useState(user.email || "");
   const [phone, setPhone] = useState(user.phone || "");
@@ -79,18 +79,28 @@ export default function EditProfileModal({ user, token, onClose, onSaved }) {
   const modal = (
     <div
       className="fixed inset-0 overflow-y-auto"
-      style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 9999 }}
+      style={{ backgroundColor: theme === "light" ? "rgba(15, 23, 42, 0.45)" : "rgba(0,0,0,0.6)", zIndex: 9999 }}
       onClick={onClose}
     >
       <div className="min-h-full flex items-center justify-center p-4">
         <div
-          className="w-full max-w-sm rounded-2xl p-6"
-          style={{ backgroundColor: "#151715", border: "1px solid #2a2a2a" }}
+          className="w-full max-w-sm rounded-2xl p-6 shadow-2xl"
+          style={{
+            backgroundColor: theme === "light" ? "#ffffff" : "#151715",
+            border: `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}`
+          }}
           onClick={e => e.stopPropagation()}
         >
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-bold text-white">Edit Profile</h2>
-            <button type="button" onClick={onClose} style={{ color: "#6b7a6b" }}>
+            <h2 className="text-base font-bold" style={{ color: theme === "light" ? "#0f172a" : "#ffffff" }}>
+              Edit Profile
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1 rounded-lg transition-colors"
+              style={{ color: theme === "light" ? "#64748b" : "#6b7a6b" }}
+            >
               <X className="w-4 h-4" />
             </button>
           </div>
