@@ -2,7 +2,6 @@ import React, { useState, useEffect, createContext, useContext } from "react";
 import { Eye, EyeOff, Mail, Lock, User, Phone, MapPin, Shield, Calendar, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react";
 import { apiRequest } from "../../api";
 import TermsModal from "../TermsModal";
-import TermsContent from "../TermsContent";
 
 const AuthThemeContext = createContext("dark");
 
@@ -176,11 +175,11 @@ function LoginForm({ onAuthSuccess, onSwitch, notice }) {
 }
 
 // ─── Register ───────────────────────────────────────────────────────────────
-// Step 1: Captures name, email, phone, password, team details.
-// Clicking "Create Account" navigates to Step 2 (separate Terms & Conditions page).
-// Step 2: Renders all 14 conditions directly on the page with a checkbox below.
-// The account cannot be created without accepting the terms.
-function RegisterForm({ onSwitch, step = 1, onStepChange, theme = "dark" }) {
+// Single-page signup: name/email/phone/password/team details plus a compact
+// Terms & Conditions checkbox at the bottom. The full T&C text lives in
+// TermsModal, opened by tapping the "Terms & Conditions" link in the checkbox
+// label. The account cannot be created without checking the box.
+function RegisterForm({ onSwitch, theme = "dark" }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -189,15 +188,16 @@ function RegisterForm({ onSwitch, step = 1, onStepChange, theme = "dark" }) {
   const [villageName, setVillageName] = useState("");
   const [teamYear, setTeamYear] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const currentYear = new Date().getFullYear();
 
-  // STEP 1: Validate account details, then advance to Terms page
-  const handleProceedToTerms = e => {
+  const handleSubmit = async e => {
     e.preventDefault();
     setError(null);
+
     if (!name.trim()) {
       setError("Full name is required");
       return;
@@ -218,21 +218,12 @@ function RegisterForm({ onSwitch, step = 1, onStepChange, theme = "dark" }) {
       setError(`Team year must be between 1900 and ${currentYear}`);
       return;
     }
-
-    // Advance to next page: Terms & Conditions
-    onStepChange?.(2);
-  };
-
-  // STEP 2: Final submit after reading & checking Terms
-  const handleFinalSubmit = async e => {
-    e.preventDefault();
     if (!termsAccepted) {
-      setError("You must accept the Terms & Conditions with the checkbox below before creating your account.");
+      setError("Please agree to the Terms & Conditions to continue.");
       return;
     }
 
     setLoading(true);
-    setError(null);
     try {
       await apiRequest("/auth/signup", {
         method: "POST",
@@ -256,76 +247,8 @@ function RegisterForm({ onSwitch, step = 1, onStepChange, theme = "dark" }) {
     }
   };
 
-  if (step === 2) {
-    // ─── STEP 2: Separate Terms & Conditions Page ────────────────────────────
-    return (
-      <form onSubmit={handleFinalSubmit} className="space-y-4 animate-in fade-in duration-200">
-        <ErrorBanner message={error} />
-
-        {/* Scrollable Terms Content Area */}
-        <div
-          className="rounded-xl p-4 sm:p-5 overflow-y-auto space-y-4 pr-3"
-          style={{
-            backgroundColor: theme === "light" ? "#f8fafc" : "#101210",
-            border: `1px solid ${theme === "light" ? "#e2e8f0" : "#242924"}`,
-            maxHeight: "52vh"
-          }}
-        >
-          <TermsContent theme={theme} />
-        </div>
-
-        {/* Checkbox below the conditions */}
-        <div
-          className="p-3.5 rounded-xl transition-all"
-          style={{
-            backgroundColor: termsAccepted ? "rgba(34, 197, 94, 0.08)" : (theme === "light" ? "#f8fafc" : "#181a18"),
-            border: termsAccepted ? "1px solid rgba(34, 197, 94, 0.35)" : `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}`
-          }}
-        >
-          <label className="flex items-start gap-3 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              id="accept-terms-checkbox"
-              checked={termsAccepted}
-              onChange={e => {
-                setTermsAccepted(e.target.checked);
-                if (e.target.checked) setError(null);
-              }}
-              className="mt-0.5 w-4 h-4 rounded border-green-500 text-green-500 focus:ring-green-500 cursor-pointer accent-green-500"
-            />
-            <div className="flex-1 min-w-0">
-              <span className="text-xs font-semibold" style={{ color: theme === "light" ? "#0f172a" : "#f0f2f0" }}>
-                I have read and accept the Terms &amp; Conditions
-              </span>
-              <p className="text-[11px] mt-0.5" style={{ color: theme === "light" ? "#64748b" : "#6b7a6b" }}>
-                By checking this box, you confirm that you agree to all the rules, payment terms, and policies above.
-              </p>
-            </div>
-          </label>
-        </div>
-
-        <SubmitButton loading={loading} disabled={!termsAccepted}>
-          Accept Terms &amp; Complete Registration
-        </SubmitButton>
-
-        <button
-          type="button"
-          onClick={() => {
-            setError(null);
-            onStepChange?.(1);
-          }}
-          className="w-full py-2 rounded-xl text-xs font-semibold transition-colors text-center"
-          style={{ color: theme === "light" ? "#64748b" : "#a3a3a3" }}
-        >
-          &larr; Back to Edit Account Details
-        </button>
-      </form>
-    );
-  }
-
-  // ─── STEP 1: Details Form ──────────────────────────────────────────────────
   return (
-    <form onSubmit={handleProceedToTerms} className="space-y-3 animate-in fade-in duration-200">
+    <form onSubmit={handleSubmit} className="space-y-3 animate-in fade-in duration-200">
       <ErrorBanner message={error} />
       <Field icon={User} required placeholder="Full name" value={name} onChange={e => setName(e.target.value)} />
       <Field icon={Mail} type="email" required placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} />
@@ -353,8 +276,36 @@ function RegisterForm({ onSwitch, step = 1, onStepChange, theme = "dark" }) {
         Teammates who register with the same team name, village and year are grouped together automatically.
       </p>
 
-      <SubmitButton>
-        Create Account
+      {/* Compact Terms & Conditions checkbox */}
+      <label className="flex items-start gap-2.5 pt-1 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          id="accept-terms-checkbox"
+          checked={termsAccepted}
+          onChange={e => {
+            setTermsAccepted(e.target.checked);
+            if (e.target.checked) setError(null);
+          }}
+          className="mt-0.5 w-4 h-4 rounded border-green-500 text-green-500 focus:ring-green-500 cursor-pointer accent-green-500 shrink-0"
+        />
+        <span className="text-xs leading-relaxed" style={{ color: theme === "light" ? "#475569" : "#a3a3a3" }}>
+          I understand and agree with the{" "}
+          <button
+            type="button"
+            onClick={e => {
+              e.preventDefault();
+              setShowTerms(true);
+            }}
+            className={`underline font-semibold cursor-pointer ${theme === "light" ? "text-emerald-600 hover:text-emerald-700" : "text-green-400 hover:text-green-300"}`}
+          >
+            Terms &amp; Conditions
+          </button>
+          . Registration confirmation will be emailed to you.
+        </span>
+      </label>
+
+      <SubmitButton loading={loading} disabled={!termsAccepted}>
+        Register
       </SubmitButton>
       <p className="text-center text-xs" style={{ color: theme === "light" ? "#64748b" : "#6b7a6b" }}>
         Already have an account?{" "}
@@ -366,6 +317,8 @@ function RegisterForm({ onSwitch, step = 1, onStepChange, theme = "dark" }) {
           Log in
         </button>
       </p>
+
+      <TermsModal isOpen={showTerms} onClose={() => setShowTerms(false)} theme={theme} />
     </form>
   );
 }
@@ -513,7 +466,6 @@ function ResetPasswordForm({ token, onSwitch }) {
 // mode: "login" | "register" | "forgot" | "reset"
 export default function AuthScreen({ onAuthSuccess, initialMode = "login", theme }) {
   const [mode, setMode] = useState(initialMode);
-  const [registerStep, setRegisterStep] = useState(1);
   const [resetToken, setResetToken] = useState(null);
   const [notice, setNotice] = useState(null);
   const [showFooterTerms, setShowFooterTerms] = useState(false);
@@ -532,16 +484,11 @@ export default function AuthScreen({ onAuthSuccess, initialMode = "login", theme
   const handleSwitch = (nextMode, message = null) => {
     setNotice(message);
     setMode(nextMode);
-    setRegisterStep(1);
   };
-
-  const isTermsPage = mode === "register" && registerStep === 2;
 
   const titles = {
     login: ["Welcome back", "Log in to book grounds, umpires, and find your next match."],
-    register: isTermsPage
-      ? ["Terms & Conditions", "Review and accept the platform conditions below to complete registration."]
-      : ["Create your account", "Join MatchConnect to start booking and playing."],
+    register: ["Create your account", "Join MatchConnect to start booking and playing."],
     forgot: ["Reset your password", ""],
     reset: ["Set a new password", ""]
   };
@@ -550,7 +497,7 @@ export default function AuthScreen({ onAuthSuccess, initialMode = "login", theme
   return (
     <AuthThemeContext.Provider value={theme}>
       <div className="min-h-screen flex items-center justify-center px-4 py-8" style={{ backgroundColor: theme === "light" ? "#f8fafc" : "#0d0f0d" }}>
-        <div className={`w-full transition-all duration-300 ${isTermsPage ? "max-w-2xl" : "max-w-sm"}`}>
+        <div className="w-full max-w-sm">
           <div className="flex flex-col items-center mb-6">
             <div className="w-12 h-12 rounded-xl bg-[#16a34a] flex items-center justify-center mb-3 shadow-md">
               <span className="text-white font-black text-lg">MC</span>
@@ -559,26 +506,12 @@ export default function AuthScreen({ onAuthSuccess, initialMode = "login", theme
           </div>
 
           <div className="rounded-2xl p-6 sm:p-7 shadow-xl transition-all" style={{ backgroundColor: theme === "light" ? "#ffffff" : "#151715", border: `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}` }}>
-            <div className="flex items-center justify-between gap-2 mb-1">
-              <h1 className="text-lg font-bold" style={{ color: theme === "light" ? "#0f172a" : "#ffffff" }}>{title}</h1>
-              {isTermsPage && (
-                <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border shrink-0 ${theme === "light" ? "text-emerald-700 bg-emerald-50 border-emerald-300" : "text-green-400 bg-green-500/10 border-green-500/20"}`}>
-                  Step 2 of 2
-                </span>
-              )}
-            </div>
+            <h1 className="text-lg font-bold mb-1" style={{ color: theme === "light" ? "#0f172a" : "#ffffff" }}>{title}</h1>
             {subtitle && <p className="text-xs mb-5" style={{ color: theme === "light" ? "#64748b" : "#6b7a6b" }}>{subtitle}</p>}
             {mode !== "forgot" && mode !== "reset" && !subtitle && <div className="mb-5" />}
 
             {mode === "login" && <LoginForm onAuthSuccess={onAuthSuccess} onSwitch={handleSwitch} notice={notice} />}
-            {mode === "register" && (
-              <RegisterForm
-                onSwitch={handleSwitch}
-                step={registerStep}
-                onStepChange={setRegisterStep}
-                theme={theme}
-              />
-            )}
+            {mode === "register" && <RegisterForm onSwitch={handleSwitch} theme={theme} />}
             {mode === "forgot" && <ForgotPasswordForm onSwitch={handleSwitch} />}
             {mode === "reset" && <ResetPasswordForm token={resetToken} onSwitch={handleSwitch} />}
           </div>
