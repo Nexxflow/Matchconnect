@@ -4,6 +4,33 @@ const { notifyAllUsersExcept } = require("../services/notificationService");
 
 const BOOKING_LIMIT_PER_DAY = 2;
 
+// ─── Geocoding (OpenStreetMap Nominatim) ───────────────────────────────────
+// Turns a free-text area/address into lat/lng so grounds can be shown on the
+// "Grounds near you" map and sorted by distance. Best-effort: on any failure
+// (network, rate limit, no match) this just returns nulls and the ground is
+// still created/updated without coordinates.
+async function geocodeArea(area) {
+  const query = String(area || "").trim();
+  if (!query) return { latitude: null, longitude: null };
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=in&q=${encodeURIComponent(query)}`;
+    const response = await fetch(url, {
+      headers: { "User-Agent": "MatchConnect/1.0 (cricket ground booking app)" }
+    });
+    if (!response.ok) return { latitude: null, longitude: null };
+    const results = await response.json();
+    if (!Array.isArray(results) || results.length === 0) return { latitude: null, longitude: null };
+    const { lat, lon } = results[0];
+    const latitude = Number(lat);
+    const longitude = Number(lon);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return { latitude: null, longitude: null };
+    return { latitude, longitude };
+  } catch (err) {
+    console.error("Geocoding error:", err.message);
+    return { latitude: null, longitude: null };
+  }
+}
+
 async function getUserTeamProfile(userId) {
   const result = await pool.query(
     "SELECT team_name, village_name, team_year FROM users WHERE id = $1",
@@ -33,6 +60,8 @@ function normalizeGroundRow(row) {
     ...row,
     price_per_hour: row.price_per_hour != null ? Number(row.price_per_hour) : null,
     rating: row.rating != null ? Number(row.rating) : 0,
+    latitude: row.latitude != null ? Number(row.latitude) : null,
+    longitude: row.longitude != null ? Number(row.longitude) : null,
     booking_count_today: row.booking_count_today != null ? Number(row.booking_count_today) : 0,
     amenities: row.amenities ?? [],
     tags: row.tags ?? [],
@@ -149,9 +178,13 @@ const createGround = asyncHandler(async (req, res) => {
   const resolvedArea = area.trim();
   const resolvedMapsUrl = google_maps_url ? String(google_maps_url).trim() : null;
 
+  // Best-effort geocode of the area text so the ground shows up on the map
+  // and can be sorted by distance. Never blocks creation on failure.
+  const { latitude, longitude } = await geocodeArea(resolvedArea);
+
   const result = await pool.query(
-    `INSERT INTO grounds (name, area, price_per_hour, google_maps_url, posted_by_user_id, availability_mode, available_date, available_time)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO grounds (name, area, price_per_hour, google_maps_url, posted_by_user_id, availability_mode, available_date, available_time, latitude, longitude)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING *`,
     [
       name.trim(),
@@ -161,7 +194,9 @@ const createGround = asyncHandler(async (req, res) => {
       req.user.id,
       normalizedAvailabilityMode,
       normalizedAvailabilityMode === "scheduled" ? available_date : null,
-      normalizedAvailabilityMode === "scheduled" ? available_time : null
+      normalizedAvailabilityMode === "scheduled" ? available_time : null,
+      latitude,
+      longitude
     ]
   );
   const created = await pool.query(
@@ -187,7 +222,7 @@ const createGround = asyncHandler(async (req, res) => {
   );
   const groundObj = normalizeGroundRow(created.rows[0]);
 
-  console.log(`🏟️ [Ground Listed] Ground #${groundObj.id} ("${groundObj.name}") listed by User #${req.user.id}. Sending broadcast notification to other users...`);
+  console.log(`🏟️ [Ground Listed] Ground #${groundObj.id} ("${groundObj.name}") listed by User #${req.user.id}. Geocoded: ${latitude ?? "none"}, ${longitude ?? "none"}. Sending broadcast notification to other users...`);
 
   // Broadcast web notification to ALL other users
   notifyAllUsersExcept(
@@ -219,6 +254,20 @@ const updateGround = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Available date and time are required for scheduled availability" });
   }
 
+  const resolvedArea = area.trim();
+  const areaChanged = resolvedArea.toLowerCase() !== String(existing.rows[0].area || "").trim().toLowerCase();
+
+  // Only re-geocode if the area text actually changed, or the ground never
+  // had coordinates in the first place — avoids hammering Nominatim on
+  // every unrelated edit (price, availability, etc.).
+  let latitude = existing.rows[0].latitude;
+  let longitude = existing.rows[0].longitude;
+  if (areaChanged || latitude == null || longitude == null) {
+    const geocoded = await geocodeArea(resolvedArea);
+    latitude = geocoded.latitude;
+    longitude = geocoded.longitude;
+  }
+
   await pool.query(
     `UPDATE grounds
      SET name = $1,
@@ -227,16 +276,20 @@ const updateGround = asyncHandler(async (req, res) => {
          google_maps_url = $4,
          availability_mode = $5,
          available_date = $6,
-         available_time = $7
-     WHERE id = $8`,
+         available_time = $7,
+         latitude = $8,
+         longitude = $9
+     WHERE id = $10`,
     [
       name.trim(),
-      area.trim(),
+      resolvedArea,
       Number(price_per_hour),
       google_maps_url ? String(google_maps_url).trim() : null,
       normalizedAvailabilityMode,
       normalizedAvailabilityMode === "scheduled" ? available_date : null,
       normalizedAvailabilityMode === "scheduled" ? available_time : null,
+      latitude,
+      longitude,
       req.params.id
     ]
   );
@@ -286,4 +339,31 @@ const deleteGround = asyncHandler(async (req, res) => {
   res.json({ success: true });
 });
 
-module.exports = { listGrounds, getGround, getGroundBookings, createGround, updateGround, deleteGround };
+// POST /api/grounds/backfill-locations
+// One-time (re-runnable) maintenance endpoint: geocodes any existing ground
+// that's missing latitude/longitude, using its saved area text. Safe to call
+// multiple times — it only touches rows where latitude/longitude is null.
+// Nominatim's usage policy caps free requests at ~1/sec, so this runs
+// sequentially with a short delay between each ground rather than in parallel.
+const backfillGroundLocations = asyncHandler(async (req, res) => {
+  const missing = await pool.query(
+    "SELECT id, area FROM grounds WHERE (latitude IS NULL OR longitude IS NULL) AND area IS NOT NULL AND area <> ''"
+  );
+
+  const results = [];
+  for (const row of missing.rows) {
+    const { latitude, longitude } = await geocodeArea(row.area);
+    if (latitude != null && longitude != null) {
+      await pool.query("UPDATE grounds SET latitude = $1, longitude = $2 WHERE id = $3", [latitude, longitude, row.id]);
+      results.push({ id: row.id, area: row.area, latitude, longitude, status: "updated" });
+    } else {
+      results.push({ id: row.id, area: row.area, status: "no_match" });
+    }
+    // Respect Nominatim's rate limit (max 1 request/sec).
+    await new Promise(resolve => setTimeout(resolve, 1100));
+  }
+
+  res.json({ processed: results.length, results });
+});
+
+module.exports = { listGrounds, getGround, getGroundBookings, createGround, updateGround, deleteGround, backfillGroundLocations };
