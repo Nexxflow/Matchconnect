@@ -7,6 +7,7 @@ import { apiRequest } from "../../api";
 import { C, cn, Tag, GhostButton, normalizePhone, formatDateIST } from "../../utils/helpers.jsx";
 import { FORMATS, DEFAULT_OVERS } from "../../utils/constants";
 import TeamDetailsModal from "../TeamDetailsModal.jsx";
+import CalendarField from "../CalendarField.jsx";
 
 const challengePinIcon = L.divIcon({
   className: "",
@@ -52,121 +53,7 @@ function formatTimeDisplay(timeStr) {
   return `${hour12}:${minute} ${ampm}`;
 }
 
-function CalendarField({ value, onChange, theme }) {
-  const isLight = theme === "light" || (typeof document !== "undefined" && document.documentElement.classList.contains("light"));
-  const [open, setOpen] = useState(false);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const initialMonth = value ? new Date(value.split("-")[0], value.split("-")[1] - 1, 1) : new Date(today.getFullYear(), today.getMonth(), 1);
-  const [viewMonth, setViewMonth] = useState(initialMonth);
 
-  const firstOfMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
-  const startWeekday = firstOfMonth.getDay();
-  const daysInThisMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0).getDate();
-  const cells = [
-    ...Array.from({ length: startWeekday }, () => null),
-    ...Array.from({ length: daysInThisMonth }, (_, i) => i + 1)
-  ];
-
-  const selectDay = day => {
-    const picked = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day);
-    onChange(toISODate(picked));
-    setOpen(false);
-  };
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        className="w-full rounded-xl px-3 py-2 text-sm text-left focus:outline-none flex items-center justify-between transition-colors shadow-sm"
-        style={{
-          backgroundColor: isLight ? "#ffffff" : "#111",
-          border: `1px solid ${open ? "#16a34a" : (isLight ? "#e2e8f0" : "#2a2a2a")}`,
-          color: value ? (isLight ? "#0f172a" : "#fff") : (isLight ? "#94a3b8" : "#4a5a4a")
-        }}
-      >
-        <span className="truncate">{value ? formatDateDisplay(value) : "Select a date"}</span>
-        <Calendar className="w-3.5 h-3.5 shrink-0" style={{ color: isLight ? "#64748b" : "#6b7a6b" }} />
-      </button>
-
-      {open && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4" style={{ backgroundColor: isLight ? "rgba(15, 23, 42, 0.45)" : "rgba(0,0,0,0.5)" }} onClick={() => setOpen(false)}>
-          <div
-            className="rounded-2xl p-4 w-72 shadow-2xl"
-            style={{
-              backgroundColor: isLight ? "#ffffff" : "#151715",
-              border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-              boxShadow: isLight ? "0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)" : "0 20px 40px rgba(0,0,0,0.8)"
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <button
-                type="button"
-                onClick={() => setViewMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
-                className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
-                style={{ color: isLight ? "#0f172a" : "#c8ccc8" }}
-              >
-                ‹
-              </button>
-              <span className="text-sm font-bold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
-                {MONTH_NAMES[viewMonth.getMonth()]} {viewMonth.getFullYear()}
-              </span>
-              <button
-                type="button"
-                onClick={() => setViewMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
-                className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
-                style={{ color: isLight ? "#0f172a" : "#c8ccc8" }}
-              >
-                ›
-              </button>
-            </div>
-            <div className="grid grid-cols-7 gap-1 mb-1">
-              {WEEKDAY_LABELS.map((w, i) => (
-                <div key={i} className="text-center text-xs font-semibold py-1" style={{ color: isLight ? "#64748b" : "#4a5a4a" }}>
-                  {w}
-                </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7 gap-1">
-              {cells.map((day, i) => {
-                if (day === null) return <div key={i} />;
-                const cellDate = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day);
-                const isPast = cellDate < today;
-                const isSelected = value === toISODate(cellDate);
-                const isToday = toISODate(cellDate) === toISODate(today);
-                return (
-                  <button
-                    key={i}
-                    type="button"
-                    disabled={isPast}
-                    onClick={() => selectDay(day)}
-                    className="aspect-square rounded-lg text-xs font-medium transition-colors"
-                    style={{
-                      backgroundColor: isSelected ? "#16a34a" : "transparent",
-                      color: isPast
-                        ? (isLight ? "#cbd5e1" : "#2a2a2a")
-                        : isSelected
-                        ? "#ffffff"
-                        : isToday
-                        ? (isLight ? "#16a34a" : "#22c55e")
-                        : (isLight ? "#0f172a" : "#c8ccc8"),
-                      border: isToday && !isSelected ? (isLight ? "1px solid #16a34a" : "1px solid #22c55e") : "1px solid transparent",
-                      cursor: isPast ? "not-allowed" : "pointer"
-                    }}
-                  >
-                    {day}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function TimeField({ value, onChange, theme }) {
   const isLight = theme === "light" || (typeof document !== "undefined" && document.documentElement.classList.contains("light"));
@@ -1695,7 +1582,10 @@ export default function FindMatchTab({
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <DateCalendarPicker value={dateFilter} onChange={setDateFilter} theme={theme} />
+              <div>
+                <label className="text-xs mb-1.5 block font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Date</label>
+                <CalendarField value={dateFilter} onChange={setDateFilter} theme={theme} placeholder="Any Date" clearable={true} />
+              </div>
               <TimePicker value={timeFilter} onChange={setTimeFilter} theme={theme} />
             </div>
           </div>

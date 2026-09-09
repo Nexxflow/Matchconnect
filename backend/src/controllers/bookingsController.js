@@ -59,8 +59,14 @@ const isRazorpayConfigured =
 const createOrder = asyncHandler(async (req, res) => {
   const { booking_type, ref_id, booking_date, time_slot, team_id } = req.body;
 
-  if (!["ground", "umpire"].includes(booking_type) || !ref_id || !booking_date || !time_slot) {
-    return res.status(400).json({ error: "booking_type, ref_id, booking_date and time_slot are required" });
+  if (!["ground", "umpire"].includes(booking_type) || !ref_id || !booking_date) {
+    return res.status(400).json({ error: "booking_type, ref_id and booking_date are required" });
+  }
+
+  // Umpires are booked by full day; grounds require a specific time slot
+  const resolvedSlot = booking_type === "umpire" ? (time_slot || "Full Day") : time_slot;
+  if (booking_type === "ground" && !resolvedSlot) {
+    return res.status(400).json({ error: "time_slot is required for ground bookings" });
   }
 
   const table = booking_type === "ground" ? "grounds" : "umpires";
@@ -75,6 +81,21 @@ const createOrder = asyncHandler(async (req, res) => {
     return res.status(404).json({ error: `${booking_type} not found` });
   }
   const item = itemResult.rows[0];
+
+  if (booking_type === "umpire") {
+    // Umpires are booked for the whole day. Check if already booked for that date.
+    const umpireBooked = await pool.query(
+      `SELECT 1 FROM bookings
+       WHERE umpire_id = $1
+         AND booking_date = $2
+         AND payment_status IN ('pending', 'paid')
+       LIMIT 1`,
+      [ref_id, booking_date]
+    );
+    if (umpireBooked.rows.length > 0) {
+      return res.status(409).json({ error: "This umpire is already booked for this date" });
+    }
+  }
 
   if (booking_type === "ground") {
     const ownerProfile = await getTeamProfile(item.posted_by_user_id);
@@ -120,7 +141,7 @@ const createOrder = asyncHandler(async (req, res) => {
          AND time_slot = $3
          AND payment_status IN ('pending', 'paid')
        LIMIT 1`,
-      [ref_id, booking_date, time_slot]
+      [ref_id, booking_date, resolvedSlot]
     );
     if (slotTaken.rows.length > 0) {
       return res.status(409).json({ error: "That time slot is already booked" });
@@ -155,7 +176,7 @@ const createOrder = asyncHandler(async (req, res) => {
       booking_type === "ground" ? ref_id : null,
       booking_type === "umpire" ? ref_id : null,
       booking_date,
-      time_slot,
+      resolvedSlot,
       baseAmount,
       platformFee,
       totalAmount
@@ -255,16 +276,17 @@ const cancelBooking = asyncHandler(async (req, res) => {
   if (!booking) return res.status(404).json({ error: "Booking not found" });
 
   const teamIds = await getTeamMemberIds(req.user.id);
+  const teamIdsStr = teamIds.map(String);
   const allowedToCancel =
     String(booking.user_id) === String(req.user.id) ||
-    (booking.booking_type === "ground" && teamIds.includes(booking.user_id));
+    teamIdsStr.includes(String(booking.user_id));
 
   if (!allowedToCancel) {
-    return res.status(403).json({ error: "You can only cancel your own team bookings" });
+    return res.status(403).json({ error: "You can only cancel your own bookings" });
   }
 
   await pool.query("DELETE FROM bookings WHERE id = $1", [req.params.id]);
-  res.json({ success: true });
+  res.json({ success: true, id: req.params.id, umpire_id: booking.umpire_id, booking_date: booking.booking_date });
 });
 
 module.exports = { createOrder, verifyPayment, myBookings, cancelBooking };

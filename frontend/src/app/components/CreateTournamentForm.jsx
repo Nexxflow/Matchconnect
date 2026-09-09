@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, Trophy, Users, Phone, DollarSign, FileText, Loader2, AlertCircle, Trash2 } from "lucide-react";
 import { apiRequest } from "../api"; // same helper App.jsx already uses
+import CalendarField from "./CalendarField.jsx";
 
 function cn(...classes) {
   return classes.filter(Boolean).join(" ");
@@ -271,11 +272,12 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
               </div>
               <div>
                 <label className={labelClass}>Start date (optional)</label>
-                <input
-                  type="date"
-                  className={inputClass}
+                <CalendarField
                   value={form.startDate}
-                  onChange={(e) => update("startDate", e.target.value)}
+                  onChange={(v) => update("startDate", v)}
+                  theme={theme}
+                  placeholder="Select start date"
+                  clearable={true}
                 />
               </div>
             </div>

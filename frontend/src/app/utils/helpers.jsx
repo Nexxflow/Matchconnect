@@ -97,6 +97,7 @@ export function transformUmpire(u, i = 0) {
     exp: `${u.experience} yrs`,
     price: `₹${Number(u.fee_per_match)}/match`,
     avail: u.available,
+    bookedDates: Array.isArray(u.booked_dates) ? u.booked_dates : [],
     grad: UMPIRE_GRADIENTS[i % UMPIRE_GRADIENTS.length]
   };
 }
@@ -105,10 +106,14 @@ export function transformBooking(b) {
   return {
     id: b.id,
     type: b.booking_type,
-    name: b.item_name || b.ground_name || b.umpire_name || "Booking",
+    name: b.item_name || b.ground_name || b.umpire_name || (b.booking_type === "umpire" ? "Umpire Booking" : "Ground Booking"),
     date: b.booking_date ? formatDateIST(b.booking_date) : "",
-    time: b.time_slot || "",
-    amount: b.amount || b.total_price || 0
+    rawDate: b.booking_date ? String(b.booking_date).slice(0, 10) : "",
+    time: b.booking_type === "umpire" ? (b.time_slot || "Full Day") : (b.time_slot || ""),
+    amount: b.amount || b.total_amount || b.total_price || 0,
+    umpire_id: b.umpire_id,
+    ground_id: b.ground_id,
+    payment_status: b.payment_status
   };
 }
 

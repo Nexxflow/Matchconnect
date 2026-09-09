@@ -1,18 +1,21 @@
 import React, { useState } from "react";
-import { X, CalendarCheck, CreditCard, CheckCircle } from "lucide-react";
+import { X, CalendarCheck, CreditCard, CheckCircle, ShieldCheck } from "lucide-react";
 import { apiRequest } from "../api";
-import { GhostButton, getNext7Days } from "../utils/helpers.jsx";
+import { GhostButton } from "../utils/helpers.jsx";
 import { TIME_SLOTS } from "../utils/constants";
+import CalendarField, { formatDateDisplay } from "./CalendarField.jsx";
 
-export default function BookingModal({ item, type, token, onClose, onConfirm, theme = "dark" }) {
+export default function BookingModal({ item, type, token, onClose, onConfirm, initialDate = "", theme = "dark" }) {
   const [step, setStep] = useState(1); // 1: date/time, 2: review/payment, 3: success
-  const [selectedDay, setSelectedDay] = useState(0);
-  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(initialDate || "");
+  const [selectedSlot, setSelectedSlot] = useState(type === "umpire" ? "Full Day" : null);
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState(null);
-  const days = getNext7Days();
 
   if (!item) return null;
+
+  const isUmpire = type === "umpire";
+  const bookedDates = item.bookedDates || item.booked_dates || [];
 
   const priceNum = Number(String(item.price).replace(/[^\d]/g, "")) || 0;
   const platformFee = Math.round(priceNum * 0.05);
@@ -39,13 +42,27 @@ export default function BookingModal({ item, type, token, onClose, onConfirm, th
       setPayError("This item isn't loaded from the backend yet — refresh and try again.");
       return;
     }
+    if (!selectedDate) {
+      setPayError("Please select a date first.");
+      return;
+    }
+    if (!isUmpire && !selectedSlot) {
+      setPayError("Please select a time slot.");
+      return;
+    }
+
     setPaying(true);
     setPayError(null);
     try {
       const res = await apiRequest("/bookings/create-order", {
         method: "POST",
         token,
-        body: { booking_type: type, ref_id: item.id, booking_date: days[selectedDay].iso, time_slot: selectedSlot }
+        body: {
+          booking_type: type,
+          ref_id: item.id,
+          booking_date: selectedDate,
+          time_slot: isUmpire ? "Full Day" : selectedSlot
+        }
       });
 
       if (res.test_mode) {
@@ -101,13 +118,16 @@ export default function BookingModal({ item, type, token, onClose, onConfirm, th
     }
   };
 
+  const isLight = theme === "light";
+  const canContinueStep1 = selectedDate && (isUmpire || selectedSlot);
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ backgroundColor: theme === "light" ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)" }} onClick={onClose}>
-      <div className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-4 sm:p-5 max-h-[88vh] overflow-y-auto pb-[max(1.25rem,env(safe-area-inset-bottom))]" style={{ backgroundColor: theme === "light" ? "#ffffff" : "#151715", border: `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}` }} onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)" }} onClick={onClose}>
+      <div className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-4 sm:p-5 max-h-[88vh] overflow-y-auto pb-[max(1.25rem,env(safe-area-inset-bottom))]" style={{ backgroundColor: isLight ? "#ffffff" : "#151715", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}` }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <span className="text-xs font-semibold text-green-500 uppercase tracking-wide">{type === "ground" ? "Book Ground" : "Book Official"}</span>
-          <button onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center hover:opacity-80" style={{ backgroundColor: theme === "light" ? "#f1f5f9" : "#222" }}>
-            <X className="w-3.5 h-3.5" style={{ color: theme === "light" ? "#475569" : "#c8ccc8" }} />
+          <button onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center hover:opacity-80" style={{ backgroundColor: isLight ? "#f1f5f9" : "#222" }}>
+            <X className="w-3.5 h-3.5" style={{ color: isLight ? "#475569" : "#c8ccc8" }} />
           </button>
         </div>
 
@@ -116,54 +136,71 @@ export default function BookingModal({ item, type, token, onClose, onConfirm, th
             {type === "ground" ? "🏟" : "🧑‍⚖️"}
           </div>
           <div className="min-w-0">
-            <div className="font-semibold text-sm truncate" style={{ color: theme === "light" ? "#0f172a" : "#ffffff" }}>{item.name}</div>
-            <div className="text-xs" style={{ color: theme === "light" ? "#64748b" : "#6b7a6b" }}>{type === "ground" ? item.area : `${item.role} · ${item.exp}`}</div>
+            <div className="font-semibold text-sm truncate" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>{item.name}</div>
+            <div className="text-xs" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>{type === "ground" ? item.area : `${item.role} · ${item.exp}`}</div>
           </div>
         </div>
 
         {step === 1 && (
           <>
             <div className="mb-4">
-              <label className="text-xs mb-2 block font-medium" style={{ color: theme === "light" ? "#475569" : "#6b7a6b" }}>Select Date</label>
-              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-                {days.map((d, i) => (
-                  <button key={i} onClick={() => setSelectedDay(i)} className="shrink-0 px-3 py-2 rounded-xl text-center transition-colors" style={{
-                    backgroundColor: selectedDay === i ? "rgba(34,197,94,0.15)" : (theme === "light" ? "#f8fafc" : "#1a1a1a"),
-                    border: selectedDay === i ? "1px solid #22c55e" : `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}`
-                  }}>
-                    <div className="text-xs font-semibold" style={{ color: selectedDay === i ? "#16a34a" : (theme === "light" ? "#334155" : "#c8ccc8") }}>{d.label}</div>
-                    <div className="text-xs mt-0.5" style={{ color: theme === "light" ? "#64748b" : "#6b7a6b" }}>{d.date}</div>
-                  </button>
-                ))}
-              </div>
+              <label className="text-xs mb-1.5 block font-medium" style={{ color: isLight ? "#475569" : "#6b7a6b" }}>
+                {isUmpire ? "Match Date (Full Day Booking)" : "Match Date"}
+              </label>
+              <CalendarField
+                value={selectedDate}
+                onChange={setSelectedDate}
+                theme={theme}
+                placeholder="Select match date"
+                disabledDates={isUmpire ? bookedDates : []}
+              />
+              {isUmpire && (
+                <div
+                  className="mt-2.5 p-2.5 rounded-xl text-xs flex items-start gap-2"
+                  style={{
+                    backgroundColor: isLight ? "#f0fdf4" : "rgba(34,197,94,0.08)",
+                    border: isLight ? "1px solid #bbf7d0" : "1px solid rgba(34,197,94,0.2)",
+                    color: isLight ? "#166534" : "#86efac"
+                  }}
+                >
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-green-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Whole Day Booking:</span> Umpires are booked for the entire match day. Once booked, this date is locked and cannot be booked by any other user until cancelled.
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="mb-5">
-              <label className="text-xs mb-2 block font-medium" style={{ color: theme === "light" ? "#475569" : "#6b7a6b" }}>Select Time Slot</label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {TIME_SLOTS.map(slot => (
-                  <button key={slot} onClick={() => setSelectedSlot(slot)} className="py-2.5 sm:py-2 rounded-xl text-xs font-medium transition-colors text-center" style={{
-                    backgroundColor: selectedSlot === slot ? "rgba(34,197,94,0.15)" : (theme === "light" ? "#f8fafc" : "#1a1a1a"),
-                    border: selectedSlot === slot ? "1px solid #22c55e" : `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}`,
-                    color: selectedSlot === slot ? "#16a34a" : (theme === "light" ? "#334155" : "#c8ccc8")
-                  }}>
-                    {slot}
-                  </button>
-                ))}
+
+            {!isUmpire && (
+              <div className="mb-5">
+                <label className="text-xs mb-2 block font-medium" style={{ color: isLight ? "#475569" : "#6b7a6b" }}>Select Time Slot</label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {TIME_SLOTS.map(slot => (
+                    <button key={slot} onClick={() => setSelectedSlot(slot)} className="py-2.5 sm:py-2 rounded-xl text-xs font-medium transition-colors text-center" style={{
+                      backgroundColor: selectedSlot === slot ? "rgba(34,197,94,0.15)" : (isLight ? "#f8fafc" : "#1a1a1a"),
+                      border: selectedSlot === slot ? "1px solid #22c55e" : `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
+                      color: selectedSlot === slot ? "#16a34a" : (isLight ? "#334155" : "#c8ccc8")
+                    }}>
+                      {slot}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
+
             <button
-              disabled={!selectedSlot}
+              disabled={!canContinueStep1}
               onClick={() => setStep(2)}
               className="w-full py-3 rounded-xl font-bold text-sm transition-all shadow-sm"
-              style={selectedSlot
+              style={canContinueStep1
                 ? {
-                    backgroundColor: theme === "light" ? "#16a34a" : "#22c55e",
-                    color: theme === "light" ? "#ffffff" : "#000",
+                    backgroundColor: isLight ? "#16a34a" : "#22c55e",
+                    color: isLight ? "#ffffff" : "#000",
                     cursor: "pointer"
                   }
                 : {
-                    backgroundColor: theme === "light" ? "#f1f5f9" : "#1e211e",
-                    color: theme === "light" ? "#94a3b8" : "#3a3a3a",
+                    backgroundColor: isLight ? "#f1f5f9" : "#1e211e",
+                    color: isLight ? "#94a3b8" : "#3a3a3a",
                     cursor: "not-allowed"
                   }}
             >
@@ -174,34 +211,36 @@ export default function BookingModal({ item, type, token, onClose, onConfirm, th
 
         {step === 2 && (
           <>
-            <div className="rounded-xl p-3 mb-4 flex items-center gap-2" style={{ backgroundColor: theme === "light" ? "#f8fafc" : "#1a1a1a", border: `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}` }}>
+            <div className="rounded-xl p-3 mb-4 flex items-center gap-2" style={{ backgroundColor: isLight ? "#f8fafc" : "#1a1a1a", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}` }}>
               <CalendarCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span className="text-xs font-medium" style={{ color: theme === "light" ? "#334155" : "#c8ccc8" }}>{days[selectedDay].label}, {days[selectedDay].date} · {selectedSlot}</span>
+              <span className="text-xs font-medium" style={{ color: isLight ? "#334155" : "#c8ccc8" }}>
+                {formatDateDisplay(selectedDate)} · {isUmpire ? "Full Day Official" : selectedSlot}
+              </span>
             </div>
-            <div className="rounded-xl p-4 mb-5 space-y-2" style={{ backgroundColor: theme === "light" ? "#f8fafc" : "#1a1a1a", border: `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}` }}>
+            <div className="rounded-xl p-4 mb-5 space-y-2" style={{ backgroundColor: isLight ? "#f8fafc" : "#1a1a1a", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}` }}>
               <div className="flex items-center justify-between text-xs">
-                <span style={{ color: theme === "light" ? "#64748b" : "#6b7a6b" }}>{type === "ground" ? "Ground charges" : "Booking fee"}</span>
-                <span className="font-mono font-semibold" style={{ color: theme === "light" ? "#0f172a" : "#ffffff" }}>₹{priceNum.toLocaleString()}</span>
+                <span style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>{type === "ground" ? "Ground charges" : "Official fee (Full Day)"}</span>
+                <span className="font-mono font-semibold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>₹{priceNum.toLocaleString()}</span>
               </div>
               <div className="flex items-center justify-between text-xs">
-                <span style={{ color: theme === "light" ? "#64748b" : "#6b7a6b" }}>Platform fee (5%)</span>
-                <span className="font-mono font-semibold" style={{ color: theme === "light" ? "#0f172a" : "#ffffff" }}>₹{platformFee.toLocaleString()}</span>
+                <span style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Platform fee (5%)</span>
+                <span className="font-mono font-semibold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>₹{platformFee.toLocaleString()}</span>
               </div>
-              <div className="pt-2 flex items-center justify-between text-sm font-bold" style={{ borderTop: `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}` }}>
-                <span style={{ color: theme === "light" ? "#0f172a" : "#ffffff" }}>Total Payable</span>
-                <span className="font-mono font-black" style={{ color: theme === "light" ? "#16a34a" : "#22c55e" }}>₹{total.toLocaleString()}</span>
+              <div className="pt-2 flex items-center justify-between text-sm font-bold" style={{ borderTop: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}` }}>
+                <span style={{ color: isLight ? "#0f172a" : "#ffffff" }}>Total Payable</span>
+                <span className="font-mono font-black" style={{ color: isLight ? "#16a34a" : "#22c55e" }}>₹{total.toLocaleString()}</span>
               </div>
             </div>
             {payError && <div className="text-xs text-red-500 font-medium mb-3 rounded-lg p-2" style={{ backgroundColor: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}>{payError}</div>}
             <div className="flex gap-2">
-              <GhostButton onClick={() => setStep(1)} disabled={paying} className="flex-1 text-center">Back</GhostButton>
+              <GhostButton onClick={() => setStep(1)} disabled={paying} theme={theme} className="flex-1 text-center">Back</GhostButton>
               <button
                 disabled={paying}
                 onClick={handleConfirmPayment}
                 className="flex-[2] py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
                 style={{
-                  backgroundColor: theme === "light" ? "#16a34a" : "#22c55e",
-                  color: theme === "light" ? "#ffffff" : "#000",
+                  backgroundColor: isLight ? "#16a34a" : "#22c55e",
+                  color: isLight ? "#ffffff" : "#000",
                   opacity: paying ? 0.6 : 1,
                   cursor: paying ? "not-allowed" : "pointer"
                 }}
@@ -217,14 +256,16 @@ export default function BookingModal({ item, type, token, onClose, onConfirm, th
             <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: "rgba(34,197,94,0.15)", border: "2px solid #22c55e" }}>
               <CheckCircle className="w-8 h-8 text-emerald-600" />
             </div>
-            <div className="font-bold text-base mb-1" style={{ color: theme === "light" ? "#0f172a" : "#ffffff" }}>Booking Confirmed!</div>
-            <p className="text-xs mb-5" style={{ color: theme === "light" ? "#64748b" : "#6b7a6b" }}>{item.name} · {days[selectedDay].label} {selectedSlot}. Check "My Bookings" in My Team tab.</p>
+            <div className="font-bold text-base mb-1" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>Booking Confirmed!</div>
+            <p className="text-xs mb-5" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
+              {item.name} · {formatDateDisplay(selectedDate)} ({isUmpire ? "Full Day" : selectedSlot}). Check "My Bookings" in My Team tab.
+            </p>
             <button
               onClick={onClose}
               className="w-full py-3 rounded-xl font-bold text-sm transition-all shadow-sm cursor-pointer"
               style={{
-                backgroundColor: theme === "light" ? "#16a34a" : "#22c55e",
-                color: theme === "light" ? "#ffffff" : "#000"
+                backgroundColor: isLight ? "#16a34a" : "#22c55e",
+                color: isLight ? "#ffffff" : "#000"
               }}
             >
               Done

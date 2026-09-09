@@ -7,9 +7,17 @@ const VALID_ROLES = ["Umpire", "Scorer", "Umpire + Scorer"];
 // GET /api/umpires
 const listUmpires = asyncHandler(async (req, res) => {
   const result = await pool.query(`
-    SELECT *
-    FROM umpires
-    ORDER BY created_at DESC
+    SELECT u.*,
+      COALESCE(
+        (
+          SELECT json_agg(to_char(b.booking_date, 'YYYY-MM-DD'))
+          FROM bookings b
+          WHERE b.umpire_id = u.id AND b.payment_status IN ('pending', 'paid')
+        ),
+        '[]'::json
+      ) AS booked_dates
+    FROM umpires u
+    ORDER BY u.created_at DESC
   `);
   res.json({
     umpires: result.rows,
@@ -18,10 +26,19 @@ const listUmpires = asyncHandler(async (req, res) => {
 
 // GET /api/umpires/:id
 const getUmpire = asyncHandler(async (req, res) => {
-  const result = await pool.query(
-    "SELECT * FROM umpires WHERE id=$1",
-    [req.params.id]
-  );
+  const result = await pool.query(`
+    SELECT u.*,
+      COALESCE(
+        (
+          SELECT json_agg(to_char(b.booking_date, 'YYYY-MM-DD'))
+          FROM bookings b
+          WHERE b.umpire_id = u.id AND b.payment_status IN ('pending', 'paid')
+        ),
+        '[]'::json
+      ) AS booked_dates
+    FROM umpires u
+    WHERE u.id=$1
+  `, [req.params.id]);
   if (result.rows.length === 0) {
     return res.status(404).json({
       error: "Umpire not found",

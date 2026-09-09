@@ -103,6 +103,7 @@ export default function MyTeamTab({
   onCancelChallenge,
   onUnregisterTournament,
   onDeleteChallenge,
+  onCancelBooking,
   cancelling,
   deleting,
   onOpenChat,
@@ -122,6 +123,20 @@ export default function MyTeamTab({
   const [viewSelfTeam, setViewSelfTeam] = useState(false);
   const [squadLoading, setSquadLoading] = useState(true);
   const [squadError, setSquadError] = useState(null);
+  const [cancellingBookingId, setCancellingBookingId] = useState(null);
+
+  const handleCancelBooking = async (booking) => {
+    if (!window.confirm(`Are you sure you want to cancel this booking for ${booking.name}?`)) return;
+    setCancellingBookingId(booking.id);
+    try {
+      await apiRequest(`/bookings/${booking.id}`, { method: "DELETE", token });
+      onCancelBooking?.(booking);
+    } catch (err) {
+      alert(err.message || "Failed to cancel booking");
+    } finally {
+      setCancellingBookingId(null);
+    }
+  };
 
   const effectiveTeam = team || (user?.team_name ? {
     team_name: user.team_name,
@@ -528,7 +543,22 @@ export default function MyTeamTab({
                     <div className="text-xs" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>{b.date} · {b.time}</div>
                   </div>
                 </div>
-                <div className={cn("text-sm font-mono font-bold shrink-0", isLight ? "text-emerald-700" : "text-green-400")}>₹{b.amount}</div>
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <div className={cn("text-sm font-mono font-bold", isLight ? "text-emerald-700" : "text-green-400")}>₹{b.amount}</div>
+                  <button
+                    type="button"
+                    disabled={cancellingBookingId === b.id}
+                    onClick={() => handleCancelBooking(b)}
+                    className={cn(
+                      "px-2.5 py-1 rounded-xl text-xs font-semibold transition-colors",
+                      isLight
+                        ? "bg-red-50 text-red-600 hover:bg-red-100 border border-red-200"
+                        : "bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20"
+                    )}
+                  >
+                    {cancellingBookingId === b.id ? "Cancelling..." : "Cancel"}
+                  </button>
+                </div>
               </div>
             ))}
           </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Plus, X, ChevronDown, Pencil, Trash2 } from "lucide-react";
 import { apiRequest } from "../../api";
 import { C, cn, normalizePhone } from "../../utils/helpers.jsx";
+import CalendarField, { formatDateDisplay } from "../CalendarField.jsx";
 
 function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpire = null, onClose, theme = "dark" }) {
   const editing = !!initialUmpire;
@@ -265,6 +266,7 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
   const isLight = theme === "light";
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("All");
+  const [dateFilter, setDateFilter] = useState("");
   const [sortBy, setSortBy] = useState("default");
   const [editingUmpire, setEditingUmpire] = useState(null);
 
@@ -416,6 +418,16 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
               )}
             />
 
+            <div className="w-full sm:w-48">
+              <CalendarField
+                value={dateFilter}
+                onChange={setDateFilter}
+                theme={theme}
+                placeholder="Filter by date"
+                clearable={true}
+              />
+            </div>
+
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
@@ -468,6 +480,9 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
               {filtered.map((u) => {
                 const role = u.role || "Umpire";
                 const rc = roleColor(role);
+                const bookedDates = u.bookedDates || u.booked_dates || [];
+                const isBookedForDate = dateFilter && bookedDates.includes(dateFilter);
+                const isAvailable = u.avail && !isBookedForDate;
                 return (
                   <div
                     key={u.id ?? u.name}
@@ -493,13 +508,18 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                           <span
                             className={cn(
                               "px-2 py-0.5 rounded-full text-[11px] font-semibold shrink-0 border",
-                              u.avail
+                              isAvailable
                                 ? (isLight ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-green-900/60 text-green-300 border-green-700/50")
                                 : (isLight ? "bg-red-50 text-red-700 border-red-200" : "bg-red-900/60 text-red-300 border-red-700/50")
                             )}
                           >
-                            {u.avail ? "Available" : "Busy"}
+                            {isAvailable ? "Available" : isBookedForDate ? "Booked" : "Busy"}
                           </span>
+                          {isBookedForDate && (
+                            <span className="text-[11px] font-medium text-red-500">
+                              (Booked on {formatDateDisplay(dateFilter)})
+                            </span>
+                          )}
                         </div>
                         <div className={cn("sm:hidden text-xs mt-1 flex items-center gap-3", isLight ? "text-slate-500" : "text-gray-400")}>
                           <span>📞 {u.mobile}</span>
@@ -564,16 +584,16 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                           </>
                         )}
                         <button
-                          disabled={!u.avail}
-                          onClick={() => u.avail && onBook(u)}
+                          disabled={!isAvailable}
+                          onClick={() => isAvailable && onBook(u, dateFilter)}
                           className={cn(
                             "px-4 py-1.5 rounded-xl text-xs font-bold transition-all",
                             isLight
-                              ? (u.avail ? "bg-[#16a34a] text-white hover:bg-[#15803d] shadow-sm" : "bg-slate-100 text-slate-400 cursor-not-allowed")
-                              : (u.avail ? "bg-green-500 text-black hover:bg-green-400" : "bg-[#252525] text-gray-600 cursor-not-allowed")
+                              ? (isAvailable ? "bg-[#16a34a] text-white hover:bg-[#15803d] shadow-sm" : "bg-slate-100 text-slate-400 cursor-not-allowed")
+                              : (isAvailable ? "bg-green-500 text-black hover:bg-green-400" : "bg-[#252525] text-gray-600 cursor-not-allowed")
                           )}
                         >
-                          {u.avail ? "Book" : "Busy"}
+                          {isAvailable ? "Book" : "Busy"}
                         </button>
                       </div>
                     </div>

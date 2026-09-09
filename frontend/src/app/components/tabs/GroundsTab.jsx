@@ -6,6 +6,7 @@ import "leaflet/dist/leaflet.css";
 import { apiRequest } from "../../api";
 import { C, cn, Tag, GhostButton, buildGroundMapsEmbedUrl, buildGroundMapsLink } from "../../utils/helpers.jsx";
 import { GROUNDS, TIME_SLOTS } from "../../utils/constants";
+import CalendarField from "../CalendarField.jsx";
 
 function GroundsMap({ grounds, canBookGround, displayPrice, displayLocation }) {
   const withLocation = grounds.filter(g => g.latitude != null && g.longitude != null);
@@ -286,12 +287,12 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
           <>
             <div>
               <label className="text-xs mb-1 block font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Available date</label>
-              <input
-                type="date"
+              <CalendarField
                 value={form.available_date}
-                onChange={e => update("available_date", e.target.value)}
-                className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none"
-                style={{ backgroundColor: isLight ? "#f8fafc" : "#111", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`, color: isLight ? "#0f172a" : "#fff" }}
+                onChange={v => update("available_date", v)}
+                theme={theme}
+                placeholder="Select available date"
+                clearable={true}
               />
             </div>
             <div>

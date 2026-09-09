@@ -3,6 +3,7 @@ import { Award, MapPin, CalendarDays, Users, DollarSign, Phone, Trophy, X, Penci
 import { apiRequest } from "../../api";
 import CreateTournamentForm from "../CreateTournamentForm";
 import { C, cn, Tag, GhostButton } from "../../utils/helpers.jsx";
+import CalendarField from "../CalendarField.jsx";
 
 const STATUS_META = {
   registering: { label: "Registering", color: "green" },
@@ -453,12 +454,13 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
               />
             </div>
             <div>
-              <label className="block mb-1 font-semibold" style={labelStyle}>Match Date & Time</label>
-              <input
-                type="datetime-local"
-                value={matchDate}
-                onChange={(e) => setMatchDate(e.target.value)}
-                className={fieldClass}
+              <label className="block mb-1 font-semibold" style={labelStyle}>Match Date</label>
+              <CalendarField
+                value={matchDate ? matchDate.slice(0, 10) : ""}
+                onChange={(v) => setMatchDate(v)}
+                theme={theme}
+                placeholder="Select match date"
+                clearable={true}
               />
             </div>
           </div>

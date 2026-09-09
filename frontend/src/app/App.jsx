@@ -171,8 +171,23 @@ export default function App() {
     }
   };
 
+  const refreshUmpires = async () => {
+    try {
+      const res = await apiRequest("/umpires");
+      setUmpires(res.umpires.map(transformUmpire));
+    } catch (err) {
+      console.warn("Could not refresh umpires:", err.message);
+    }
+  };
+
   const handleBookingConfirm = booking => {
     refreshBookings(auth.token);
+    refreshUmpires();
+  };
+
+  const handleBookingCancelled = booking => {
+    refreshBookings(auth.token);
+    refreshUmpires();
   };
 
   const loadAppData = async (token, user) => {
@@ -812,7 +827,7 @@ export default function App() {
         onCreated={handleUmpireCreated}
         onUpdated={handleUmpireUpdated}
         onDeleted={handleUmpireDeleted}
-        onBook={u => setBookingModal({ type: "umpire", item: u })}
+        onBook={(u, date) => setBookingModal({ type: "umpire", item: u, date })}
         theme={theme}
       />
     ),
@@ -844,6 +859,7 @@ export default function App() {
         bookings={bookings}
         onCancelChallenge={handleCancelAcceptedChallenge}
         onUnregisterTournament={handleUnregisterTournament}
+        onCancelBooking={handleBookingCancelled}
         cancelling={cancellingChallenge}
         onOpenChat={setChatChallenge}
         challenges={challenges}
@@ -958,6 +974,7 @@ export default function App() {
         <BookingModal
           type={bookingModal.type}
           item={bookingModal.item}
+          initialDate={bookingModal.date || ""}
           token={auth.token}
           onClose={() => setBookingModal(null)}
           onConfirm={handleBookingConfirm}
