@@ -13,7 +13,15 @@ const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
 // `myTeamId` is always empty, which is what caused teammates like D to fall
 // through to name-matching on every single tournament request.
 const PUBLIC_USER_COLUMNS =
-  "id, name, email, phone, team_id, team_name, village_name, team_year, created_at";
+  "id, name, email, phone, team_id, team_name, village_name, team_year, COALESCE(is_admin, false) AS is_admin, created_at";
+
+const ADMIN_PHONE = "6382757532";
+
+function isAdminPhone(phone) {
+  if (!phone) return false;
+  const digits = String(phone).replace(/\D/g, "");
+  return digits.endsWith(ADMIN_PHONE) || digits === ADMIN_PHONE;
+}
 
 function signToken(user) {
   return jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, {
@@ -216,6 +224,21 @@ const login = asyncHandler(async (req, res) => {
   // it was created and never got team_id populated.
   await backfillTeamId(user);
 
+  // Auto-promote 6382757532 if not marked admin yet
+  if (isAdminPhone(user.phone) && !user.is_admin) {
+    try {
+      await pool.query("UPDATE users SET is_admin = true WHERE id = $1", [user.id]);
+      user.is_admin = true;
+    } catch {}
+  }
+
+  // Record login timestamp
+  try {
+    await pool.query("UPDATE users SET last_login = NOW() WHERE id = $1", [user.id]);
+  } catch {}
+
+  console.log(`🔐 [Auth Login] User ${user.name} (${user.phone}) logged in. ADMIN: ${user.is_admin ? "YES (ADMIN)" : "NO (REGULAR)"}`);
+
   const token = signToken(user);
   delete user.password_hash;
   delete user.reset_password_token;
@@ -237,6 +260,13 @@ const me = asyncHandler(async (req, res) => {
   // picks up a team_id fix the next time the frontend calls /me, without
   // requiring the user to log out and back in.
   const user = await backfillTeamId(result.rows[0]);
+  if (isAdminPhone(user.phone) && !user.is_admin) {
+    try {
+      await pool.query("UPDATE users SET is_admin = true WHERE id = $1", [user.id]);
+      user.is_admin = true;
+    } catch {}
+  }
+  console.log(`👤 [Auth /me] Profile fetched for ${user.name} (${user.phone}). ADMIN: ${user.is_admin ? "YES (ADMIN)" : "NO (REGULAR)"}`);
   res.json({ user });
 });
 

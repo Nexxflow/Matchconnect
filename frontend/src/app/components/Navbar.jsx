@@ -22,7 +22,9 @@ export default function Navbar({
   const [bellOpen, setBellOpen] = useState(false);
   const [editing, setEditing] = useState(false);
 
-  const tabs = ["Home", "Find Match", "Grounds", "Umpires", "Live Score", "Tournaments", "My Team"];
+  const tabs = user?.is_admin
+    ? ["Dashboard", "Find Match", "Grounds", "Umpires", "Live Score", "Tournaments", "My Team"]
+    : ["Home", "Find Match", "Grounds", "Umpires", "Live Score", "Tournaments", "My Team"];
   const initials = (user?.name || "?")
     .split(" ")
     .map((w) => w[0])
@@ -54,7 +56,7 @@ export default function Navbar({
       } else if (full.includes("team")) {
         setActive("My Team");
       } else {
-        setActive("Home");
+        setActive(user?.is_admin ? "Dashboard" : "Home");
       }
     }
   };
@@ -106,7 +108,7 @@ export default function Navbar({
       className="sticky top-0 z-50 border-b backdrop-blur-sm transition-colors duration-200"
     >
       <div className="max-w-7xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between md:justify-start gap-2 sm:gap-6">
-        <div className="flex items-center gap-2 shrink-0 cursor-pointer" onClick={() => setActive("Home")}>
+        <div className="flex items-center gap-2 shrink-0 cursor-pointer" onClick={() => setActive(user?.is_admin ? "Dashboard" : "Home")}>
           <div className="w-8 h-8 rounded-lg bg-green-500 flex items-center justify-center shadow-md shadow-green-500/20">
             <span className="text-black font-black text-sm">MC</span>
           </div>
@@ -307,8 +309,15 @@ export default function Navbar({
                   }}
                 >
                   <div className="px-3 py-2.5" style={{ borderBottom: `1px solid ${theme === "light" ? "#f1f5f9" : "#2a2a2a"}` }}>
-                    <div className="text-sm font-semibold truncate" style={{ color: theme === "light" ? "#000000" : "#ffffff" }}>
-                      {user?.name}
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="text-sm font-semibold truncate" style={{ color: theme === "light" ? "#000000" : "#ffffff" }}>
+                        {user?.name}
+                      </div>
+                      {user?.is_admin && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide bg-amber-500/15 text-amber-500 border border-amber-500/30 shrink-0">
+                          Admin
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs font-mono truncate" style={{ color: theme === "light" ? "#000000" : "#6b7a6b" }}>
                       {user?.phone || "—"}

@@ -108,8 +108,9 @@ async function connectWithRetry(retries = 3, delayMs = 2000) {
 
           ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted BOOLEAN DEFAULT true;
           ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ DEFAULT now();
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ;
         `);
-        console.log("✅ challenge_acceptances, challenge_cancellations, team_reviews, umpires, and users terms schema ready");
+        console.log("✅ challenge_acceptances, challenge_cancellations, team_reviews, umpires, and users schema ready");
       } catch (tblErr) {
         console.error("❌ database tables creation error in db.js:", tblErr.message);
       }

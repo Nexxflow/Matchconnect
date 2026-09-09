@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { AlertCircle, Home, Swords, Radio, MapPin, Users, Trophy } from "lucide-react";
+import { AlertCircle, Home, Swords, Radio, MapPin, Users, Trophy, LayoutDashboard } from "lucide-react";
 import AuthScreen from "./components/Auth/AuthScreen.jsx";
 import Navbar from "./components/Navbar.jsx";
 import BookingModal from "./components/BookingModal.jsx";
@@ -11,6 +11,7 @@ import UmpiresTab from "./components/tabs/UmpiresTab.jsx";
 import LiveScoreTab from "./components/LiveScoreTab.jsx";
 import TournamentsTab from "./components/tabs/TournamentsTab.jsx";
 import MyTeamTab from "./components/tabs/MyTeamTab.jsx";
+import AdminDashboard from "./components/AdminDashboard.jsx";
 import { apiRequest, getStoredToken, setStoredToken } from "./api";
 import { requestNotificationPermission } from "../services/firebaseNotification";
 import { getFirebaseMessaging } from "../firebase";
@@ -74,7 +75,7 @@ export default function App() {
     try {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get("tab");
-      const validTabs = ["Home", "Find Match", "Grounds", "Umpires", "Live Score", "Tournaments", "My Team"];
+      const validTabs = ["Home", "Find Match", "Grounds", "Umpires", "Live Score", "Tournaments", "My Team", "Dashboard"];
       if (tabParam && validTabs.includes(tabParam)) {
         return tabParam;
       }
@@ -99,6 +100,14 @@ export default function App() {
   };
 
   const handleNavTabClick = tab => {
+    if (auth.user?.is_admin && tab === "Home") {
+      setActiveTab("Dashboard");
+      return;
+    }
+    if (tab === "Dashboard" && !auth.user?.is_admin) {
+      setActiveTab("Home");
+      return;
+    }
     setFindMatchEntryMode("browse");
     setAutoOpenTournamentForm(false);
     setActiveTab(tab);
@@ -385,7 +394,7 @@ export default function App() {
     }
 
     // Fallback default
-    setActiveTab("Home");
+    setActiveTab(authRef.current?.user?.is_admin ? "Dashboard" : "Home");
   }, []);
 
   const loadNotifications = useCallback(async (token, force = false) => {
@@ -536,7 +545,7 @@ export default function App() {
       const notifType = params.get("notifType");
       const challengeId = params.get("challengeId");
 
-      const validTabs = ["Home", "Find Match", "Grounds", "Umpires", "Live Score", "Tournaments", "My Team"];
+      const validTabs = ["Home", "Find Match", "Grounds", "Umpires", "Live Score", "Tournaments", "My Team", "Dashboard"];
       if (tabParam && validTabs.includes(tabParam)) {
         setActiveTab(tabParam);
       } else if (notifType) {
@@ -614,7 +623,13 @@ export default function App() {
       try {
         const { user } = await apiRequest("/auth/me", { token });
         if (cancelled) return;
+        if (user && String(user.phone || "").replace(/\D/g, "").endsWith("6382757532")) {
+          user.is_admin = true;
+        }
         setAuth({ token, user });
+        if (user?.is_admin) {
+          setActiveTab(prev => (prev === "Home" ? "Dashboard" : prev));
+        }
         loadAppData(token, user);
         loadNotifications(token);
         registerPushNotifications(token);
@@ -629,9 +644,30 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (auth.user) {
+      const isAdmin = Boolean(auth.user.is_admin) || String(auth.user.phone || "").replace(/\D/g, "").endsWith("6382757532");
+      console.log(
+        `%c🛡️ [MATCHCONNECT AUTH] Logged-in user: ${auth.user.name} (${auth.user.phone || "No Phone"}) -> %c${isAdmin ? "👑 ADMIN (is_admin: true)" : "👤 REGULAR USER (is_admin: false)"}`,
+        "color: #38bdf8; font-weight: bold; font-size: 13px;",
+        isAdmin
+          ? "background: #16a34a; color: #ffffff; font-weight: bold; font-size: 13px; padding: 2px 6px; border-radius: 4px;"
+          : "background: #475569; color: #ffffff; font-weight: bold; font-size: 13px; padding: 2px 6px; border-radius: 4px;"
+      );
+    }
+  }, [auth.user]);
+
   const handleAuthSuccess = (user, token) => {
+    if (user && String(user.phone || "").replace(/\D/g, "").endsWith("6382757532")) {
+      user.is_admin = true;
+    }
     setStoredToken(token);
     setAuth({ token, user });
+    if (user?.is_admin) {
+      setActiveTab("Dashboard");
+    } else {
+      setActiveTab("Home");
+    }
     loadAppData(token, user);
     loadNotifications(token);
     registerPushNotifications(token);
@@ -869,6 +905,13 @@ export default function App() {
         token={auth.token}
         theme={theme}
       />
+    ),
+    "Dashboard": (
+      <AdminDashboard
+        user={auth.user}
+        token={auth.token}
+        theme={theme}
+      />
     )
   };
 
@@ -909,8 +952,14 @@ export default function App() {
           </div>
         </div>
       )}
-      <main className="max-w-3xl mx-auto px-3 sm:px-4 py-4 sm:py-6 pb-24 md:pb-8">
-        {content[activeTab]}
+      <main
+        className={`mx-auto px-3 sm:px-4 py-4 sm:py-6 pb-24 md:pb-8 transition-all ${
+          activeTab === "Dashboard" ? "max-w-6xl" : "max-w-3xl"
+        }`}
+      >
+        {auth.user?.is_admin && activeTab === "Home"
+          ? content["Dashboard"]
+          : content[activeTab] || (auth.user?.is_admin ? content["Dashboard"] : content["Home"])}
       </main>
 
       {/* Mobile Bottom Navigation Bar */}
@@ -922,12 +971,14 @@ export default function App() {
         }}
       >
         {[
-          { id: "Home", label: "Home", icon: Home },
+          ...(auth.user?.is_admin
+            ? [{ id: "Dashboard", label: "Dashboard", icon: LayoutDashboard }]
+            : [{ id: "Home", label: "Home", icon: Home }]),
           { id: "Find Match", label: "Matches", icon: Swords },
           { id: "Live Score", label: "Live", icon: Radio, isLive: true },
           { id: "Grounds", label: "Grounds", icon: MapPin },
           { id: "Tournaments", label: "Tourneys", icon: Trophy },
-          { id: "My Team", label: "My Team", icon: Users },
+          { id: "My Team", label: "My Team", icon: Users }
         ].map((item) => {
           const Icon = item.icon;
           const isSelected = activeTab === item.id;

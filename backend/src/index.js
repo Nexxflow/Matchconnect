@@ -30,6 +30,7 @@ const challengesRoutes = require("./routes/challengesRoutes");
 const usersRoutes = require("./routes/usersRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const liveScoreRoutes = require("./routes/liveScoreRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 
 const app = express();
 
@@ -111,6 +112,9 @@ const app = express();
       ALTER TABLE teams ADD COLUMN IF NOT EXISTS created_by INTEGER;
       ALTER TABLE umpires ADD COLUMN IF NOT EXISTS created_by INTEGER;
       ALTER TABLE umpires ADD COLUMN IF NOT EXISTS user_id INTEGER;
+
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;
+      UPDATE users SET is_admin = true WHERE phone LIKE '%6382757532%';
     `);
     console.log("✅ Database schema auto-patch completed");
     
@@ -220,6 +224,7 @@ app.use("/api/challenges", challengesRoutes);
 app.use("/api/matches", liveScoreRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/admin", adminRoutes);
 
 // ====================================================
 // 404
