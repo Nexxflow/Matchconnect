@@ -22,8 +22,11 @@ export default function Navbar({
   const [bellOpen, setBellOpen] = useState(false);
   const [editing, setEditing] = useState(false);
 
+  // Admin accounts only ever see the Dashboard tab in the top nav — no access
+  // to the regular player-facing tabs (Find Match, Grounds, etc). Regular
+  // users keep the full app experience starting from Home.
   const tabs = user?.is_admin
-    ? ["Dashboard", "Find Match", "Grounds", "Umpires", "Live Score", "Tournaments", "My Team"]
+    ? ["Dashboard"]
     : ["Home", "Find Match", "Grounds", "Umpires", "Live Score", "Tournaments", "My Team"];
   const initials = (user?.name || "?")
     .split(" ")
