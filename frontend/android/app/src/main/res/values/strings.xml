@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MatchConnect</string>
+    <string name="title_activity_main">MatchConnect</string>
+    <string name="package_name">com.nexxflow.matchconnect</string>
+    <string name="custom_url_scheme">com.nexxflow.matchconnect</string>
+</resources>
