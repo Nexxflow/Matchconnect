@@ -53,6 +53,7 @@ export default function LiveScoreCard() {
 
       {/* PROMINENT MAIN MOTIVE HERO BOX */}
       <div 
+        className="theme-hero-box"
         style={{
           background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.14) 0%, rgba(28, 12, 20, 0.9) 100%)',
           borderLeft: '5px solid #ec4899',
@@ -67,21 +68,22 @@ export default function LiveScoreCard() {
           <Sparkles size={15} /> The Main Motive
         </div>
 
-        <h3 style={{ fontSize: 'clamp(1.5rem, 3vw, 2rem)', marginBottom: '12px', color: '#fff', lineHeight: 1.25 }}>
+        <h3 style={{ fontSize: 'clamp(1.35rem, 3vw, 2rem)', marginBottom: '12px', color: '#fff', lineHeight: 1.25 }}>
           Broadcast-Grade Ball-by-Ball Live Scoring. <br />
           <span style={{ color: '#f472b6' }}>Zero Lag, Instant Fan Sharing.</span>
         </h3>
 
-        <p style={{ fontSize: '1.02rem', color: 'var(--text-secondary)', lineHeight: 1.65, maxWidth: '920px', margin: 0 }}>
+        <p style={{ fontSize: '1rem', color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: '920px', margin: 0 }}>
           No more lost paper scorebooks, missed boundaries, or frantic phone calls asking &ldquo;What&rsquo;s the score?&rdquo;. MatchConnect turns any smartphone into an international broadcast console. Parents, friends, and squadmates follow live balls, commentary, and wagon wheels from anywhere in the world with zero streaming delay.
         </p>
       </div>
 
       {/* SIDE-BY-SIDE PROBLEM VS SOLUTION COMPARISON */}
       <div 
+        className="card-comparison-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
           gap: '16px',
           marginBottom: '28px',
           position: 'relative',
@@ -147,9 +149,10 @@ export default function LiveScoreCard() {
 
       {/* 3 CORE MOTIVE PILLARS */}
       <div 
+        className="card-pillars-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
           gap: '16px',
           position: 'relative',
           zIndex: 1

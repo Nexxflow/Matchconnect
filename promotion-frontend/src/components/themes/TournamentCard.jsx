@@ -53,6 +53,7 @@ export default function TournamentCard() {
 
       {/* PROMINENT MAIN MOTIVE HERO BOX */}
       <div 
+        className="theme-hero-box"
         style={{
           background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.14) 0%, rgba(22, 12, 30, 0.9) 100%)',
           borderLeft: '5px solid #a855f7',
@@ -67,21 +68,22 @@ export default function TournamentCard() {
           <Sparkles size={15} /> The Main Motive
         </div>
 
-        <h3 style={{ fontSize: 'clamp(1.5rem, 3vw, 2rem)', marginBottom: '12px', color: '#fff', lineHeight: 1.25 }}>
+        <h3 style={{ fontSize: 'clamp(1.35rem, 3vw, 2rem)', marginBottom: '12px', color: '#fff', lineHeight: 1.25 }}>
           Run Amateur Cups Like the IPL. <br />
           <span style={{ color: '#c084fc' }}>Zero Spreadsheets, Instant NRR &amp; Live Brackets.</span>
         </h3>
 
-        <p style={{ fontSize: '1.02rem', color: 'var(--text-secondary)', lineHeight: 1.65, maxWidth: '920px', margin: 0 }}>
+        <p style={{ fontSize: '1rem', color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: '920px', margin: 0 }}>
           Organizing an amateur cricket cup usually turns into a full-time nightmare: manual Excel sheets, confusing Net Run Rate math, heated arguments over qualification tie-breakers, and delayed scores. MatchConnect automates knockout brackets, round-robin points tables, automated NRR calculation, and digital trophy showcases.
         </p>
       </div>
 
       {/* SIDE-BY-SIDE PROBLEM VS SOLUTION COMPARISON */}
       <div 
+        className="card-comparison-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
           gap: '16px',
           marginBottom: '28px',
           position: 'relative',
@@ -147,9 +149,10 @@ export default function TournamentCard() {
 
       {/* 3 CORE MOTIVE PILLARS */}
       <div 
+        className="card-pillars-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
           gap: '16px',
           position: 'relative',
           zIndex: 1

@@ -374,15 +374,18 @@ export default function TestimonialsFAQ() {
             {/* Right Column: Live Community Feedback Stream */}
             <div>
               <div 
+                className="community-rating-header"
                 style={{
                   background: 'rgba(255, 255, 255, 0.03)',
                   border: '1px solid rgba(255, 255, 255, 0.08)',
                   borderRadius: '16px',
-                  padding: '20px 24px',
+                  padding: '18px 22px',
                   marginBottom: '16px',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between'
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '10px'
                 }}
               >
                 <div>
@@ -532,7 +535,7 @@ export default function TestimonialsFAQ() {
         }
         @media (max-width: 640px) {
           .feedback-form-panel {
-            padding: 22px 16px !important;
+            padding: 20px 14px !important;
           }
           .feedback-form-row {
             grid-template-columns: 1fr !important;
@@ -547,17 +550,30 @@ export default function TestimonialsFAQ() {
             gap: 12px !important;
           }
           .faq-accordion-btn {
-            padding: 16px !important;
+            padding: 16px 14px !important;
             font-size: 0.95rem !important;
           }
           .faq-accordion-body {
-            padding: 0 16px 16px 16px !important;
+            padding: 0 14px 16px 14px !important;
             font-size: 0.88rem !important;
           }
         }
-        @media (max-width: 420px) {
+        @media (max-width: 480px) {
+          .community-rating-header {
+            padding: 14px !important;
+          }
+        }
+        @media (max-width: 360px) {
           .feedback-roles-grid {
             grid-template-columns: 1fr !important;
+          }
+          .community-rating-header {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 10px !important;
+          }
+          .community-rating-header > div:last-child {
+            text-align: left !important;
           }
         }
       `}</style>

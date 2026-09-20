@@ -55,6 +55,7 @@ export default function BookGroundCard() {
 
       {/* PROMINENT MAIN MOTIVE HERO BOX */}
       <div 
+        className="theme-hero-box"
         style={{
           background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.14) 0%, rgba(10, 22, 26, 0.9) 100%)',
           borderLeft: '5px solid #06b6d4',
@@ -69,21 +70,22 @@ export default function BookGroundCard() {
           <Sparkles size={15} /> The Main Motive
         </div>
 
-        <h3 style={{ fontSize: 'clamp(1.5rem, 3vw, 2rem)', marginBottom: '12px', color: '#fff', lineHeight: 1.25 }}>
+        <h3 style={{ fontSize: 'clamp(1.35rem, 3vw, 2rem)', marginBottom: '12px', color: '#fff', lineHeight: 1.25 }}>
           Guaranteed Turf Quality. <br />
           <span style={{ color: '#22d3ee' }}>Zero Double-Booked Slots or Ruined Weekends.</span>
         </h3>
 
-        <p style={{ fontSize: '1.02rem', color: 'var(--text-secondary)', lineHeight: 1.65, maxWidth: '920px', margin: 0 }}>
+        <p style={{ fontSize: '1rem', color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: '920px', margin: 0 }}>
           Few things hurt more than arriving on match morning with 22 eager players, only to find the ground keeper double-booked your slot for cash, or finding an unrolled, waterlogged pitch lacking promised floodlights. MatchConnect connects directly with verified venues, ensuring live calendar locks, guaranteed pitch custody, and verified digital gate passes.
         </p>
       </div>
 
       {/* SIDE-BY-SIDE PROBLEM VS SOLUTION COMPARISON */}
       <div 
+        className="card-comparison-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
           gap: '16px',
           marginBottom: '28px',
           position: 'relative',
@@ -149,9 +151,10 @@ export default function BookGroundCard() {
 
       {/* 3 CORE MOTIVE PILLARS */}
       <div 
+        className="card-pillars-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
           gap: '16px',
           position: 'relative',
           zIndex: 1
