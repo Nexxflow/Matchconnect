@@ -5,11 +5,8 @@ import {
   ShieldCheck, 
   Zap, 
   AlertTriangle, 
-  CheckCircle2, 
   Smartphone, 
   Check, 
-  Share2, 
-  TrendingUp, 
   BarChart3, 
   Globe 
 } from 'lucide-react';
@@ -44,7 +41,7 @@ export default function LiveScoreCard() {
       {/* HEADER TAG */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '18px', position: 'relative', zIndex: 1 }}>
         <span className="badge-pill badge-pill-pink">
-          <Radio size={14} /> THEME 05 &bull; LIVE SCORE ARENA
+          <Radio size={14} /> THEME 05 &bull; LIVE SCORING
         </span>
         <span style={{ fontSize: '0.82rem', color: '#f472b6', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Smartphone size={14} /> MatchConnect App Feature
@@ -69,12 +66,13 @@ export default function LiveScoreCard() {
         </div>
 
         <h3 style={{ fontSize: 'clamp(1.35rem, 3vw, 2rem)', marginBottom: '12px', color: '#fff', lineHeight: 1.25 }}>
-          Broadcast-Grade Ball-by-Ball Live Scoring. <br />
-          <span style={{ color: '#f472b6' }}>Zero Lag, Instant Fan Sharing.</span>
+          Ball-by-Ball Live Scoring. <br />
+          <span style={{ color: '#f472b6' }}>Let Friends &amp; Family Follow Along.</span>
         </h3>
 
         <p style={{ fontSize: '1rem', color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: '920px', margin: 0 }}>
-          No more lost paper scorebooks, missed boundaries, or frantic phone calls asking &ldquo;What&rsquo;s the score?&rdquo;. MatchConnect turns any smartphone into an international broadcast console. Parents, friends, and squadmates follow live balls, commentary, and wagon wheels from anywhere in the world with zero streaming delay.
+          No more lost paper scorebooks, missed boundaries, or frantic phone calls asking &ldquo;What&rsquo;s the score?&rdquo;. 
+          MatchConnect lets you score your match ball by ball on your phone, so squadmates, friends and family can follow along.
         </p>
       </div>
 
@@ -109,16 +107,16 @@ export default function LiveScoreCard() {
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <span style={{ color: '#f87171', fontWeight: 800 }}>&times;</span>
-              <span><strong>Constant Phone Calls:</strong> Non-playing squadmates and family repeatedly calling the dugout for updates.</span>
+              <span><strong>Constant Phone Calls:</strong> Non-playing squadmates and family repeatedly calling for updates.</span>
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <span style={{ color: '#f87171', fontWeight: 800 }}>&times;</span>
-              <span><strong>Vanishing Career Records:</strong> Match-winning innings and 5-wicket hauls forgotten with zero digital proof.</span>
+              <span><strong>Forgotten Performances:</strong> Match-winning innings and 5-wicket hauls with no digital record.</span>
             </li>
           </ul>
         </div>
 
-        {/* The MatchConnect Standard */}
+        {/* The MatchConnect Experience */}
         <div 
           style={{
             background: 'rgba(236, 72, 153, 0.06)',
@@ -128,20 +126,20 @@ export default function LiveScoreCard() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f472b6', fontWeight: 700, fontSize: '0.88rem', marginBottom: '12px' }}>
-            <ShieldCheck size={16} /> The MatchConnect Scoring Standard
+            <ShieldCheck size={16} /> The MatchConnect Experience
           </div>
           <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem', color: '#e2e8f0' }}>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <Check size={16} color="#ec4899" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <span><strong>1-Tap Shareable WhatsApp Link:</strong> Anyone can open and watch the live match center on mobile without installing an app.</span>
+              <span><strong>Simple Ball-by-Ball Scoring:</strong> Record runs, boundaries, extras and wickets right from your phone.</span>
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <Check size={16} color="#ec4899" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <span><strong>Sub-Second TV Telemetry:</strong> Every single, boundary, and wicket updates instantly with broadcast-style graphics.</span>
+              <span><strong>Live Scorecard:</strong> The scorecard updates as you score, so everyone follows the same live score.</span>
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <Check size={16} color="#ec4899" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <span><strong>AI Commentary &amp; Analytics:</strong> Automated ball-by-ball written commentary, run rate charts, and wagon wheels.</span>
+              <span><strong>Everything In One App:</strong> Find the match, book the ground and score it all in MatchConnect.</span>
             </li>
           </ul>
         </div>
@@ -162,9 +160,9 @@ export default function LiveScoreCard() {
           <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(236, 72, 153, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
             <Zap size={18} color="#f472b6" />
           </div>
-          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Zero-Lag Mobile Engine</h4>
+          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Built For The Ground</h4>
           <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0 }}>
-            Optimized to broadcast without lag even on weak 3G or remote ground cell signals.
+            Simple screens designed to be used quickly on your phone during a match.
           </p>
         </div>
 
@@ -172,9 +170,9 @@ export default function LiveScoreCard() {
           <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(6, 182, 212, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
             <Globe size={18} color="#22d3ee" />
           </div>
-          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Public Web Match Center</h4>
+          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Follow Live</h4>
           <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0 }}>
-            Share a single link to family WhatsApp groups. Anyone can watch the match live in any web browser.
+            Friends and fans can follow the live score instead of waiting for WhatsApp updates.
           </p>
         </div>
 
@@ -182,9 +180,9 @@ export default function LiveScoreCard() {
           <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
             <BarChart3 size={18} color="#4ade80" />
           </div>
-          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Permanent Career Sync</h4>
+          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Match Scorecards</h4>
           <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0 }}>
-            Every run scored and wicket taken permanently updates player batting averages, strike rates, and honors.
+            Runs, wickets and results are recorded in a clear scorecard for every match you score.
           </p>
         </div>
       </div>
@@ -207,10 +205,10 @@ export default function LiveScoreCard() {
         }}
       >
         <span>
-          🔴 Viewers average <strong>18 minutes session time</strong> on MatchConnect live streams &bull; 100% cloud-backed.
+          🔴 Score your next match live and let everyone follow along.
         </span>
         <span style={{ color: '#f472b6', fontWeight: 600 }}>
-          Available on MatchConnect iOS &amp; Android
+          Web app live &bull; Android app coming soon
         </span>
       </div>
     </div>

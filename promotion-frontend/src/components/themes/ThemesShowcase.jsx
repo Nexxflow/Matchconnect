@@ -46,7 +46,7 @@ export default function ThemesShowcase({ selectedThemeId, navTimestamp }) {
       id: 'book-umpire', 
       number: '02',
       label: 'Book Umpire', 
-      tagline: 'Certified Panel Umpires',
+      tagline: 'Neutral Match Officials',
       icon: Scale, 
       color: '#f59e0b',
       glow: 'rgba(245, 158, 11, 0.35)',
@@ -56,7 +56,7 @@ export default function ThemesShowcase({ selectedThemeId, navTimestamp }) {
       id: 'book-ground', 
       number: '03',
       label: 'Book Ground', 
-      tagline: 'Verified Turf & Pitch Slots',
+      tagline: 'Live Ground Slots',
       icon: MapPin, 
       color: '#06b6d4',
       glow: 'rgba(6, 182, 212, 0.35)',
@@ -66,7 +66,7 @@ export default function ThemesShowcase({ selectedThemeId, navTimestamp }) {
       id: 'tournaments', 
       number: '04',
       label: 'Tournaments', 
-      tagline: 'Brackets & Cash Cups',
+      tagline: 'Tournament Hosting',
       icon: Trophy, 
       color: '#a855f7',
       glow: 'rgba(168, 85, 247, 0.35)',
@@ -233,8 +233,8 @@ export default function ThemesShowcase({ selectedThemeId, navTimestamp }) {
           </h2>
 
           <p className="section-subtitle" style={{ maxWidth: '780px', margin: '0 auto', fontSize: '1rem', lineHeight: 1.6 }}>
-            Recreational cricket has been broken by WhatsApp spam, biased officiating, and double-booked turfs. 
-            Explore how MatchConnect solves every single pain point with instant app automation through interactive slides.
+            Recreational cricket is held back by WhatsApp spam, unfair umpiring, and double-booked grounds. 
+            Explore how MatchConnect helps with each of these problems inside the app.
           </p>
         </div>
 

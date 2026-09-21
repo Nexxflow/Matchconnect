@@ -2,11 +2,16 @@ import React from 'react';
 import { 
   Sparkles, 
   ChevronRight, 
-  Zap,
-  Users
+  Zap
 } from 'lucide-react';
+import { WEB_APP_URL, PLAY_STORE_URL } from '../data/promoData';
 
 export default function Hero({ onExploreConnect }) {
+  // Play Store live aana automatic ah Play Store link ku maarum
+  const hasPlayStore = Boolean(PLAY_STORE_URL);
+  const ctaHref = hasPlayStore ? PLAY_STORE_URL : WEB_APP_URL;
+  const ctaLabel = hasPlayStore ? 'Get MatchConnect on Google Play' : 'Use MatchConnect Web App';
+
   return (
     <section 
       className="hero-section"
@@ -58,9 +63,9 @@ export default function Hero({ onExploreConnect }) {
             }}
           >
             <span className="live-dot"></span>
-            <span>CRICKET OPERATING SYSTEM</span>
+            <span>CRICKET APP FOR LOCAL TEAMS</span>
             <span className="hero-badge-divider" style={{ color: 'rgba(255,255,255,0.3)' }}>|</span>
-            <span style={{ color: '#fff', fontWeight: 600 }}>Connect Matches 10x Faster</span>
+            <span style={{ color: '#fff', fontWeight: 600 }}>Find Matches, Grounds &amp; Umpires</span>
           </div>
         </div>
 
@@ -74,7 +79,7 @@ export default function Hero({ onExploreConnect }) {
               letterSpacing: '-0.03em'
             }}
           >
-            Connect Cricket Matches <span className="neon-gradient-text">10x Faster.</span> <br />
+            Connect Cricket Matches <span className="neon-gradient-text">Faster.</span> <br />
             Book Grounds, Umpires &amp; <span className="gold-gradient-text">Tournaments in the App.</span>
           </h1>
           <p 
@@ -86,8 +91,8 @@ export default function Hero({ onExploreConnect }) {
               lineHeight: 1.6
             }}
           >
-            Stop spending days begging for teams in chaotic WhatsApp groups. The <strong>MatchConnect App</strong> connects 
-            two cricket teams in under 60 seconds, locks floodlit turfs, assigns certified panel umpires, and manages tournament leagues.
+            Stop spending days begging for teams in chaotic WhatsApp groups. The <strong>MatchConnect App</strong> helps 
+            cricket teams find opponents, book grounds, hire neutral umpires, and run tournaments, all in one place.
           </p>
         </div>
 
@@ -103,7 +108,7 @@ export default function Hero({ onExploreConnect }) {
           }}
         >
           <a 
-            href="http://localhost:5173"
+            href={ctaHref}
             target="_blank"
             rel="noopener noreferrer"
             className="btn btn-primary"
@@ -115,7 +120,7 @@ export default function Hero({ onExploreConnect }) {
             }}
           >
             <Zap size={20} />
-            Open MatchConnect App
+            {ctaLabel}
             <ChevronRight size={18} />
           </a>
 
@@ -135,6 +140,19 @@ export default function Hero({ onExploreConnect }) {
             Explore 5 Themes &amp; Cards
           </button>
         </div>
+
+        {!hasPlayStore && (
+          <p 
+            style={{
+              textAlign: 'center',
+              marginTop: '18px',
+              fontSize: '0.88rem',
+              color: 'var(--text-muted)'
+            }}
+          >
+            Android app coming soon on Google Play
+          </p>
+        )}
       </div>
 
       <style>{`

@@ -5,13 +5,9 @@ import {
   ShieldCheck, 
   Zap, 
   AlertTriangle, 
-  CheckCircle2, 
   Smartphone, 
   Check, 
-  Award, 
-  TrendingUp, 
-  Calendar, 
-  Medal 
+  Award
 } from 'lucide-react';
 
 export default function TournamentCard() {
@@ -44,7 +40,7 @@ export default function TournamentCard() {
       {/* HEADER TAG */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '18px', position: 'relative', zIndex: 1 }}>
         <span className="badge-pill badge-pill-purple">
-          <Trophy size={14} /> THEME 04 &bull; TOURNAMENTS &amp; LEAGUES
+          <Trophy size={14} /> THEME 04 &bull; TOURNAMENTS
         </span>
         <span style={{ fontSize: '0.82rem', color: '#d8b4fe', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Smartphone size={14} /> MatchConnect App Feature
@@ -69,12 +65,13 @@ export default function TournamentCard() {
         </div>
 
         <h3 style={{ fontSize: 'clamp(1.35rem, 3vw, 2rem)', marginBottom: '12px', color: '#fff', lineHeight: 1.25 }}>
-          Run Amateur Cups Like the IPL. <br />
-          <span style={{ color: '#c084fc' }}>Zero Spreadsheets, Instant NRR &amp; Live Brackets.</span>
+          Host Your Cup Without the Chaos. <br />
+          <span style={{ color: '#c084fc' }}>Create, Register &amp; Keep Every Team Informed.</span>
         </h3>
 
         <p style={{ fontSize: '1rem', color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: '920px', margin: 0 }}>
-          Organizing an amateur cricket cup usually turns into a full-time nightmare: manual Excel sheets, confusing Net Run Rate math, heated arguments over qualification tie-breakers, and delayed scores. MatchConnect automates knockout brackets, round-robin points tables, automated NRR calculation, and digital trophy showcases.
+          Organizing an amateur cricket cup usually turns into a full-time headache: scattered WhatsApp messages, manual sheets, and teams asking the same questions again and again. 
+          MatchConnect gives organizers one place to create the tournament, set entry fees and prizes, and let teams register online.
         </p>
       </div>
 
@@ -105,20 +102,20 @@ export default function TournamentCard() {
           <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <span style={{ color: '#f87171', fontWeight: 800 }}>&times;</span>
-              <span><strong>Excel &amp; WhatsApp Nightmares:</strong> Organizers spending midnight hours manually calculating decimal run rates.</span>
+              <span><strong>Excel &amp; WhatsApp Nightmares:</strong> Organizers spending hours managing team lists and details by hand.</span>
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <span style={{ color: '#f87171', fontWeight: 800 }}>&times;</span>
-              <span><strong>Tie-Breaker Disputes:</strong> Teams arguing over complex qualification formulas and net run rate round-offs.</span>
+              <span><strong>Confusion Over Details:</strong> Teams unsure about fees, prizes, dates and rules until the last minute.</span>
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <span style={{ color: '#f87171', fontWeight: 800 }}>&times;</span>
-              <span><strong>Delayed Fixtures:</strong> Squads waiting hours at the pavilion not knowing who or when they play next.</span>
+              <span><strong>Delayed Updates:</strong> Squads waiting around not knowing who or when they play next.</span>
             </li>
           </ul>
         </div>
 
-        {/* The MatchConnect Standard */}
+        {/* The MatchConnect Experience */}
         <div 
           style={{
             background: 'rgba(168, 85, 247, 0.06)',
@@ -128,20 +125,20 @@ export default function TournamentCard() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#c084fc', fontWeight: 700, fontSize: '0.88rem', marginBottom: '12px' }}>
-            <ShieldCheck size={16} /> The MatchConnect Tournament Standard
+            <ShieldCheck size={16} /> The MatchConnect Experience
           </div>
           <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem', color: '#e2e8f0' }}>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <Check size={16} color="#a855f7" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <span><strong>Automated Live Knockout Brackets:</strong> Winning teams advance in real-time as match results finalize.</span>
+              <span><strong>Create in Minutes:</strong> Set the format, venue, dates, entry fee and prizes for your tournament.</span>
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <Check size={16} color="#a855f7" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <span><strong>Instant Net Run Rate (NRR):</strong> Standings tables update with sub-second accuracy after every boundary.</span>
+              <span><strong>Online Team Registration:</strong> Teams register from the app and organizers see who has joined.</span>
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <Check size={16} color="#a855f7" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <span><strong>Digital Orange &amp; Purple Caps:</strong> Automated real-time leaderboards for top tournament run scorers and wicket takers.</span>
+              <span><strong>Everything In One Place:</strong> Details, registrations and live scoring in one app instead of scattered chats.</span>
             </li>
           </ul>
         </div>
@@ -162,29 +159,29 @@ export default function TournamentCard() {
           <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(168, 85, 247, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
             <Trophy size={18} color="#c084fc" />
           </div>
-          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>1-Click League Creation</h4>
+          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Easy Tournament Setup</h4>
           <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0 }}>
-            Knockout, double-elimination, or multi-pool corporate cups configured with automated schedules in 60 seconds.
+            Set up your cup with format, venue, dates, entry fee and prizes in a few taps.
           </p>
         </div>
 
         <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.07)', borderRadius: '12px', padding: '18px' }}>
           <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(6, 182, 212, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
-            <TrendingUp size={18} color="#22d3ee" />
+            <Award size={18} color="#22d3ee" />
           </div>
-          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Zero-Argument Tie Breaks</h4>
+          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Clear Details Upfront</h4>
           <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0 }}>
-            Official BCCI standard tie-breaking rules applied transparently to eliminate qualification squabbles.
+            Entry fee and prizes are listed upfront, so every team knows exactly what they are playing for.
           </p>
         </div>
 
         <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.07)', borderRadius: '12px', padding: '18px' }}>
           <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
-            <Medal size={18} color="#4ade80" />
+            <Zap size={18} color="#4ade80" />
           </div>
-          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Career Milestone Sync</h4>
+          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Live Scoring for Matches</h4>
           <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0 }}>
-            Every tournament 50, century, and 5-wicket haul syncs to permanent player resumes with verified tournament medals.
+            Score tournament matches ball by ball so teams and fans can follow along.
           </p>
         </div>
       </div>
@@ -207,10 +204,10 @@ export default function TournamentCard() {
         }}
       >
         <span>
-          🏆 <strong>1,450+ grassroots cups</strong> hosted &bull; 100% automated bracket progression and Net Run Rate sync.
+          🏆 Create a tournament once and let teams register online.
         </span>
         <span style={{ color: '#c084fc', fontWeight: 600 }}>
-          Available on MatchConnect iOS &amp; Android
+          Web app live &bull; Android app coming soon
         </span>
       </div>
     </div>

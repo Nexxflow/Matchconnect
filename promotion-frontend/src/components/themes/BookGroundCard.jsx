@@ -5,15 +5,9 @@ import {
   ShieldCheck, 
   Zap, 
   AlertTriangle, 
-  Clock, 
-  Sun, 
-  Moon, 
-  CheckCircle2, 
   Smartphone, 
   Check, 
-  QrCode, 
-  CloudRain, 
-  Layers 
+  CloudRain
 } from 'lucide-react';
 
 export default function BookGroundCard() {
@@ -46,7 +40,7 @@ export default function BookGroundCard() {
       {/* HEADER TAG */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '18px', position: 'relative', zIndex: 1 }}>
         <span className="badge-pill badge-pill-cyan">
-          <MapPin size={14} /> THEME 03 &bull; BOOK VERIFIED GROUND
+          <MapPin size={14} /> THEME 03 &bull; BOOK A GROUND
         </span>
         <span style={{ fontSize: '0.82rem', color: '#67e8f9', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Smartphone size={14} /> MatchConnect App Feature
@@ -71,12 +65,13 @@ export default function BookGroundCard() {
         </div>
 
         <h3 style={{ fontSize: 'clamp(1.35rem, 3vw, 2rem)', marginBottom: '12px', color: '#fff', lineHeight: 1.25 }}>
-          Guaranteed Turf Quality. <br />
-          <span style={{ color: '#22d3ee' }}>Zero Double-Booked Slots or Ruined Weekends.</span>
+          Find &amp; Book Grounds Near You. <br />
+          <span style={{ color: '#22d3ee' }}>See Available Slots Before You Go.</span>
         </h3>
 
         <p style={{ fontSize: '1rem', color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: '920px', margin: 0 }}>
-          Few things hurt more than arriving on match morning with 22 eager players, only to find the ground keeper double-booked your slot for cash, or finding an unrolled, waterlogged pitch lacking promised floodlights. MatchConnect connects directly with verified venues, ensuring live calendar locks, guaranteed pitch custody, and verified digital gate passes.
+          Few things hurt more than arriving on match morning with a full squad, only to find your slot was double-booked or the ground is not what you expected. 
+          MatchConnect lets you find grounds near you, check the details and available slots, and book online.
         </p>
       </div>
 
@@ -107,20 +102,20 @@ export default function BookGroundCard() {
           <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <span style={{ color: '#f87171', fontWeight: 800 }}>&times;</span>
-              <span><strong>Cash Double-Bookings:</strong> Ground managers take cash deposits from two different teams for the same slot.</span>
+              <span><strong>Double-Bookings:</strong> Phone and cash bookings can leave two teams holding the same slot.</span>
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <span style={{ color: '#f87171', fontWeight: 800 }}>&times;</span>
-              <span><strong>Unplayable Pitch Surprises:</strong> Arriving to discover unrolled mud, uneven dangerous craters, or overgrown grass.</span>
+              <span><strong>Endless Phone Calls:</strong> Calling ground owners one by one just to hear &ldquo;sorry, fully booked&rdquo;.</span>
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <span style={{ color: '#f87171', fontWeight: 800 }}>&times;</span>
-              <span><strong>Dim &amp; Broken Floodlights:</strong> Night floodlit matches ruined by low-lux bulbs making leather balls invisible.</span>
+              <span><strong>Surprises On The Day:</strong> Not knowing the pitch type, timings or lights until you reach the ground.</span>
             </li>
           </ul>
         </div>
 
-        {/* The MatchConnect Standard */}
+        {/* The MatchConnect Experience */}
         <div 
           style={{
             background: 'rgba(6, 182, 212, 0.06)',
@@ -130,20 +125,20 @@ export default function BookGroundCard() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#22d3ee', fontWeight: 700, fontSize: '0.88rem', marginBottom: '12px' }}>
-            <ShieldCheck size={16} /> The MatchConnect Ground Standard
+            <ShieldCheck size={16} /> The MatchConnect Experience
           </div>
           <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem', color: '#e2e8f0' }}>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <Check size={16} color="#06b6d4" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <span><strong>Real-Time API Slot Lock:</strong> Guaranteed exclusive pitch custody—once locked in app, it is impossible to double-book.</span>
+              <span><strong>Live Slot Availability:</strong> See which slots are available before you book, so fewer double-bookings.</span>
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <Check size={16} color="#06b6d4" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <span><strong>Verified 360° Pitch Reports:</strong> Live surface inspections detailing clay bounce, roller status, and boundary dimensions.</span>
+              <span><strong>Ground Details:</strong> Check location, pitch type and pricing before you commit.</span>
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <Check size={16} color="#06b6d4" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <span><strong>Certified 800+ Lux Stadium Lights:</strong> Every night arena is photometrically audited for broadcast-grade visibility.</span>
+              <span><strong>Near Me Map:</strong> Find grounds close to you on the map in a few taps.</span>
             </li>
           </ul>
         </div>
@@ -162,21 +157,21 @@ export default function BookGroundCard() {
       >
         <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.07)', borderRadius: '12px', padding: '18px' }}>
           <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(6, 182, 212, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
-            <Layers size={18} color="#22d3ee" />
+            <MapPin size={18} color="#22d3ee" />
           </div>
-          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>180+ Inspected Venues</h4>
+          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Find Grounds Near You</h4>
           <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0 }}>
-            Standard 65m–75m boundaries, natural clay, red soil turf, and high-tension all-weather box arenas.
+            Browse grounds in your area and see them on the map with the Near Me feature.
           </p>
         </div>
 
         <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.07)', borderRadius: '12px', padding: '18px' }}>
           <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
-            <QrCode size={18} color="#4ade80" />
+            <Zap size={18} color="#4ade80" />
           </div>
-          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Digital QR Gate Pass</h4>
+          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Book &amp; Pay Online</h4>
           <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0 }}>
-            Ground caretakers scan your app QR code for instant pitch handover. Zero cash haggling at the gate.
+            Pay securely online through Razorpay instead of handling cash at the gate.
           </p>
         </div>
 
@@ -184,9 +179,9 @@ export default function BookGroundCard() {
           <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(245, 158, 11, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
             <CloudRain size={18} color="#fbbf24" />
           </div>
-          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>100% Bad Weather Cover</h4>
+          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Clear Refund Rules</h4>
           <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0 }}>
-            If unexpected rain, waterlogging, or power cuts disrupt your match, your booking is 100% credited or refunded.
+            If a booking is cancelled due to weather or ground unavailability, refunds follow our <a href="/terms.html" style={{ color: '#22d3ee' }}>Terms &amp; Conditions</a>.
           </p>
         </div>
       </div>
@@ -209,10 +204,10 @@ export default function BookGroundCard() {
         }}
       >
         <span>
-          🏟️ <strong>480+ floodlit partner turfs</strong> active &bull; Over 2,100 hours hosted monthly without double-booking.
+          🏟️ Find a ground, pick a slot and book in a few taps.
         </span>
         <span style={{ color: '#22d3ee', fontWeight: 600 }}>
-          Available on MatchConnect iOS &amp; Android
+          Web app live &bull; Android app coming soon
         </span>
       </div>
     </div>

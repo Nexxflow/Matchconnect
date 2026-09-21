@@ -5,13 +5,9 @@ import {
   ShieldCheck, 
   Zap, 
   AlertTriangle, 
-  Award, 
-  CheckCircle2, 
   Smartphone, 
   Check, 
-  UserCheck, 
-  Video, 
-  Star 
+  UserCheck
 } from 'lucide-react';
 
 export default function BookUmpireCard() {
@@ -44,7 +40,7 @@ export default function BookUmpireCard() {
       {/* HEADER TAG */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '18px', position: 'relative', zIndex: 1 }}>
         <span className="badge-pill badge-pill-gold">
-          <Scale size={14} /> THEME 02 &bull; BOOK CERTIFIED UMPIRE
+          <Scale size={14} /> THEME 02 &bull; BOOK AN UMPIRE
         </span>
         <span style={{ fontSize: '0.82rem', color: '#fde047', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Smartphone size={14} /> MatchConnect App Feature
@@ -69,12 +65,13 @@ export default function BookUmpireCard() {
         </div>
 
         <h3 style={{ fontSize: 'clamp(1.35rem, 3vw, 2rem)', marginBottom: '12px', color: '#fff', lineHeight: 1.25 }}>
-          100% Neutral Decisions. <br />
-          <span className="gold-gradient-text">Zero Sledging, Bias, or Disputed Walk-Offs.</span>
+          A Neutral Umpire for Your Match. <br />
+          <span className="gold-gradient-text">Fewer Fights, Fairer Games.</span>
         </h3>
 
         <p style={{ fontSize: '1rem', color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: '920px', margin: 0 }}>
-          Nothing ruins weekend cricket faster than team-umpired matches where close LBWs, nicked catches behind the wicket, and waist-high full tosses turn into screaming fights and abandoned matches. MatchConnect deploys verified, board-certified panel umpires with transparent match fees, digital match reports, and total officiating neutrality.
+          Nothing ruins weekend cricket faster than team-umpired matches where close LBWs, nicked catches and waist-high full tosses turn into fights. 
+          With MatchConnect you can book a neutral umpire with a clear match fee, so both teams can focus on playing.
         </p>
       </div>
 
@@ -109,16 +106,16 @@ export default function BookUmpireCard() {
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <span style={{ color: '#f87171', fontWeight: 800 }}>&times;</span>
-              <span><strong>Waist-Height No-Ball Fights:</strong> Constant shouting over subjective calls on fast full-toss deliveries.</span>
+              <span><strong>No-Ball Fights:</strong> Constant shouting over subjective calls on fast full-toss deliveries.</span>
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <span style={{ color: '#f87171', fontWeight: 800 }}>&times;</span>
-              <span><strong>Walk-Offs &amp; Abandoned Games:</strong> Over 35% of amateur clashes end with bad blood or incomplete overs.</span>
+              <span><strong>Walk-Offs &amp; Abandoned Games:</strong> Heated arguments can end a good match early and leave bad blood.</span>
             </li>
           </ul>
         </div>
 
-        {/* The MatchConnect Standard */}
+        {/* The MatchConnect Experience */}
         <div 
           style={{
             background: 'rgba(245, 158, 11, 0.06)',
@@ -128,20 +125,20 @@ export default function BookUmpireCard() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#fbbf24', fontWeight: 700, fontSize: '0.88rem', marginBottom: '12px' }}>
-            <ShieldCheck size={16} /> The MatchConnect Umpiring Standard
+            <ShieldCheck size={16} /> The MatchConnect Experience
           </div>
           <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem', color: '#e2e8f0' }}>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <Check size={16} color="#f59e0b" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <span><strong>Independent Board Officials:</strong> BCCI Level-1 &amp; State panel accredited umpires with absolute neutrality.</span>
+              <span><strong>Independent Umpires:</strong> Book a neutral official who is not connected to either team.</span>
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <Check size={16} color="#f59e0b" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <span><strong>Digital Match Report Card:</strong> Official match dismissals, fair play ratings, and tallies signed off inside the app.</span>
+              <span><strong>Clear Match Fees:</strong> The fee per match is visible before you book, so no awkward haggling.</span>
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <Check size={16} color="#f59e0b" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <span><strong>Dispute-Free Authority:</strong> Both teams respect independent third-party calls; match stays competitive and disciplined.</span>
+              <span><strong>Fair Play On The Field:</strong> Both teams respect an independent call, so the match stays competitive.</span>
             </li>
           </ul>
         </div>
@@ -160,31 +157,31 @@ export default function BookUmpireCard() {
       >
         <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.07)', borderRadius: '12px', padding: '18px' }}>
           <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(245, 158, 11, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
-            <Award size={18} color="#fbbf24" />
+            <UserCheck size={18} color="#fbbf24" />
           </div>
-          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>BCCI &amp; State Panel Vetting</h4>
+          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Umpire Profiles</h4>
           <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0 }}>
-            Every panel official passes formal law examinations, field tests, and match-control background verification.
+            Browse umpire profiles with experience and fee per match before you choose.
           </p>
         </div>
 
         <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.07)', borderRadius: '12px', padding: '18px' }}>
           <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(6, 182, 212, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
-            <Video size={18} color="#22d3ee" />
+            <Zap size={18} color="#22d3ee" />
           </div>
-          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>App-Assisted DRS Review</h4>
+          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Simple Booking</h4>
           <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0 }}>
-            Neutral umpires have access to frame-by-frame phone camera replays for controversial boundary and run-out calls.
+            Choose an umpire for your date and match directly from the app.
           </p>
         </div>
 
         <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.07)', borderRadius: '12px', padding: '18px' }}>
           <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
-            <Star size={18} color="#4ade80" />
+            <ShieldCheck size={18} color="#4ade80" />
           </div>
-          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Captain Integrity Rating</h4>
+          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Neutral By Design</h4>
           <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0 }}>
-            Both team captains rate the umpire after every game. Only officials maintaining 4.8+ ratings remain on the roster.
+            Umpires are independent of both teams, so calls are not influenced by friendships.
           </p>
         </div>
       </div>
@@ -207,10 +204,10 @@ export default function BookUmpireCard() {
         }}
       >
         <span>
-          ⚖️ <strong>320+ certified panel umpires</strong> active &bull; 99.8% dispute-free match completion record.
+          ⚖️ Book a neutral umpire for your next match.
         </span>
         <span style={{ color: '#fbbf24', fontWeight: 600 }}>
-          Available on MatchConnect iOS &amp; Android
+          Web app live &bull; Android app coming soon
         </span>
       </div>
     </div>
