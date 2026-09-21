@@ -1,97 +1,129 @@
+// =====================================================================
+// SITE CONFIG - ellam inga irundhu maathina podhum
+// =====================================================================
+
+// Live web app URL (main MatchConnect app)
+export const WEB_APP_URL = 'https://matchconnect-five.vercel.app';
+
+// Play Store live aana piragu inga link podunga. Empty na "Coming Soon" mode.
+// Ex: 'https://play.google.com/store/apps/details?id=com.nexxflow.matchconnect'
+export const PLAY_STORE_URL = '';
+
+// Support / contact email (footer + feedback la varum)
+export const SUPPORT_EMAIL = 'matchconnectmuon@gmail.com';
+
+// Legal pages (promotion-frontend/public/ la privacy.html, terms.html vekkanum)
+export const PRIVACY_URL = '/privacy.html';
+export const TERMS_URL = '/terms.html';
+
+// Optional: Formspree / Google Form / Apps Script URL.
+// Empty na feedback + waitlist email app (mailto) vazhiya varum.
+export const FEEDBACK_ENDPOINT = '';
+export const WAITLIST_FORM_URL = '';
+
+export const LAUNCH_REGION = 'Tamil Nadu';
+export const CITIES = ['Chennai', 'Coimbatore', 'Madurai', 'Tiruchirappalli', 'Salem', 'Tirunelveli'];
+
+// =====================================================================
+// CONTENT
+// Note: fake numbers, fake reviews, escrow/ELO/AI-reels maathiri claims
+// remove pannirukken. App la real ah irukkura feature na mattum thirumba add pannunga.
+// =====================================================================
+
 export const VIDEO_CHAPTERS = [
   {
     id: 'fast-matchmaking',
     tag: '01. CONNECT TEAMS FASTER',
-    title: 'Challenge & Connect 2 Teams in Under 60 Seconds',
-    subtitle: 'The core motive of MatchConnect: Stop endless WhatsApp texting. Broadcast a match challenge or browse ready opponent cricket squads filtered by skill level, overs, and distance.',
-    badge: '48-Second Instant Match',
+    title: 'Challenge & Connect Teams Without the WhatsApp Chaos',
+    subtitle: 'The core motive of MatchConnect: stop endless WhatsApp texting. Post a match challenge or browse nearby cricket squads by overs format, ball type, and distance.',
+    badge: 'Instant Team Matchmaking',
     accentColor: '#22c55e',
     videoType: 'teams',
     metrics: [
-      { label: 'Avg Connection Time', val: '48 sec' },
-      { label: 'Challenge Accept Rate', val: '96.2%' },
-      { label: 'Active Squads Ready', val: '320+' }
+      { label: 'Find Opponents By', val: 'Area & Format' },
+      { label: 'Challenge Alerts', val: 'In-App' },
+      { label: 'WhatsApp Chaos', val: 'None' }
     ],
     features: [
-      '1-Tap Team Broadcast: Alert all matching cricket squads in your area instantly',
-      'Balanced Matchmaking: Equal Elo ratings, overs format, and ball type (Tennis/Leather)',
-      'Instant In-App & WhatsApp Notification: Rival captains accept challenges with 1 tap'
+      'Post a match challenge and let nearby cricket squads see it instantly',
+      'Filter by overs format and ball type (Tennis / Leather)',
+      'Rival captains get an in-app notification and can accept with one tap'
     ]
   },
   {
     id: 'turf-booking',
-    tag: '02. BOOK FLOODLIT GROUNDS',
-    title: 'Lock High-Grade Cricket Turfs Instantly',
-    subtitle: 'Discover and reserve 450+ verified cricket turfs, indoor nets, and floodlit stadiums. View real-time slot calendars, pitch dimensions, and split costs among teammates.',
-    badge: 'Direct Calendar Sync',
+    tag: '02. BOOK GROUNDS',
+    title: 'Find & Book Cricket Grounds Near You',
+    subtitle: 'Discover cricket grounds and turfs around you, check available slots, and book online without endless phone calls.',
+    badge: 'Live Slot Booking',
     accentColor: '#06b6d4',
     videoType: 'turf',
     metrics: [
-      { label: 'Partner Turfs', val: '450+' },
-      { label: 'Avg Booking Time', val: '2.4 min' },
-      { label: 'Night Floodlit Arenas', val: '88%' }
+      { label: 'Slots', val: 'Live Calendar' },
+      { label: 'Payment', val: 'Online' },
+      { label: 'Search', val: 'Near Me' }
     ],
     features: [
-      'Real-time slot availability directly synced with turf venue managers',
-      'High-spec pitch details: AstroTurf, synthetic shockpad, LED floodlights',
-      'Automated team cost-splitting link: Each player pays their exact share'
+      'See ground details and available slots in one place',
+      'Find grounds close to you with the Near Me map',
+      'Book and pay online securely'
     ]
   },
   {
     id: 'umpires',
-    tag: '03. BOOK CERTIFIED UMPIRES',
-    title: 'Professional Umpires For Every Match',
-    subtitle: 'No more arguments over leg-before-wicket or no-balls. Hire licensed state and district cricket panel umpires with transparent match fees and proven track records.',
-    badge: 'Certified Officials Panel',
+    tag: '03. BOOK UMPIRES',
+    title: 'Neutral Umpires For Your Matches',
+    subtitle: 'No more arguments over leg-before-wicket or no-balls. Book a neutral umpire directly from the app with clear match fees.',
+    badge: 'Neutral Match Officials',
     accentColor: '#f59e0b',
     videoType: 'umpire',
     metrics: [
-      { label: 'Registered Umpires', val: '320+' },
-      { label: 'Panel Rating Avg', val: '4.88 ★' },
-      { label: 'Fair Play Index', val: '99.8%' }
+      { label: 'Booking', val: 'In-App' },
+      { label: 'Fees', val: 'Transparent' },
+      { label: 'Officials', val: 'Neutral' }
     ],
     features: [
-      'Browse umpires with experience level, matches officiated, and fee per match',
-      'Instant assignment to friendly games, corporate matches, or league fixtures',
-      'Zero dispute guarantee: Official decision telemetry and match reports'
+      'Browse umpire profiles with experience and fee per match',
+      'Book an umpire for friendly games, corporate matches, or leagues',
+      'A neutral official on the field keeps every match fair'
     ]
   },
   {
     id: 'tournaments',
-    tag: '04. TOURNAMENT ENGINE',
-    title: 'Create & Host Cricket Tournaments Flawlessly',
-    subtitle: 'From local weekend knockouts to corporate leagues. Automated fixture generation, group stages, live Net Run Rate (NRR) calculators, and digital prize pool escrow.',
-    badge: 'Automated NRR & Brackets',
+    tag: '04. TOURNAMENTS',
+    title: 'Create & Host Cricket Tournaments',
+    subtitle: 'From local weekend knockouts to corporate cups. Create a tournament, set entry fees and prizes, and let teams register online.',
+    badge: 'Tournament Hosting Tools',
     accentColor: '#a855f7',
     videoType: 'bracket',
     metrics: [
-      { label: 'Tournaments Hosted', val: '1,450+' },
-      { label: 'Prize Pool Distributed', val: '₹4.2 Cr' },
-      { label: 'Organizer Time Saved', val: '85%' }
+      { label: 'Registrations', val: 'Online' },
+      { label: 'Entry Fee', val: 'Set Your Own' },
+      { label: 'Prizes', val: 'Clearly Listed' }
     ],
     features: [
-      'Automated Round-Robin and Knockout bracket draws with PDF schedule export',
-      'Live dynamic points table with real-time Net Run Rate (NRR) recalculation',
-      'Entry fee collection and verified prize money escrow protection'
+      'Create a tournament with format, venue, dates, entry fee and prizes',
+      'Teams register from the app and organizers see who has joined',
+      'Keep every team informed in one place instead of scattered chats'
     ]
   },
   {
     id: 'livescore',
-    tag: '05. BROADCAST LIVE SCORING',
-    title: 'Ball-By-Ball Scoring & Wagon Wheels',
-    subtitle: 'Turn every match into an IPL-style broadcast. 1-tap live scoring, wagon wheels, run rate worms, player strike rates, and sharable spectator links for fans.',
-    badge: 'Sub-Second Telemetry',
+    tag: '05. LIVE SCORING',
+    title: 'Ball-By-Ball Live Scoring',
+    subtitle: 'Turn every match into a live broadcast for your friends and fans. Score ball by ball and let everyone follow the match live.',
+    badge: 'Live Scorecards',
     accentColor: '#ec4899',
     videoType: 'scoring',
     metrics: [
-      { label: 'Ball Update Latency', val: '< 0.5s' },
-      { label: 'Career Stats Saved', val: '180K+' },
-      { label: 'Spectator Link Clicks', val: '1.2M+' }
+      { label: 'Scoring', val: 'Ball by Ball' },
+      { label: 'Updates', val: 'Live' },
+      { label: 'Match Records', val: 'Scorecard' }
     ],
     features: [
-      'Intuitive 1-tap scorer: Runs, boundaries, extras, and dismissals',
-      'Interactive wagon wheels, run-rate worms, and Manhattan bar charts',
-      'Free spectator web link: Friends watch live on WhatsApp with zero app install'
+      'Simple scoring for runs, boundaries, extras and wickets',
+      'Live scorecard updates for everyone following the match',
+      'Friends and fans can follow the score without WhatsApp forwards'
     ]
   }
 ];
@@ -106,23 +138,23 @@ export const USER_FACILITIES = [
     facilities: [
       {
         title: 'Fast Team-to-Team Matchmaking',
-        desc: 'Post a match challenge or browse nearby teams ready to play. Connect and confirm in seconds.'
+        desc: 'Post a match challenge or browse nearby teams ready to play. Connect and confirm inside the app.'
       },
       {
-        title: 'Guaranteed Floodlit Ground Booking',
-        desc: 'Instant booking on verified cricket turfs with 1-tap UPI split payment among all players.'
+        title: 'Easy Ground Booking',
+        desc: 'Find grounds near you, pick a slot, and book and pay online without endless phone calls.'
       },
       {
-        title: 'Certified Umpires on Demand',
-        desc: 'Book qualified cricket umpires for impartial officiating and professional match experience.'
+        title: 'Umpires on Demand',
+        desc: 'Book a neutral umpire for impartial officiating and a proper match experience.'
       },
       {
-        title: 'Pro Live Scoring & Lifetime Stats',
-        desc: 'Ball-by-ball commentary, player career averages, strike rates, 5-wicket hauls, and MVP trophies.'
+        title: 'Live Scoring',
+        desc: 'Ball-by-ball live scoring so your friends and fans can follow the match.'
       },
       {
-        title: 'Squad Roster Management',
-        desc: 'Track teammate availability, pick up local guest players, and assign player roles with 1 click.'
+        title: 'Squad Management',
+        desc: 'Manage your team and teammates in one place and get chat with rival captains.'
       }
     ]
   },
@@ -131,56 +163,56 @@ export const USER_FACILITIES = [
     badge: 'VENUE PARTNERS',
     accent: '#06b6d4',
     icon: 'MapPin',
-    headline: 'Fill Every Slot & Eliminate Revenue Loss from Cancellations',
+    headline: 'Get Your Ground In Front Of Local Cricket Teams',
     facilities: [
       {
-        title: 'Zero Empty Night Slots',
-        desc: 'Our matchmaking engine continuously pairs teams searching for grounds into your vacant slots.'
+        title: 'Reach Local Teams',
+        desc: 'Get discovered by cricket squads searching for grounds in your area.'
       },
       {
-        title: '100% Upfront Guaranteed Payouts',
-        desc: 'Captains lock turf fees upfront through automated squad split payments. No chasing payments.'
+        title: 'Online Slot Bookings',
+        desc: 'Teams pick an available slot and book online, so fewer calls and fewer double bookings.'
       },
       {
-        title: 'No-Show Protection Escrow',
-        desc: 'If a team cancels late, your venue is compensated instantly through commitment deposits.'
+        title: 'Secure Online Payments',
+        desc: 'Booking payments are collected online instead of chasing cash on the day.'
       },
       {
-        title: 'Direct Calendar & Pitch Management',
-        desc: 'Manage multiple pitches, floodlight surcharges, ball sales, and slot timings in real time.'
+        title: 'Ground Listing Details',
+        desc: 'Show your pitch type, timings, pricing and location clearly to teams.'
       },
       {
-        title: 'Verified Cricketers Community',
-        desc: 'Get discovered by thousands of active, verified cricket squads in your metropolitan area.'
+        title: 'Cricket-Focused Community',
+        desc: 'Be part of a platform built only for cricket teams, umpires and tournaments.'
       }
     ]
   },
   {
-    role: 'Certified Cricket Umpires',
+    role: 'Cricket Umpires',
     badge: 'MATCH OFFICIALS',
     accent: '#f59e0b',
     icon: 'Award',
-    headline: 'Get Booked For Weekend Matches & Earn Transparent Fees',
+    headline: 'Get Booked For Weekend Matches',
     facilities: [
       {
-        title: 'Direct Captain Match Bookings',
-        desc: 'Receive match officiating requests based on your location, free time, and preferred overs format.'
+        title: 'Direct Captain Bookings',
+        desc: 'Receive match officiating requests from captains directly in the app.'
       },
       {
-        title: 'Fixed & Transparent Match Fees',
-        desc: 'Set your own match fee per fixture. Automated payout directly to your bank account post-match.'
+        title: 'Transparent Match Fees',
+        desc: 'Fees are clear to both sides before the match, so no awkward haggling.'
       },
       {
-        title: 'Official Rating & Credentials Profile',
-        desc: 'Showcase your state/district panel certifications, matches officiated, and fair-play rating.'
+        title: 'Umpire Profile',
+        desc: 'Showcase your experience and matches officiated to captains looking for officials.'
       },
       {
-        title: 'Zero Dispute Atmosphere',
-        desc: 'Digital score sync ensures clear over counts, official balls, and documented team behavior.'
+        title: 'Fair Play',
+        desc: 'A neutral official keeps the game clean and disputes low.'
       },
       {
-        title: 'Tournament Umpiring Contracts',
-        desc: 'Exclusive access to officiate multi-day tournament knockouts and corporate championship cups.'
+        title: 'Tournament Opportunities',
+        desc: 'Get noticed by tournament organizers looking for umpires.'
       }
     ]
   },
@@ -189,72 +221,79 @@ export const USER_FACILITIES = [
     badge: 'LEAGUE ORGANIZERS',
     accent: '#a855f7',
     icon: 'Trophy',
-    headline: 'Run Multi-Team Cricket Leagues Like Professional Tournaments',
+    headline: 'Run Multi-Team Cricket Tournaments From One App',
     facilities: [
       {
-        title: 'Automated Bracket Generation',
-        desc: 'Generate single-elimination, double-elimination, or group stage round-robin schedules with 1 tap.'
+        title: 'Create Tournaments Easily',
+        desc: 'Set the format, venue, dates, entry fee and prizes in a few taps.'
       },
       {
-        title: 'Real-Time Dynamic Points Table',
-        desc: 'Automated Net Run Rate (NRR) computation, boundary countback, and live standings updates.'
+        title: 'Online Team Registration',
+        desc: 'Teams register from the app and you can see who has joined and how many slots are left.'
       },
       {
-        title: 'Digital Entry Fee & Prize Escrow',
-        desc: 'Collect team entry fees seamlessly and guarantee transparent prize pool distribution.'
+        title: 'Clear Entry Fee & Prize Details',
+        desc: 'Show entry fees and prizes upfront so every team knows what they are playing for.'
       },
       {
-        title: 'Live Tournament Broadcast Hub',
-        desc: 'Dedicated tournament webpage with fixtures, top batsman/bowler leaderboards, and live scores.'
+        title: 'Live Scoring for Matches',
+        desc: 'Score tournament matches live so teams and fans can follow along.'
       },
       {
-        title: 'Umpire & Ground Bundling',
-        desc: 'Bulk reserve verified partner turfs and assign official umpires across all match fixtures.'
+        title: 'Grounds & Umpires In One Place',
+        desc: 'Find grounds and umpires for your fixtures in the same app.'
       }
     ]
   }
 ];
 
+// ---------------------------------------------------------------------
+// SAMPLE / DEMO DATA - UI preview ku mattum. Real listings illa.
+// (UmpiresAndTournaments.jsx, GroundsSpotlight.jsx la "Sample preview" nu label pannunga)
+// ---------------------------------------------------------------------
 export const CERTIFIED_UMPIRES = [
   {
     id: 'u1',
-    name: 'Sanjeev Sharma',
-    role: 'Lead Match Umpire',
+    name: 'Sample Umpire A',
+    role: 'Match Umpire',
     experience: '8+ Years',
     matchesOfficiated: 240,
-    rating: 4.95,
+    rating: 4.9,
     feePerMatch: 800,
-    certification: 'State Cricket Association Panel A',
-    status: 'Available Tonight'
+    certification: 'Sample profile',
+    status: 'Available Tonight',
+    sample: true
   },
   {
     id: 'u2',
-    name: 'Manoj Pillai',
-    role: 'Senior Official & Scorer',
+    name: 'Sample Umpire B',
+    role: 'Senior Official',
     experience: '6+ Years',
     matchesOfficiated: 185,
-    rating: 4.9,
+    rating: 4.8,
     feePerMatch: 650,
-    certification: 'District Certified Panel',
-    status: 'Available Weekend'
+    certification: 'Sample profile',
+    status: 'Available Weekend',
+    sample: true
   },
   {
     id: 'u3',
-    name: 'K. Venkatesh',
-    role: 'Tournament Referee / Umpire',
+    name: 'Sample Umpire C',
+    role: 'Tournament Umpire',
     experience: '11+ Years',
     matchesOfficiated: 410,
-    rating: 4.98,
+    rating: 4.9,
     feePerMatch: 950,
-    certification: 'National Umpire Academy Graduate',
-    status: 'Available Tonight'
+    certification: 'Sample profile',
+    status: 'Available Tonight',
+    sample: true
   }
 ];
 
 export const ACTIVE_TOURNAMENTS = [
   {
     id: 'tour-1',
-    name: 'Super 8 Champions Trophy 2026',
+    name: 'Sample Champions Trophy',
     format: 'Turf T10 (8 Overs)',
     prizePool: '₹60,000',
     firstPrize: '₹35,000 + Trophy',
@@ -262,12 +301,13 @@ export const ACTIVE_TOURNAMENTS = [
     maxTeams: 16,
     entryFee: '₹4,000 / team',
     status: 'Registering',
-    dates: 'Next Saturday & Sunday',
-    location: 'Apex Arena & Floodlit Ground'
+    dates: 'Sample dates',
+    location: 'Sample Ground',
+    sample: true
   },
   {
     id: 'tour-2',
-    name: 'Night Box Premier League (NBPL)',
+    name: 'Sample Box Cricket League',
     format: 'Box Cricket (6v6)',
     prizePool: '₹40,000',
     firstPrize: '₹25,000 + Trophy',
@@ -275,12 +315,13 @@ export const ACTIVE_TOURNAMENTS = [
     maxTeams: 8,
     entryFee: '₹3,000 / team',
     status: 'Ongoing (Knockouts)',
-    dates: 'Tonight 7:00 PM',
-    location: 'Skyline Box Cricket Stadium'
+    dates: 'Sample dates',
+    location: 'Sample Box Cricket Arena',
+    sample: true
   },
   {
     id: 'tour-3',
-    name: 'Corporate Weekend Cricket Cup',
+    name: 'Sample Corporate Cup',
     format: 'Leather Ball T20',
     prizePool: '₹1,00,000',
     firstPrize: '₹60,000 + Trophy',
@@ -288,73 +329,77 @@ export const ACTIVE_TOURNAMENTS = [
     maxTeams: 16,
     entryFee: '₹7,500 / team',
     status: 'Registering',
-    dates: 'Starting End of Month',
-    location: 'Green Field International Grounds'
+    dates: 'Sample dates',
+    location: 'Sample International Ground',
+    sample: true
   }
 ];
 
 export const SAMPLE_TURFS = [
   {
     id: 'g1',
-    name: 'Apex Arena & Floodlit Turf',
-    location: 'Sector 45 / Central Sports Hub',
+    name: 'Sample Floodlit Turf',
+    location: 'Sample location',
     pricePerHour: 1400,
     rating: 4.9,
     reviews: 142,
-    pitch: 'Pro AstroTurf (15mm shockpad)',
-    lights: '1000 Lux Shadowless LED',
-    amenities: ['Dugouts', 'Live Stream Cam', 'Chilled Water', 'Shower'],
-    slotsAvailableTonight: 3
+    pitch: 'AstroTurf',
+    lights: 'LED Floodlights',
+    amenities: ['Dugouts', 'Drinking Water', 'Parking'],
+    slotsAvailableTonight: 3,
+    sample: true
   },
   {
     id: 'g2',
-    name: 'Skyline Box Cricket Stadium',
-    location: 'Outer Ring Road, Tech Corridor',
+    name: 'Sample Box Cricket Arena',
+    location: 'Sample location',
     pricePerHour: 1100,
     rating: 4.8,
     reviews: 98,
-    pitch: 'High-Density Turf Matting',
-    lights: '800 Lux Night Sport Lights',
-    amenities: ['Scoreboard Screen', 'Cafeteria', 'Parking', 'Bat Rental'],
-    slotsAvailableTonight: 5
+    pitch: 'Turf Matting',
+    lights: 'Night Sport Lights',
+    amenities: ['Scoreboard', 'Cafeteria', 'Parking'],
+    slotsAvailableTonight: 5,
+    sample: true
   },
   {
     id: 'g3',
-    name: 'Green Field International Grounds',
-    location: 'North Athletic Campus Hub',
+    name: 'Sample Full-Size Ground',
+    location: 'Sample location',
     pricePerHour: 1600,
-    rating: 4.95,
+    rating: 4.9,
     reviews: 210,
-    pitch: 'ICC Standard 22-Yard Turf',
-    lights: 'Shadowless HD Floodlights',
-    amenities: ['Bowling Machine', 'Pro Umpire On-Site', 'Locker Room'],
-    slotsAvailableTonight: 2
+    pitch: '22-Yard Turf Pitch',
+    lights: 'Floodlights',
+    amenities: ['Locker Room', 'Parking', 'Drinking Water'],
+    slotsAvailableTonight: 2,
+    sample: true
   }
 ];
 
 export const WHY_MATCHCONNECT = [
   {
-    title: 'Connect Two Teams 10x Faster',
-    problem: 'Captains spend 2–3 days asking around 5 WhatsApp groups hoping another team is free.',
-    solution: 'MatchConnect broadcasts match invites or pairs you with an opponent in under 60 seconds.',
+    title: 'Find Opponents Faster',
+    problem: 'Captains spend days asking around multiple WhatsApp groups hoping another team is free.',
+    solution: 'Post your match once and let nearby teams see it and accept inside the app.',
     icon: 'Zap'
   },
   {
-    title: 'Book Grounds with Real-Time Slots',
-    problem: 'Calling turf owners individually only to hear "sorry, fully booked" or facing double bookings.',
-    solution: 'Live synced ground calendar allows 1-click slot reservation with upfront automated player split pay.',
+    title: 'Book Grounds With Live Slots',
+    problem: 'Calling ground owners one by one only to hear "sorry, fully booked" or facing double bookings.',
+    solution: 'See available slots and book online in a few taps.',
     icon: 'MapPin'
   },
   {
-    title: 'Certified Umpires on Demand',
-    problem: 'Endless heated arguments over run-outs, no-balls, and LBWs when using friendly uncertified umpires.',
-    solution: 'Book licensed state and district umpires with transparent match fees and official match control.',
+    title: 'Neutral Umpires On Demand',
+    problem: 'Endless heated arguments over run-outs, no-balls, and LBWs when friends umpire the match.',
+    solution: 'Book a neutral umpire with clear match fees for a fair game.',
     icon: 'Award'
   },
   {
-    title: 'Full Tournament Operating Engine',
-    problem: 'Organizing leagues with paper brackets, disputed points tables, and manual Net Run Rate math.',
-    solution: 'Automated knockout brackets, live dynamic NRR calculation, digital entry fee & prize escrow.',
+    title: 'Tournaments In One App',
+    problem: 'Organizing leagues with scattered chats, paper lists, and manual updates.',
+    solution: 'Create tournaments, collect team registrations, and keep every team informed in one app.',
     icon: 'Trophy'
   }
 ];
@@ -363,75 +408,52 @@ export const HOW_IT_WORKS_STEPS = [
   {
     step: '01',
     title: 'Challenge Or Discover An Opponent',
-    description: 'Post your match format (T10, T20, Box Cricket) or challenge a nearby squad. Rival captain gets an instant alert and confirms in seconds.',
-    highlight: 'Connect in 48s'
+    description: 'Post your match format (T10, T20, Box Cricket) or challenge a nearby squad. The rival captain gets an alert and can accept in the app.',
+    highlight: 'Quick Match Connect'
   },
   {
     step: '02',
-    title: 'Select & Lock A Floodlit Ground',
-    description: 'Choose from 450+ partner turfs. Split the ground fee automatically with an instant UPI link sent to both squads.',
-    highlight: 'Instant Slot Lock'
+    title: 'Select & Book A Ground',
+    description: 'Browse grounds near you, pick an available slot, and book online.',
+    highlight: 'Online Slot Booking'
   },
   {
     step: '03',
-    title: 'Assign A Certified Cricket Umpire',
-    description: 'Add a qualified match official to oversee LBW rules, wides, and fair play for a zero-dispute professional game.',
-    highlight: 'Official Umpire Panel'
+    title: 'Add A Neutral Umpire',
+    description: 'Book an umpire to oversee LBW calls, wides, and fair play for a low-dispute game.',
+    highlight: 'Neutral Officials'
   },
   {
     step: '04',
-    title: 'Score Ball-By-Ball & Build Legacy',
-    description: 'Stream live scores to WhatsApp, earn match MVP trophies, update tournament points tables, and rank up your team.',
-    highlight: 'Broadcast Live Telecast'
+    title: 'Score Ball-By-Ball',
+    description: 'Score the match live so friends and fans can follow along, and keep your match records in one place.',
+    highlight: 'Live Scoring'
   }
 ];
 
-export const TESTIMONIALS = [
-  {
-    name: 'Rohit Kulkarni',
-    role: 'Captain, Koramangala Knights',
-    text: 'MatchConnect completely transformed how we play cricket. We challenged Royals XI, locked the turf, and booked an official umpire in under 4 minutes. Zero arguments, pro experience.',
-    rating: 5,
-    matchCount: '38 Matches',
-    city: 'Bengaluru'
-  },
-  {
-    name: 'Suhas Deshmukh',
-    role: 'Owner, Apex Arena Turf',
-    text: 'Our evening slots used to go empty on weekdays. With MatchConnect connecting teams to our ground, we have 92% occupancy and 100% guaranteed upfront payments.',
-    rating: 5,
-    matchCount: 'Turf Partner (14 Months)',
-    city: 'Pune'
-  },
-  {
-    name: 'Amanpreet Singh',
-    role: 'Tournament Organizer, Corporate Cup',
-    text: 'Hosted a 16-team tournament through MatchConnect. Automated brackets, NRR points table, and verified umpires saved our committee 20+ hours of headache.',
-    rating: 5,
-    matchCount: '4 Tournaments Hosted',
-    city: 'Delhi NCR'
-  }
-];
+// Real reviews vandha inga add pannunga:
+// { name: 'Name', role: 'Captain, Team Name', text: 'Review text', rating: 5, city: 'Chennai' }
+export const TESTIMONIALS = [];
 
 export const FAQS = [
   {
-    q: 'How does MatchConnect connect two teams faster?',
-    a: 'MatchConnect maintains an active radar of cricket teams in your metropolitan area. When you post a match or broadcast a challenge with your overs format (T10, T20, Box Cricket), matching teams and captains receive an instant push and WhatsApp notification. Matches are typically confirmed within 48 to 60 seconds.'
+    q: 'How does MatchConnect help me find an opponent?',
+    a: 'Post a match challenge with your overs format (T10, T20, Box Cricket) and preferred slot. Nearby teams can see it and accept inside the app, and captains get an in-app notification. No more searching through WhatsApp groups.'
   },
   {
-    q: 'How does turf ground booking and payment splitting work?',
-    a: 'MatchConnect connects directly to turf management calendars. When you select a ground slot, an automated per-player payment split link is generated. Both teams and all players chip in their share via UPI or cards, locking the slot instantly without the captain risking their own money.'
+    q: 'How does ground booking work?',
+    a: 'Browse grounds near you, check the available slots, and book the one that suits your team. Booking payments are made online securely.'
   },
   {
-    q: 'Can we book certified umpires for our friendly or corporate matches?',
-    a: 'Yes! MatchConnect has over 320+ registered state and district panel umpires. You can browse their officiating experience, match fee, and ratings, and add them to your match in one tap. The umpire receives the venue and timing and arrives to officiate with official equipment.'
+    q: 'Can we book umpires for our friendly or corporate matches?',
+    a: 'Yes. You can browse umpire profiles, see their fee per match, and book one for your game directly from the app.'
   },
   {
-    q: 'How do tournaments and prize pool escrow work on MatchConnect?',
-    a: 'Tournament organizers can create cups, set entry fees and prize pools, and invite teams. Teams register digitally, and MatchConnect generates the automated bracket tree, schedules matches, calculates live Net Run Rates (NRR), and safely escrows the prize pool until the final is won.'
+    q: 'How do tournaments work on MatchConnect?',
+    a: 'Organizers can create a tournament, set the format, venue, dates, entry fee and prizes, and open registrations. Teams register from the app so organizers can see who has joined.'
   },
   {
-    q: 'Do spectators or friends need an app to watch the live match scoring?',
-    a: 'No app download is needed for viewers. When scoring begins, a lightweight web live-stream link is generated that you can share on WhatsApp. Anyone can click and follow ball-by-ball commentary, wagon wheels, and run-rates on any browser in real time.'
+    q: 'Do I need to install an app?',
+    a: 'You can use MatchConnect right now in your browser. An Android app is coming soon on Google Play. Live scores and match details are available inside the app.'
   }
 ];

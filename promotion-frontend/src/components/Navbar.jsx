@@ -1,19 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Zap, 
-  Menu, 
-  X, 
-  ArrowRight, 
-  Users, 
-  Award, 
-  Trophy,
-  MapPin,
-  Flame
-} from 'lucide-react';
+import { Zap, Menu, X, ArrowRight } from 'lucide-react';
+import { WEB_APP_URL, PLAY_STORE_URL } from '../data/promoData';
 
 export default function Navbar({ onOpenConnect, onSelectTheme }) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Play Store live aana "Download App", illana "Use Web App"
+  const hasPlayStore = Boolean(PLAY_STORE_URL);
+  const ctaHref = hasPlayStore ? PLAY_STORE_URL : WEB_APP_URL;
+  const ctaLabel = hasPlayStore ? 'Download App' : 'Use Web App';
 
   useEffect(() => {
     const handleScroll = () => {
@@ -66,10 +62,12 @@ export default function Navbar({ onOpenConnect, onSelectTheme }) {
       >
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#4ade80', fontWeight: 600 }}>
           <span className="live-dot"></span>
-          MATCHCONNECT APP SHOWCASE
+          {hasPlayStore ? 'NOW ON GOOGLE PLAY' : 'ANDROID APP COMING SOON'}
         </span>
         <span className="top-disclaimer-text" style={{ color: 'var(--text-secondary)' }}>
-          All matchmaking, grounds &amp; certified umpires are booked inside the <strong>MatchConnect App</strong>
+          {hasPlayStore 
+            ? <>Find matches, book grounds &amp; umpires, and host tournaments in the <strong>MatchConnect App</strong></>
+            : <>Use the <strong>MatchConnect web app</strong> today. Android app coming soon on Google Play.</>}
         </span>
       </div>
 
@@ -148,29 +146,14 @@ export default function Navbar({ onOpenConnect, onSelectTheme }) {
 
         {/* Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          {/* <a
-            href="#themes"
-            className="btn btn-secondary nav-btn-secondary"
-            style={{ padding: '8px 18px', fontSize: '0.85rem' }}
-            onClick={(e) => {
-              if (onOpenConnect) {
-                e.preventDefault();
-                onOpenConnect();
-              }
-            }}
-          >
-            <Zap size={15} color="#22c55e" />
-            Explore Themes
-          </a> */}
-
           <a
-            href="http://localhost:5173"
+            href={ctaHref}
             target="_blank"
             rel="noopener noreferrer"
             className="btn btn-primary nav-btn-primary"
             style={{ padding: '8px 20px', fontSize: '0.85rem' }}
           >
-            Launch App
+            {ctaLabel}
             <ArrowRight size={15} />
           </a>
 
@@ -241,10 +224,12 @@ export default function Navbar({ onOpenConnect, onSelectTheme }) {
               Explore 5 Themes
             </a>
             <a
-              href="http://localhost:5173"
+              href={ctaHref}
+              target="_blank"
+              rel="noopener noreferrer"
               className="btn btn-primary"
             >
-              Launch MatchConnect App
+              {hasPlayStore ? 'Download MatchConnect App' : 'Use MatchConnect Web App'}
             </a>
           </div>
         </div>
@@ -256,7 +241,6 @@ export default function Navbar({ onOpenConnect, onSelectTheme }) {
           .mobile-menu-btn { display: block !important; }
         }
         @media (max-width: 640px) {
-          .nav-btn-secondary { display: none !important; }
           .nav-btn-primary { padding: 6px 14px !important; font-size: 0.8rem !important; width: auto !important; }
           .top-disclaimer-text { display: none !important; }
         }

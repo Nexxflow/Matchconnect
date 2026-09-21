@@ -6,31 +6,54 @@ import {
   MapPin, 
   Heart, 
   ShieldCheck, 
-  QrCode, 
   Smartphone, 
-  ArrowRight,
-  Video,
-  UserCheck,
-  CreditCard
+  Bell,
+  Mail
 } from 'lucide-react';
+import {
+  WEB_APP_URL,
+  PLAY_STORE_URL,
+  SUPPORT_EMAIL,
+  PRIVACY_URL,
+  TERMS_URL,
+  WAITLIST_FORM_URL,
+  LAUNCH_REGION,
+  CITIES
+} from '../data/promoData';
 
 export default function UpdatedFooter({ onConnectTeams }) {
   const [email, setEmail] = useState('');
   const [subscribed, setSubscribed] = useState(false);
-  const [showQrModal, setShowQrModal] = useState(false);
 
+  const hasPlayStore = Boolean(PLAY_STORE_URL);
+
+  // Backend illa, so waitlist form URL irundha adhu, illana email app open aagum
   const handleSubscribe = (e) => {
     e.preventDefault();
-    if (email.trim()) {
-      setSubscribed(true);
-      setTimeout(() => {
-        setEmail('');
-        setSubscribed(false);
-      }, 4000);
+    const value = email.trim();
+    if (!value) return;
+
+    if (WAITLIST_FORM_URL) {
+      window.open(WAITLIST_FORM_URL, '_blank', 'noopener,noreferrer');
+    } else {
+      const subject = encodeURIComponent('MatchConnect launch updates');
+      const body = encodeURIComponent(`Please add me to the MatchConnect launch updates list.\n\nMy email: ${value}`);
+      window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
     }
+
+    setSubscribed(true);
+    setTimeout(() => {
+      setEmail('');
+      setSubscribed(false);
+    }, 6000);
   };
 
-  const CITIES = ['Bangalore', 'Mumbai', 'Delhi-NCR', 'Hyderabad', 'Chennai', 'Pune', 'Kolkata', 'Ahmedabad'];
+  const HIGHLIGHTS = [
+    { value: 'Teams', label: 'Find opponents', color: '#4ade80' },
+    { value: 'Grounds', label: 'Book slots online', color: '#38bdf8' },
+    { value: 'Umpires', label: 'Neutral officials', color: '#fbbf24' },
+    { value: 'Live Score', label: 'Ball by ball', color: '#c084fc' }
+  ];
 
   return (
     <footer 
@@ -60,7 +83,7 @@ export default function UpdatedFooter({ onConnectTeams }) {
       />
 
       <div className="container" style={{ position: 'relative', zIndex: 1 }}>
-        {/* GIANT PROMOTIONAL LAUNCH BANNER */}
+        {/* PROMOTIONAL LAUNCH BANNER */}
         <div 
           className="glass-panel"
           style={{
@@ -74,40 +97,46 @@ export default function UpdatedFooter({ onConnectTeams }) {
         >
           <div className="badge-pill" style={{ marginBottom: '16px' }}>
             <Zap size={14} />
-            AVAILABLE ON IOS &amp; ANDROID
+            {hasPlayStore ? 'AVAILABLE ON GOOGLE PLAY' : 'ANDROID APP COMING SOON'}
           </div>
 
           <h2 style={{ fontSize: 'clamp(2.2rem, 4vw, 3.4rem)', marginBottom: '16px', lineHeight: 1.15 }}>
-            Experience Grassroots Cricket Re-imagined. <br />
-            <span className="neon-gradient-text">Download the MatchConnect App</span>
+            Grassroots Cricket, Re-imagined. <br />
+            <span className="neon-gradient-text">
+              {hasPlayStore ? 'Download the MatchConnect App' : 'Use MatchConnect on the Web Today'}
+            </span>
           </h2>
 
           <p style={{ color: 'var(--text-secondary)', maxWidth: '720px', margin: '0 auto 32px auto', fontSize: '1.05rem', lineHeight: 1.6 }}>
-            Every weekend match you ever play: matched in 30 seconds with equal opponents, played on verified floodlit turfs, 
-            officiated by neutral certified umpires, and streamed live with AI reels.
+            Find opponents, book grounds and umpires, host tournaments, and score matches live. 
+            All in one cricket app built for local players.
           </p>
 
           <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', flexWrap: 'wrap', marginBottom: '24px' }}>
-            <button 
-              onClick={() => setShowQrModal(true)}
+            <a 
+              href={hasPlayStore ? PLAY_STORE_URL : WEB_APP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               className="btn btn-primary"
               style={{ padding: '15px 34px', fontSize: '1rem', gap: '10px' }}
             >
               <Smartphone size={18} />
-              Get App on iOS &amp; Android
-            </button>
+              {hasPlayStore ? 'Get it on Google Play' : 'Open Web App'}
+            </a>
 
-            <button 
-              onClick={() => setShowQrModal(true)}
-              className="btn btn-secondary"
-              style={{ padding: '15px 28px', fontSize: '1rem', gap: '8px' }}
-            >
-              <QrCode size={18} />
-              Scan QR Code
-            </button>
+            {!hasPlayStore && (
+              <a 
+                href="#notify"
+                className="btn btn-secondary"
+                style={{ padding: '15px 28px', fontSize: '1rem', gap: '8px' }}
+              >
+                <Bell size={18} />
+                Notify Me at Launch
+              </a>
+            )}
           </div>
 
-          {/* Real-time Ecosystem Metrics */}
+          {/* Feature highlights */}
           <div 
             style={{
               display: 'grid',
@@ -119,75 +148,14 @@ export default function UpdatedFooter({ onConnectTeams }) {
               margin: '0 auto'
             }}
           >
-            <div>
-              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#4ade80' }}>14,800+</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Matches Paired</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#38bdf8' }}>480+</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Verified Turfs</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fbbf24' }}>350+</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Certified Umpires</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#c084fc' }}>99.4%</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Fair Play Rating</div>
-            </div>
+            {HIGHLIGHTS.map((h) => (
+              <div key={h.value}>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: h.color }}>{h.value}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{h.label}</div>
+              </div>
+            ))}
           </div>
         </div>
-
-        {/* QR Code Modal */}
-        {showQrModal && (
-          <div 
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: 'rgba(0, 0, 0, 0.85)',
-              backdropFilter: 'blur(12px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 9999,
-              padding: '20px'
-            }}
-            onClick={() => setShowQrModal(false)}
-          >
-            <div 
-              style={{
-                background: '#0d1410',
-                border: '1px solid #22c55e',
-                borderRadius: '20px',
-                padding: '36px',
-                maxWidth: '400px',
-                textAlign: 'center',
-                boxShadow: '0 0 50px rgba(34, 197, 94, 0.4)'
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
-                <div style={{ padding: '16px', background: '#fff', borderRadius: '16px' }}>
-                  <QrCode size={160} color="#000" />
-                </div>
-              </div>
-              <h3 style={{ fontSize: '1.3rem', color: '#fff', marginBottom: '8px' }}>Scan with Phone Camera</h3>
-              <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', marginBottom: '20px' }}>
-                Installs the MatchConnect Progressive Web App instantly on your iPhone or Android.
-              </p>
-              <button 
-                onClick={() => setShowQrModal(false)}
-                className="btn btn-primary"
-                style={{ width: '100%', justifyContent: 'center' }}
-              >
-                Close Window
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* FOOTER LINKS & SITEMAP GRID */}
         <div 
@@ -221,11 +189,17 @@ export default function UpdatedFooter({ onConnectTeams }) {
               </span>
             </div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: '280px', marginBottom: '16px' }}>
-              The comprehensive amateur cricket operating system. Connecting teams 10x faster, ensuring neutral certified officiating, guaranteed ground slots, automated tournaments, and live scoring.
+              A cricket app for local teams. Find opponents, book grounds and umpires, host tournaments, and score matches live.
             </p>
-            <div style={{ fontSize: '0.78rem', color: '#4ade80', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <ShieldCheck size={14} /> 100% Neutral Fair Play Guarantee
+            <div style={{ fontSize: '0.78rem', color: '#4ade80', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+              <ShieldCheck size={14} /> Built for fair play
             </div>
+            <a 
+              href={`mailto:${SUPPORT_EMAIL}`}
+              style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Mail size={14} color="#22c55e" /> {SUPPORT_EMAIL}
+            </a>
           </div>
 
           {/* 5 Core Themes */}
@@ -237,24 +211,24 @@ export default function UpdatedFooter({ onConnectTeams }) {
               <a href="#find-match" style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>🏏 Find a Match</a>
               <a href="#book-umpire" style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>⚖️ Book Umpires</a>
               <a href="#book-ground" style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>🏟️ Book Grounds</a>
-              <a href="#tournaments" style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>🏆 Tournament Engine</a>
-              <a href="#live-score" style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>⚡ Live Scoring Arena</a>
+              <a href="#tournaments" style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>🏆 Tournaments</a>
+              <a href="#live-score" style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>⚡ Live Scoring</a>
               <a href="#feedback" style={{ color: '#4ade80', textDecoration: 'none', fontWeight: 600, marginTop: '4px' }}>💬 Share Feedback</a>
               <a href="#faq" style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>❓ FAQs</a>
             </div>
           </div>
 
-          {/* Match Alert Newsletter */}
-          <div>
+          {/* Launch updates */}
+          <div id="notify">
             <h4 style={{ fontSize: '0.9rem', color: '#fff', marginBottom: '16px', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-              Match Alerts in Your City
+              Get Launch Updates
             </h4>
             <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '14px', lineHeight: 1.5 }}>
-              Receive instant alerts whenever a cricket squad in your neighborhood is looking for an opponent or tournament slot.
+              Leave your email and we will let you know when the Android app goes live on Google Play.
             </p>
             {subscribed ? (
               <div style={{ background: 'rgba(34, 197, 94, 0.15)', border: '1px solid #22c55e', padding: '10px 14px', borderRadius: '10px', color: '#4ade80', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CheckCircle size={16} /> Subscribed to local match alerts!
+                <CheckCircle size={16} /> Almost done! Complete the email or form that just opened.
               </div>
             ) : (
               <form onSubmit={handleSubscribe} className="newsletter-form" style={{ display: 'flex', gap: '8px' }}>
@@ -279,6 +253,7 @@ export default function UpdatedFooter({ onConnectTeams }) {
                   type="submit"
                   className="btn btn-primary"
                   style={{ padding: '10px 16px', borderRadius: '10px' }}
+                  aria-label="Notify me"
                 >
                   <Send size={15} />
                 </button>
@@ -287,7 +262,7 @@ export default function UpdatedFooter({ onConnectTeams }) {
           </div>
         </div>
 
-        {/* Coverage Cities Bar */}
+        {/* Launch Region Bar */}
         <div 
           style={{
             padding: '16px 0',
@@ -304,7 +279,7 @@ export default function UpdatedFooter({ onConnectTeams }) {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <MapPin size={14} color="#22c55e" />
-            <strong style={{ color: 'var(--text-secondary)' }}>Live City Networks:</strong>
+            <strong style={{ color: 'var(--text-secondary)' }}>Starting in {LAUNCH_REGION}:</strong>
           </div>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             {CITIES.map(city => (
@@ -315,7 +290,7 @@ export default function UpdatedFooter({ onConnectTeams }) {
           </div>
         </div>
 
-        {/* Bottom Copyright & Credit Row */}
+        {/* Bottom Copyright, Legal & Credit Row */}
         <div 
           className="footer-bottom-row"
           style={{
@@ -331,11 +306,17 @@ export default function UpdatedFooter({ onConnectTeams }) {
           }}
         >
           <div>
-            &copy; {new Date().getFullYear()} MatchConnect Cricket Systems. Built exclusively for recreational players.
+            &copy; {new Date().getFullYear()} MatchConnect. Built for recreational cricket players.
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <a href={PRIVACY_URL} style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>Privacy Policy</a>
+            <a href={TERMS_URL} style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>Terms &amp; Conditions</a>
+            <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>Contact</a>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span>Built for passionate cricket captains, turf owners &amp; players with</span>
+            <span>Made with</span>
             <Heart size={14} color="#ef4444" fill="#ef4444" />
+            <span>for cricket lovers</span>
           </div>
         </div>
       </div>

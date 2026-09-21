@@ -3,79 +3,97 @@ import {
   Star, 
   ChevronDown, 
   HelpCircle, 
-  Quote, 
   ShieldCheck, 
   Sparkles,
   MessageSquare,
   Send
 } from 'lucide-react';
-import { TESTIMONIALS, FAQS } from '../data/promoData';
+import { TESTIMONIALS, FAQS, FEEDBACK_ENDPOINT, SUPPORT_EMAIL } from '../data/promoData';
+
+const INITIAL_FORM = {
+  name: '',
+  role: 'Team Captain',
+  teamOrCity: '',
+  category: 'Connecting Teams Faster',
+  rating: 5,
+  message: ''
+};
 
 export default function TestimonialsFAQ() {
   const [openFaqIndex, setOpenFaqIndex] = useState(0);
-
-  // Feedback State
-  const [feedbackList, setFeedbackList] = useState([
-    {
-      id: 1,
-      name: 'Rohit Kulkarni',
-      role: 'Team Captain (Koramangala Knights)',
-      rating: 5,
-      category: 'Connecting Teams Faster',
-      message: 'MatchConnect completely eliminated the weekly Saturday headache of hunting for teams. We locked our turf, split ₹180 per guy in 2 minutes, and had a thriller match scored with full wagon wheels.',
-      time: 'Just now'
-    },
-    {
-      id: 2,
-      name: 'Suhas Deshmukh',
-      role: 'Turf Owner (Apex Arena Turf)',
-      rating: 5,
-      category: 'Turf Ground Booking',
-      message: 'Our empty weekday evening slots are 92% booked now because of MatchConnect matchmaking. Players show up on time and payments are 100% upfront.',
-      time: 'Yesterday'
-    },
-    {
-      id: 3,
-      name: 'Amanpreet Singh',
-      role: 'Tournament Organizer (Delhi NCR)',
-      rating: 5,
-      category: 'Tournaments & Leagues',
-      message: 'Hosted a 16-team tournament using MatchConnect. Automatic Net Run Rate calculation and live point tables made our weekend league run like a mini-IPL.',
-      time: '3 days ago'
-    }
-  ]);
-
-  const [formData, setFormData] = useState({
-    name: '',
-    role: 'Team Captain',
-    teamOrCity: '',
-    category: 'Connecting Teams Faster',
-    rating: 5,
-    message: ''
-  });
+  const [formData, setFormData] = useState(INITIAL_FORM);
   const [hoverRating, setHoverRating] = useState(0);
   const [submitted, setSubmitted] = useState(false);
+  const [sentVia, setSentVia] = useState('email'); // 'api' | 'email'
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleFeedbackSubmit = (e) => {
+  const handleFeedbackSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.message.trim()) return;
 
-    const newFeedback = {
-      id: Date.now(),
+    setError('');
+    const payload = {
       name: formData.name.trim(),
-      role: `${formData.role}${formData.teamOrCity ? ` (${formData.teamOrCity.trim()})` : ''}`,
+      role: formData.role,
+      teamOrCity: formData.teamOrCity.trim(),
+      topic: formData.category,
       rating: formData.rating,
-      category: formData.category,
-      message: formData.message.trim(),
-      time: 'Just now'
+      message: formData.message.trim()
     };
 
-    setFeedbackList([newFeedback, ...feedbackList]);
+    // 1) Endpoint set pannirundha (Formspree / Google Apps Script) adhukku POST
+    if (FEEDBACK_ENDPOINT) {
+      try {
+        setSending(true);
+        const res = await fetch(FEEDBACK_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('Request failed');
+        setSentVia('api');
+        setSubmitted(true);
+      } catch (err) {
+        setError('Could not send your feedback right now. Please try again in a moment.');
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
+
+    // 2) Endpoint illana user oda email app open aagum
+    const subject = encodeURIComponent(`MatchConnect Feedback: ${payload.topic}`);
+    const body = encodeURIComponent(
+      `Name: ${payload.name}\nRole: ${payload.role}\nTeam / Venue / City: ${payload.teamOrCity || '-'}\nTopic: ${payload.topic}\nRating: ${payload.rating}/5\n\n${payload.message}`
+    );
+    window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
+    setSentVia('email');
     setSubmitted(true);
   };
 
   const toggleFaq = (index) => {
     setOpenFaqIndex(openFaqIndex === index ? -1 : index);
+  };
+
+  const inputStyle = {
+    width: '100%',
+    padding: '12px 14px',
+    borderRadius: '10px',
+    background: 'rgba(255, 255, 255, 0.04)',
+    border: '1px solid rgba(255, 255, 255, 0.12)',
+    color: '#fff',
+    fontSize: '0.88rem',
+    outline: 'none'
+  };
+
+  const labelStyle = {
+    display: 'block',
+    fontSize: '0.8rem',
+    fontWeight: 600,
+    color: 'var(--text-secondary)',
+    marginBottom: '6px',
+    textTransform: 'uppercase'
   };
 
   return (
@@ -99,8 +117,8 @@ export default function TestimonialsFAQ() {
               Share Your Feedback on <span className="neon-gradient-text">MatchConnect</span>
             </h2>
             <p className="section-subtitle">
-              Are you a team captain, cricketer, turf owner, or certified umpire? 
-              Share your experience, feature requests, or review with the MatchConnect community.
+              Are you a team captain, cricketer, ground owner, or umpire? 
+              Share your experience or feature requests and help us build a better app for local cricket.
             </p>
           </div>
 
@@ -113,7 +131,7 @@ export default function TestimonialsFAQ() {
             }}
             className="feedback-main-grid"
           >
-            {/* Left Column: Interactive Feedback Form */}
+            {/* Left Column: Feedback Form */}
             <div 
               className="glass-panel feedback-form-panel"
               style={{
@@ -140,22 +158,17 @@ export default function TestimonialsFAQ() {
                     <ShieldCheck size={36} color="#22c55e" />
                   </div>
                   <h3 style={{ fontSize: '1.4rem', color: '#fff', marginBottom: '8px' }}>
-                    Thank You For Your Feedback!
+                    {sentVia === 'api' ? 'Thank You For Your Feedback!' : 'Almost There!'}
                   </h3>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem', lineHeight: 1.6, maxWidth: '380px', margin: '0 auto 24px auto' }}>
-                    Your review has been recorded and posted to the community feed. We continuously improve the MatchConnect App based on your feedback.
+                    {sentVia === 'api'
+                      ? 'Your feedback has been sent to the MatchConnect team. We read every message and use it to improve the app.'
+                      : 'Your email app has opened with your feedback filled in. Just press Send to deliver it to the MatchConnect team.'}
                   </p>
                   <button
                     onClick={() => {
                       setSubmitted(false);
-                      setFormData({
-                        name: '',
-                        role: 'Team Captain',
-                        teamOrCity: '',
-                        category: 'Connecting Teams Faster',
-                        rating: 5,
-                        message: ''
-                      });
+                      setFormData(INITIAL_FORM);
                     }}
                     className="btn btn-secondary"
                     style={{ padding: '10px 24px', fontSize: '0.9rem' }}
@@ -170,65 +183,41 @@ export default function TestimonialsFAQ() {
                     <h3 style={{ fontSize: '1.25rem', color: '#fff' }}>Submit User Feedback</h3>
                   </div>
 
-                  {/* Name & Role Grid */}
+                  {/* Name & Team Grid */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }} className="feedback-form-row">
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase' }}>
-                        Your Full Name *
-                      </label>
+                      <label style={labelStyle}>Your Full Name *</label>
                       <input
                         type="text"
                         required
                         placeholder="e.g. Vikram Sethi"
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        style={{
-                          width: '100%',
-                          padding: '12px 14px',
-                          borderRadius: '10px',
-                          background: 'rgba(255, 255, 255, 0.04)',
-                          border: '1px solid rgba(255, 255, 255, 0.12)',
-                          color: '#fff',
-                          fontSize: '0.88rem',
-                          outline: 'none'
-                        }}
+                        style={inputStyle}
                       />
                     </div>
 
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase' }}>
-                        Team / Venue / City
-                      </label>
+                      <label style={labelStyle}>Team / Venue / City</label>
                       <input
                         type="text"
-                        placeholder="e.g. Thunderbolts CC / Bengaluru"
+                        placeholder="e.g. Thunderbolts CC / Chennai"
                         value={formData.teamOrCity}
                         onChange={(e) => setFormData({ ...formData, teamOrCity: e.target.value })}
-                        style={{
-                          width: '100%',
-                          padding: '12px 14px',
-                          borderRadius: '10px',
-                          background: 'rgba(255, 255, 255, 0.04)',
-                          border: '1px solid rgba(255, 255, 255, 0.12)',
-                          color: '#fff',
-                          fontSize: '0.88rem',
-                          outline: 'none'
-                        }}
+                        style={inputStyle}
                       />
                     </div>
                   </div>
 
                   {/* User Role Selector */}
                   <div style={{ marginBottom: '16px' }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase' }}>
-                      Select Your Role
-                    </label>
+                    <label style={labelStyle}>Select Your Role</label>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }} className="feedback-roles-grid">
                       {[
                         'Team Captain',
                         'Cricket Player',
                         'Turf Owner',
-                        'Certified Umpire',
+                        'Umpire',
                         'Tournament Host',
                         'Spectator / Fan'
                       ].map((r) => (
@@ -255,40 +244,31 @@ export default function TestimonialsFAQ() {
                     </div>
                   </div>
 
-                  {/* Feedback Category & Interactive Rating */}
+                  {/* Feedback Category & Rating */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '14px', marginBottom: '16px' }} className="feedback-meta-row">
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase' }}>
-                        Feedback Topic
-                      </label>
+                      <label style={labelStyle}>Feedback Topic</label>
                       <select
                         value={formData.category}
                         onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                         style={{
-                          width: '100%',
-                          padding: '12px 14px',
-                          borderRadius: '10px',
+                          ...inputStyle,
                           background: 'rgba(12, 18, 14, 0.9)',
-                          border: '1px solid rgba(255, 255, 255, 0.12)',
-                          color: '#fff',
                           fontSize: '0.85rem',
-                          outline: 'none',
                           cursor: 'pointer'
                         }}
                       >
                         <option value="Connecting Teams Faster">⚡ Connecting Teams Faster</option>
-                        <option value="Turf Ground Booking">🏟️ Turf Ground Booking</option>
-                        <option value="Certified Umpires">⚖️ Certified Umpires Quality</option>
-                        <option value="Tournaments & Leagues">🏆 Tournaments &amp; Leagues</option>
-                        <option value="Ball-by-Ball Live Scoring">📊 Ball-by-Ball Live Scoring</option>
+                        <option value="Ground Booking">🏟️ Ground Booking</option>
+                        <option value="Umpires">⚖️ Umpires</option>
+                        <option value="Tournaments">🏆 Tournaments</option>
+                        <option value="Live Scoring">📊 Live Scoring</option>
                         <option value="Feature Suggestion">💡 Feature Suggestion</option>
                       </select>
                     </div>
 
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase' }}>
-                        Your Rating ({formData.rating}/5)
-                      </label>
+                      <label style={labelStyle}>Your Rating ({formData.rating}/5)</label>
                       <div 
                         style={{
                           display: 'flex',
@@ -329,118 +309,98 @@ export default function TestimonialsFAQ() {
 
                   {/* Feedback Message */}
                   <div style={{ marginBottom: '22px' }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase' }}>
-                      Your Review / Suggestions *
-                    </label>
+                    <label style={labelStyle}>Your Review / Suggestions *</label>
                     <textarea
                       required
                       rows={4}
-                      placeholder="Tell us what you loved about MatchConnect or how we can make weekend matches even better for your squad..."
+                      placeholder="Tell us what you liked about MatchConnect or how we can make weekend matches even better for your squad..."
                       value={formData.message}
                       onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                      style={{
-                        width: '100%',
-                        padding: '12px 14px',
-                        borderRadius: '10px',
-                        background: 'rgba(255, 255, 255, 0.04)',
-                        border: '1px solid rgba(255, 255, 255, 0.12)',
-                        color: '#fff',
-                        fontSize: '0.88rem',
-                        outline: 'none',
-                        resize: 'vertical',
-                        fontFamily: 'inherit'
-                      }}
+                      style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
                     />
                   </div>
+
+                  {error && (
+                    <div style={{ marginBottom: '14px', padding: '10px 14px', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.35)', color: '#f87171', fontSize: '0.85rem' }}>
+                      {error}
+                    </div>
+                  )}
 
                   {/* Submit Button */}
                   <button
                     type="submit"
                     className="btn btn-primary"
+                    disabled={sending}
                     style={{
                       width: '100%',
                       padding: '14px',
                       fontSize: '1rem',
-                      boxShadow: '0 0 25px rgba(34, 197, 94, 0.35)'
+                      boxShadow: '0 0 25px rgba(34, 197, 94, 0.35)',
+                      opacity: sending ? 0.7 : 1
                     }}
                   >
                     <Send size={16} />
-                    Submit Feedback &amp; Review
+                    {sending ? 'Sending...' : 'Submit Feedback'}
                   </button>
                 </form>
               )}
             </div>
 
-            {/* Right Column: Live Community Feedback Stream */}
+            {/* Right Column: Community reviews (real reviews mattum) */}
             <div>
-              <div 
-                style={{
-                  background: 'rgba(255, 255, 255, 0.03)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                  borderRadius: '16px',
-                  padding: '20px 24px',
-                  marginBottom: '16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between'
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>COMMUNITY RATING</div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '2px' }}>
-                    <span className="mono" style={{ fontSize: '1.8rem', fontWeight: 800, color: '#fff' }}>4.92</span>
-                    <div style={{ display: 'flex', gap: '2px' }}>
-                      {[...Array(5)].map((_, i) => (
-                        <Star key={i} size={14} fill="#fbbf24" color="#fbbf24" />
-                      ))}
-                    </div>
+              {TESTIMONIALS.length === 0 ? (
+                <div
+                  className="glass-card"
+                  style={{
+                    padding: '28px 24px',
+                    borderRadius: '16px',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    textAlign: 'center'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '4px', marginBottom: '14px' }}>
+                    {[...Array(5)].map((_, i) => (
+                      <Star key={i} size={20} color="rgba(255, 255, 255, 0.25)" />
+                    ))}
                   </div>
+                  <h3 style={{ fontSize: '1.15rem', color: '#fff', marginBottom: '8px' }}>
+                    Be Among the First to Review
+                  </h3>
+                  <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
+                    MatchConnect is just getting started. Try the app, tell us what you think, and help shape 
+                    how local cricket teams connect, book grounds and play.
+                  </p>
                 </div>
-
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>TOTAL REVIEWS</div>
-                  <strong style={{ fontSize: '1.2rem', color: '#4ade80' }}>1,280+ Verified</strong>
-                </div>
-              </div>
-
-              {/* Feed of User Feedback */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {feedbackList.map((item) => (
-                  <div
-                    key={item.id}
-                    className="glass-card"
-                    style={{
-                      padding: '18px 20px',
-                      borderRadius: '14px',
-                      border: '1px solid rgba(255, 255, 255, 0.08)',
-                      animation: item.id === 1 ? 'popIn 0.3s ease' : 'none'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {[...Array(item.rating)].map((_, i) => (
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {TESTIMONIALS.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="glass-card"
+                      style={{
+                        padding: '18px 20px',
+                        borderRadius: '14px',
+                        border: '1px solid rgba(255, 255, 255, 0.08)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '8px' }}>
+                        {[...Array(item.rating || 5)].map((_, i) => (
                           <Star key={i} size={13} fill="#fbbf24" color="#fbbf24" />
                         ))}
-                        <span style={{ fontSize: '0.72rem', color: '#4ade80', fontWeight: 700, marginLeft: '4px' }}>
-                          Verified User
-                        </span>
                       </div>
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                        {item.time}
-                      </span>
-                    </div>
 
-                    <p style={{ fontSize: '0.85rem', color: '#e2e8f0', lineHeight: 1.5, marginBottom: '10px' }}>
-                      "{item.message}"
-                    </p>
+                      <p style={{ fontSize: '0.85rem', color: '#e2e8f0', lineHeight: 1.5, marginBottom: '10px' }}>
+                        "{item.text}"
+                      </p>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', paddingTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                      <strong style={{ color: '#fff' }}>{item.name}</strong>
-                      <span style={{ color: 'var(--text-secondary)' }}>{item.role}</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', paddingTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                        <strong style={{ color: '#fff' }}>{item.name}</strong>
+                        <span style={{ color: 'var(--text-secondary)' }}>{item.role}</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -453,7 +413,7 @@ export default function TestimonialsFAQ() {
               FREQUENTLY ASKED QUESTIONS
             </div>
             <h2 style={{ fontSize: 'clamp(1.8rem, 3.2vw, 2.5rem)' }}>
-              Everything You Need to Know About <span className="cyan-gradient-text">Teams, Turfs &amp; Tournaments</span>
+              Everything You Need to Know About <span className="cyan-gradient-text">Teams, Grounds &amp; Tournaments</span>
             </h2>
           </div>
 

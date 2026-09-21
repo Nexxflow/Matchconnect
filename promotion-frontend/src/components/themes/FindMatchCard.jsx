@@ -5,7 +5,7 @@ import {
   ShieldCheck, 
   Zap, 
   MessageSquareOff, 
-  TrendingUp, 
+  SlidersHorizontal, 
   MapPin, 
   Smartphone,
   Check
@@ -66,11 +66,12 @@ export default function FindMatchCard() {
 
         <h3 style={{ fontSize: 'clamp(1.5rem, 3vw, 2rem)', marginBottom: '12px', color: '#fff', lineHeight: 1.25 }}>
           Stop WhatsApp Group Chaos. <br />
-          <span className="neon-gradient-text">Match with Equal-Skill Teams in 30 Seconds.</span>
+          <span className="neon-gradient-text">Find Your Next Opponent, Fast.</span>
         </h3>
 
         <p style={{ fontSize: '1.02rem', color: 'var(--text-secondary)', lineHeight: 1.65, maxWidth: '920px', margin: 0 }}>
-          No more spamming 50+ WhatsApp groups pleading for an opponent, haggling over match balls, or enduring one-sided blowouts. MatchConnect pairs your squad with verified teams having similar skill ratings (ELO), guaranteed punctuality, and mutual rules.
+          No more spamming 50+ WhatsApp groups pleading for an opponent or haggling over match details. 
+          Post your match challenge, let nearby teams see it, and confirm the format, overs and slot right inside the app.
         </p>
       </div>
 
@@ -100,15 +101,15 @@ export default function FindMatchCard() {
           <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <span style={{ color: '#f87171', fontWeight: 800 }}>&times;</span>
-              <span><strong>50+ WhatsApp Messages:</strong> Spending 3 days begging for an opponent in fragmented city groups.</span>
+              <span><strong>Endless WhatsApp Messages:</strong> Spending days begging for an opponent across scattered groups.</span>
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <span style={{ color: '#f87171', fontWeight: 800 }}>&times;</span>
-              <span><strong>Mismatched Blowouts:</strong> Academy-level semi-pros crush casual weekend teams 220 to 40.</span>
+              <span><strong>Mismatched Games:</strong> Strong teams crush casual weekend squads and nobody enjoys the match.</span>
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <span style={{ color: '#f87171', fontWeight: 800 }}>&times;</span>
-              <span><strong>Last-Minute No-Shows:</strong> Opponent cancels on Saturday at 7 AM, ruining your paid ground slot.</span>
+              <span><strong>Last-Minute Confusion:</strong> Details get lost in chats and plans fall apart on match day.</span>
             </li>
           </ul>
         </div>
@@ -128,15 +129,15 @@ export default function FindMatchCard() {
           <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem', color: '#e2e8f0' }}>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <Check size={16} color="#22c55e" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <span><strong>Instant 30s Radar:</strong> Set format &amp; slot. The algorithm pairs you with an active verified opponent immediately.</span>
+              <span><strong>Post &amp; Discover:</strong> Set your format &amp; slot. Nearby teams see your challenge and can accept in the app.</span>
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <Check size={16} color="#22c55e" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <span><strong>Ranked ELO Parity:</strong> Both teams enter with a 50-50 winning probability for nail-biting finishes.</span>
+              <span><strong>Right-Level Opponents:</strong> Filter by overs format and ball type to find a fair, competitive match.</span>
             </li>
             <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <Check size={16} color="#22c55e" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <span><strong>Guaranteed Punctuality:</strong> Both captains lock a commitment deposit. 0% ghosting rate guaranteed.</span>
+              <span><strong>Everything In One Place:</strong> Captains confirm the match, chat, and book the ground without leaving the app.</span>
             </li>
           </ul>
         </div>
@@ -154,11 +155,11 @@ export default function FindMatchCard() {
       >
         <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.07)', borderRadius: '12px', padding: '18px' }}>
           <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
-            <TrendingUp size={18} color="#4ade80" />
+            <SlidersHorizontal size={18} color="#4ade80" />
           </div>
-          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Ranked ELO Skill Parity</h4>
+          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Match Filters</h4>
           <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0 }}>
-            Dynamic skill ratings calculated ball-by-ball. Both teams enter with balanced win probabilities for genuine contest.
+            Choose overs format, ball type and distance so you play teams that fit your level and your schedule.
           </p>
         </div>
 
@@ -166,9 +167,9 @@ export default function FindMatchCard() {
           <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(6, 182, 212, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
             <ShieldCheck size={18} color="#22d3ee" />
           </div>
-          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Digital Match Contract</h4>
+          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Clear Match Details</h4>
           <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0 }}>
-            Over limits, ball specifications, and powerplay rules are pre-locked digitally prior to toss. Zero disputes on the pitch.
+            Overs, ball type and timings are agreed inside the app before match day, so there are fewer arguments on the pitch.
           </p>
         </div>
 
@@ -176,9 +177,9 @@ export default function FindMatchCard() {
           <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(245, 158, 11, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
             <MapPin size={18} color="#fbbf24" />
           </div>
-          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Auto-Synced Grounds</h4>
+          <h4 style={{ fontSize: '1rem', color: '#fff', marginBottom: '6px' }}>Ground Booking Built In</h4>
           <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0 }}>
-            Matches are tied to verified real-time ground slots in your city radius so neither squad is ever left without a pitch.
+            Found an opponent? Pick a ground near you and book the slot from the same app.
           </p>
         </div>
       </div>
@@ -201,10 +202,10 @@ export default function FindMatchCard() {
         }}
       >
         <span>
-          ⚡ Average pairing time: <strong>32 seconds</strong> across 1,420+ active teams in Bangalore, Mumbai &amp; Delhi-NCR.
+          ⚡ Post a challenge once and let nearby teams come to you.
         </span>
         <span style={{ color: '#4ade80', fontWeight: 600 }}>
-          Available on MatchConnect iOS &amp; Android
+          Web app live &bull; Android app coming soon
         </span>
       </div>
     </div>
