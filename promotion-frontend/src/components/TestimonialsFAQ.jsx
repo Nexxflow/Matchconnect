@@ -492,7 +492,7 @@ export default function TestimonialsFAQ() {
         }
         @media (max-width: 640px) {
           .feedback-form-panel {
-            padding: 22px 16px !important;
+            padding: 20px 14px !important;
           }
           .feedback-form-row {
             grid-template-columns: 1fr !important;
@@ -507,15 +507,15 @@ export default function TestimonialsFAQ() {
             gap: 12px !important;
           }
           .faq-accordion-btn {
-            padding: 16px !important;
+            padding: 16px 14px !important;
             font-size: 0.95rem !important;
           }
           .faq-accordion-body {
-            padding: 0 16px 16px 16px !important;
+            padding: 0 14px 16px 14px !important;
             font-size: 0.88rem !important;
           }
         }
-        @media (max-width: 420px) {
+        @media (max-width: 360px) {
           .feedback-roles-grid {
             grid-template-columns: 1fr !important;
           }

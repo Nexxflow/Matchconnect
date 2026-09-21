@@ -219,47 +219,27 @@ export default function ThemesShowcase({ selectedThemeId, navTimestamp }) {
     >
       <div className="container">
         {/* Section Header */}
-        <div className="section-header" style={{ marginBottom: '32px' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-            <span className="badge-pill" style={{ padding: '6px 16px' }}>
+        <div className="section-header" style={{ marginBottom: '28px' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+            <span className="badge-pill" style={{ padding: '6px 14px' }}>
               <Sparkles size={14} />
               THE 5 PILLARS OF MATCHCONNECT
             </span>
           </div>
 
-          <h2 style={{ fontSize: 'clamp(2.2rem, 4.2vw, 3.4rem)', lineHeight: 1.15, marginBottom: '16px' }}>
+          <h2 style={{ fontSize: 'clamp(1.75rem, 4.8vw, 3.4rem)', lineHeight: 1.18, marginBottom: '14px' }}>
             Inside the MatchConnect App: <br />
             <span className="neon-gradient-text">The 5 Core Game Themes</span>
           </h2>
 
-          <p className="section-subtitle" style={{ maxWidth: '780px', margin: '0 auto', fontSize: '1.05rem' }}>
+          <p className="section-subtitle" style={{ maxWidth: '780px', margin: '0 auto', fontSize: '1rem', lineHeight: 1.6 }}>
             Recreational cricket has been broken by WhatsApp spam, biased officiating, and double-booked turfs. 
             Explore how MatchConnect solves every single pain point with instant app automation through interactive slides.
           </p>
         </div>
 
-        {/* Quick Theme Switcher Pill Bar (Sticky) */}
-        <div 
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: '8px',
-            flexWrap: 'wrap',
-            marginBottom: '32px',
-            position: 'sticky',
-            top: '80px',
-            zIndex: 90,
-            padding: '10px 16px',
-            borderRadius: '9999px',
-            background: 'rgba(7, 10, 8, 0.88)',
-            backdropFilter: 'blur(20px)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            maxWidth: '920px',
-            margin: '0 auto 32px auto',
-            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.6)'
-          }}
-        >
+        {/* Quick Theme Switcher Pill Bar (Sticky, Single-Row Swipeable on Mobile) */}
+        <div className="theme-switcher-bar">
           {/* All 5 Themes / Slideshow Pill */}
           <button
             onClick={() => handlePillClick('all')}
@@ -314,49 +294,37 @@ export default function ThemesShowcase({ selectedThemeId, navTimestamp }) {
         </div>
 
         {/* SLIDE PRESENTATION CONTROLS BAR */}
-        <div 
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '12px',
-            marginBottom: '16px',
-            padding: '12px 20px',
-            borderRadius: '16px',
-            background: 'rgba(12, 18, 14, 0.7)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-            backdropFilter: 'blur(12px)'
-          }}
-        >
+        <div className="slide-controls-bar">
           {/* Left: Current Slide Info */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className="slide-controls-info" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span 
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
-                padding: '4px 12px',
+                padding: '4px 10px',
                 borderRadius: '9999px',
-                fontSize: '0.78rem',
+                fontSize: '0.74rem',
                 fontWeight: 800,
                 letterSpacing: '0.05em',
                 background: `${currentTheme.color}22`,
                 border: `1px solid ${currentTheme.color}44`,
-                color: currentTheme.color
+                color: currentTheme.color,
+                whiteSpace: 'nowrap'
               }}
             >
               SLIDE {currentTheme.number} / 05
             </span>
 
-            <span style={{ fontSize: '0.9rem', color: '#fff', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '0.88rem', color: '#fff', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <currentTheme.icon size={15} color={currentTheme.color} />
-              {currentTheme.label} &bull; <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>{currentTheme.tagline}</span>
+              <span>{currentTheme.label}</span>
+              <span className="slide-tagline-text" style={{ color: 'var(--text-secondary)', fontWeight: 400 }}> &bull; {currentTheme.tagline}</span>
             </span>
           </div>
 
           {/* Right: Controls & View Switcher */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <div className="slide-controls-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             {/* Autoplay toggle */}
             <button
               onClick={() => setIsAutoPlay(!isAutoPlay)}
@@ -523,7 +491,7 @@ export default function ThemesShowcase({ selectedThemeId, navTimestamp }) {
           </div>
         )}
 
-        {/* Slide navigation keyboard hint */}
+        {/* Slide navigation keyboard / touch hint */}
         {viewMode === 'slides' && (
           <div 
             style={{
@@ -531,17 +499,28 @@ export default function ThemesShowcase({ selectedThemeId, navTimestamp }) {
               justifyContent: 'center',
               alignItems: 'center',
               gap: '8px',
-              marginTop: '24px',
+              marginTop: '20px',
               fontSize: '0.8rem',
-              color: 'var(--text-muted)'
+              color: 'var(--text-muted)',
+              textAlign: 'center'
             }}
           >
-            <span>Use keyboard <kbd style={{ padding: '2px 6px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '4px', color: '#fff' }}>&larr;</kbd> <kbd style={{ padding: '2px 6px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '4px', color: '#fff' }}>&rarr;</kbd> or swipe to explore all slides</span>
+            <span className="desktop-hint">Use keyboard <kbd style={{ padding: '2px 6px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '4px', color: '#fff' }}>&larr;</kbd> <kbd style={{ padding: '2px 6px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '4px', color: '#fff' }}>&rarr;</kbd> or swipe to explore all slides</span>
+            <span className="mobile-hint">👈 Swipe left or right to explore themes 👉</span>
             {isAutoPlay && isHovered && (
-              <span style={{ color: '#fbbf24', fontSize: '0.75rem' }}>(Autoplay paused while hovering)</span>
+              <span style={{ color: '#fbbf24', fontSize: '0.75rem' }}>(Autoplay paused)</span>
             )}
           </div>
         )}
+
+        <style>{`
+          .mobile-hint { display: none; }
+          @media (max-width: 640px) {
+            .desktop-hint { display: none !important; }
+            .mobile-hint { display: inline !important; font-size: 0.76rem !important; }
+            .slide-tagline-text { display: none !important; }
+          }
+        `}</style>
 
       </div>
     </section>

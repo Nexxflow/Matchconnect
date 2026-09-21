@@ -50,6 +50,7 @@ export default function FindMatchCard() {
 
       {/* PROMINENT MAIN MOTIVE HERO BOX */}
       <div 
+        className="theme-hero-box"
         style={{
           background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.14) 0%, rgba(10, 24, 16, 0.9) 100%)',
           borderLeft: '5px solid #22c55e',
@@ -64,12 +65,12 @@ export default function FindMatchCard() {
           <Sparkles size={15} /> The Main Motive
         </div>
 
-        <h3 style={{ fontSize: 'clamp(1.5rem, 3vw, 2rem)', marginBottom: '12px', color: '#fff', lineHeight: 1.25 }}>
+        <h3 style={{ fontSize: 'clamp(1.35rem, 3vw, 2rem)', marginBottom: '12px', color: '#fff', lineHeight: 1.25 }}>
           Stop WhatsApp Group Chaos. <br />
           <span className="neon-gradient-text">Find Your Next Opponent, Fast.</span>
         </h3>
 
-        <p style={{ fontSize: '1.02rem', color: 'var(--text-secondary)', lineHeight: 1.65, maxWidth: '920px', margin: 0 }}>
+        <p style={{ fontSize: '1rem', color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: '920px', margin: 0 }}>
           No more spamming 50+ WhatsApp groups pleading for an opponent or haggling over match details. 
           Post your match challenge, let nearby teams see it, and confirm the format, overs and slot right inside the app.
         </p>
@@ -77,9 +78,10 @@ export default function FindMatchCard() {
 
       {/* SIDE-BY-SIDE PROBLEM VS SOLUTION COMPARISON */}
       <div 
+        className="card-comparison-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
           gap: '16px',
           marginBottom: '28px',
           position: 'relative',
@@ -145,9 +147,10 @@ export default function FindMatchCard() {
 
       {/* 3 CORE PILLARS OF FAIR MATCHMAKING */}
       <div 
+        className="card-pillars-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
           gap: '16px',
           position: 'relative',
           zIndex: 1

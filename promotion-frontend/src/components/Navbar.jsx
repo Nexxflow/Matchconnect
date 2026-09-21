@@ -10,6 +10,7 @@ export default function Navbar({ onOpenConnect, onSelectTheme }) {
   const hasPlayStore = Boolean(PLAY_STORE_URL);
   const ctaHref = hasPlayStore ? PLAY_STORE_URL : WEB_APP_URL;
   const ctaLabel = hasPlayStore ? 'Download App' : 'Use Web App';
+  const ctaShort = hasPlayStore ? 'App' : 'Web App';
 
   useEffect(() => {
     const handleScroll = () => {
@@ -49,6 +50,7 @@ export default function Navbar({ onOpenConnect, onSelectTheme }) {
     >
       {/* Top micro-ticker bar */}
       <div 
+        className="top-ticker-bar"
         style={{
           background: 'linear-gradient(90deg, rgba(34, 197, 94, 0.15), rgba(6, 182, 212, 0.15), rgba(245, 158, 11, 0.15))',
           borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
@@ -71,7 +73,7 @@ export default function Navbar({ onOpenConnect, onSelectTheme }) {
         </span>
       </div>
 
-      <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '72px' }}>
+      <div className="container nav-inner-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '72px' }}>
         {/* Brand Logo */}
         <a 
           href="#" 
@@ -84,6 +86,7 @@ export default function Navbar({ onOpenConnect, onSelectTheme }) {
           }}
         >
           <div 
+            className="brand-logo-icon"
             style={{
               width: '40px',
               height: '40px',
@@ -93,7 +96,8 @@ export default function Navbar({ onOpenConnect, onSelectTheme }) {
               alignItems: 'center',
               justifyContent: 'center',
               boxShadow: '0 0 15px rgba(34, 197, 94, 0.5)',
-              position: 'relative'
+              position: 'relative',
+              flexShrink: 0
             }}
           >
             <Zap size={22} color="#051408" strokeWidth={2.8} />
@@ -145,7 +149,7 @@ export default function Navbar({ onOpenConnect, onSelectTheme }) {
         </nav>
 
         {/* Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <a
             href={ctaHref}
             target="_blank"
@@ -153,7 +157,8 @@ export default function Navbar({ onOpenConnect, onSelectTheme }) {
             className="btn btn-primary nav-btn-primary"
             style={{ padding: '8px 20px', fontSize: '0.85rem' }}
           >
-            {ctaLabel}
+            <span className="btn-text-desktop">{ctaLabel}</span>
+            <span className="btn-text-mobile" style={{ display: 'none' }}>{ctaShort}</span>
             <ArrowRight size={15} />
           </a>
 
@@ -166,7 +171,12 @@ export default function Navbar({ onOpenConnect, onSelectTheme }) {
               color: '#fff',
               cursor: 'pointer',
               display: 'none',
-              padding: '6px'
+              padding: '8px',
+              borderRadius: '8px',
+              minWidth: '44px',
+              minHeight: '44px',
+              alignItems: 'center',
+              justifyContent: 'center'
             }}
             className="mobile-menu-btn"
             aria-label="Toggle Navigation Menu"
@@ -207,7 +217,7 @@ export default function Navbar({ onOpenConnect, onSelectTheme }) {
                 textDecoration: 'none',
                 fontSize: '1.05rem',
                 fontWeight: 600,
-                padding: '8px 0',
+                padding: '10px 0',
                 borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
                 cursor: 'pointer'
               }}
@@ -238,15 +248,36 @@ export default function Navbar({ onOpenConnect, onSelectTheme }) {
       <style>{`
         @media (max-width: 1040px) {
           .desktop-nav { display: none !important; }
-          .mobile-menu-btn { display: block !important; }
+          .mobile-menu-btn { display: inline-flex !important; }
+        }
+        @media (max-width: 768px) {
+          .nav-inner-container { height: 60px !important; }
         }
         @media (max-width: 640px) {
-          .nav-btn-primary { padding: 6px 14px !important; font-size: 0.8rem !important; width: auto !important; }
           .top-disclaimer-text { display: none !important; }
+          .top-ticker-bar { padding: 3px 10px !important; font-size: 0.72rem !important; }
         }
         @media (max-width: 480px) {
+          .nav-inner-container { height: 56px !important; }
           .brand-subtitle { display: none !important; }
-          .nav-btn-primary { display: none !important; }
+          .btn-text-desktop { display: none !important; }
+          .btn-text-mobile { display: inline !important; }
+          .nav-btn-primary { 
+            padding: 6px 12px !important; 
+            font-size: 0.78rem !important; 
+            border-radius: 9999px !important;
+            gap: 4px !important;
+            width: auto !important;
+          }
+          .brand-logo-icon {
+            width: 34px !important;
+            height: 34px !important;
+            border-radius: 10px !important;
+          }
+          .brand-logo-icon svg {
+            width: 18px !important;
+            height: 18px !important;
+          }
         }
       `}</style>
     </header>

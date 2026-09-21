@@ -12,6 +12,12 @@ export const PLAY_STORE_URL = '';
 // Support / contact email (footer + feedback la varum)
 export const SUPPORT_EMAIL = 'matchconnectmuon@gmail.com';
 
+// Optional: real number irundha mattum podunga. Empty na buttons kaattaadhu.
+// SUPPORT_PHONE   ex: '+919876543210'
+// SUPPORT_WHATSAPP ex: '919876543210' (+ illama, country code oda)
+export const SUPPORT_PHONE = '';
+export const SUPPORT_WHATSAPP = '';
+
 // Legal pages (promotion-frontend/public/ la privacy.html, terms.html vekkanum)
 export const PRIVACY_URL = '/privacy.html';
 export const TERMS_URL = '/terms.html';
