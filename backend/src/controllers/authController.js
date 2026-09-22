@@ -30,13 +30,6 @@ function signToken(user) {
 }
 
 // ─── Team self-heal ─────────────────────────────────────────────────────────
-// Best-effort: if a user has a team_name but no team_id, try to link them to
-// an existing team row (case/whitespace-insensitive match on name). This is
-// what lets teammates who never created the team (e.g. D, who joined after
-// C created "team A") end up with the same team_id as the creator, instead
-// of silently having team_id = NULL forever. It's called from every place a
-// user record gets loaded, so it self-corrects on next login/profile fetch
-// without needing a one-off migration script.
 async function backfillTeamId(user) {
   if (!user || user.team_id || !user.team_name?.trim()) return user;
 
@@ -45,7 +38,7 @@ async function backfillTeamId(user) {
     [user.team_name.trim()]
   );
   const team = teamRes.rows[0];
-  if (!team) return user; // no matching team row exists yet — nothing to link
+  if (!team) return user;
 
   await pool.query(`UPDATE users SET team_id = $1 WHERE id = $2`, [team.id, user.id]);
   user.team_id = team.id;
@@ -53,19 +46,10 @@ async function backfillTeamId(user) {
 }
 
 // ─── Mailer setup ───────────────────────────────────────────────────────────
-// Configure these in your .env file:
-//   SMTP_HOST=smtp.gmail.com
-//   SMTP_PORT=587
-//   SMTP_SECURE=false
-//   SMTP_USER=you@gmail.com
-//   SMTP_PASS=your-app-password        <- Gmail: use an "App Password", not your real password
-//   MAIL_FROM="MatchConnect <no-reply@matchconnect.com>"
-//
-// Any SMTP provider works the same way (SendGrid, Mailtrap, AWS SES, Resend SMTP, etc).
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT || 587),
-  secure: process.env.SMTP_SECURE === "true", // true for port 465, false for 587/25
+  secure: process.env.SMTP_SECURE === "true",
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS
@@ -96,16 +80,13 @@ async function sendResetEmail(toEmail, resetUrl) {
 }
 
 // POST /api/auth/signup
-// Body: { name, email, phone, password, team_name, village_name, team_year, terms_accepted }
 const signup = asyncHandler(async (req, res) => {
   const { name, email, phone, password, team_name, village_name, team_year, terms_accepted } = req.body;
 
-  // name, email, phone and password are all required.
   if (!name || !email || !phone || !password) {
     return res.status(400).json({ error: "name, email, phone and password are required" });
   }
 
-  // Users must accept the Terms & Conditions to create an account
   if (terms_accepted !== true && terms_accepted !== "true" && terms_accepted !== 1) {
     return res.status(400).json({ error: "You must accept the Terms & Conditions to create an account." });
   }
@@ -119,8 +100,6 @@ const signup = asyncHandler(async (req, res) => {
     }
   }
 
-  // Check email and phone for existing use in a single query, then figure out
-  // which one(s) collided so we can give a precise, helpful error message.
   const existing = await pool.query(
     "SELECT email, phone FROM users WHERE email = $1 OR phone = $2",
     [email, phone]
@@ -148,49 +127,27 @@ const signup = asyncHandler(async (req, res) => {
       `INSERT INTO users (name, email, phone, password_hash, team_name, village_name, team_year, terms_accepted, terms_accepted_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, true, now())
        RETURNING ${PUBLIC_USER_COLUMNS}`,
-      [
-        name,
-        email,
-        phone,
-        passwordHash,
-        team_name || null,
-        village_name || null,
-        parsedYear
-      ]
+      [name, email, phone, passwordHash, team_name || null, village_name || null, parsedYear]
     );
   } catch (dbErr) {
-    // Fallback if terms_accepted column doesn't exist yet
     if (dbErr.message && dbErr.message.includes("terms_accepted")) {
       result = await pool.query(
         `INSERT INTO users (name, email, phone, password_hash, team_name, village_name, team_year)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING ${PUBLIC_USER_COLUMNS}`,
-        [
-          name,
-          email,
-          phone,
-          passwordHash,
-          team_name || null,
-          village_name || null,
-          parsedYear
-        ]
+        [name, email, phone, passwordHash, team_name || null, village_name || null, parsedYear]
       );
     } else {
       throw dbErr;
     }
   }
 
-  // Try to link team_id immediately if a team with this name already exists
-  // (e.g. D signs up and types the same team_name C already registered).
   const user = await backfillTeamId(result.rows[0]);
 
-  // Signing up no longer grants access. No token is issued here —
-  // the user has to log in separately to get one.
   res.status(201).json({ user, message: "Account created. Please log in." });
 });
 
 // POST /api/auth/login
-// POST /api/auth/login   Body: { identifier, password }
 const login = asyncHandler(async (req, res) => {
   const { identifier, password } = req.body;
   if (!identifier || !password) {
@@ -200,7 +157,6 @@ const login = asyncHandler(async (req, res) => {
   const cleanId = String(identifier).trim();
   const digits = cleanId.replace(/\D/g, "");
 
-  // Query database strictly for matching user by email or phone
   const result = await pool.query(
     `SELECT * FROM users
      WHERE LOWER(TRIM(email)) = LOWER($1)
@@ -219,12 +175,8 @@ const login = asyncHandler(async (req, res) => {
     return res.status(401).json({ error: "Invalid credentials. Password does not match." });
   }
 
-  // Self-heal team_id on every login — cheap no-op once it's set, and this
-  // is the main path that fixes teammates (like D) who joined a team after
-  // it was created and never got team_id populated.
   await backfillTeamId(user);
 
-  // Auto-promote 6382757532 if not marked admin yet
   if (isAdminPhone(user.phone) && !user.is_admin) {
     try {
       await pool.query("UPDATE users SET is_admin = true WHERE id = $1", [user.id]);
@@ -232,7 +184,6 @@ const login = asyncHandler(async (req, res) => {
     } catch {}
   }
 
-  // Record login timestamp
   try {
     await pool.query("UPDATE users SET last_login = NOW() WHERE id = $1", [user.id]);
   } catch {}
@@ -247,8 +198,6 @@ const login = asyncHandler(async (req, res) => {
 });
 
 // GET /api/auth/me
-// Returns the full profile (name, email, phone, team_id, team_name, village_name, team_year).
-// The UI decides what to show at a glance (name + phone) vs. in the edit form.
 const me = asyncHandler(async (req, res) => {
   const result = await pool.query(
     `SELECT ${PUBLIC_USER_COLUMNS} FROM users WHERE id = $1`,
@@ -256,9 +205,6 @@ const me = asyncHandler(async (req, res) => {
   );
   if (result.rows.length === 0) return res.status(404).json({ error: "User not found" });
 
-  // Also self-heal here, so an already-logged-in session (long-lived JWT)
-  // picks up a team_id fix the next time the frontend calls /me, without
-  // requiring the user to log out and back in.
   const user = await backfillTeamId(result.rows[0]);
   if (isAdminPhone(user.phone) && !user.is_admin) {
     try {
@@ -271,10 +217,6 @@ const me = asyncHandler(async (req, res) => {
 });
 
 // PUT /api/auth/profile
-// Body: any subset of { name, email, phone, team_name, village_name, team_year }
-// Lets a logged-in user edit their own profile, including the team fields
-// used to group teammates together in "My Team". Password changes are not
-// handled here — that goes through the separate forgot/reset-password flow.
 const updateProfile = asyncHandler(async (req, res) => {
   const { name, email, phone, team_name, village_name, team_year } = req.body;
 
@@ -291,7 +233,6 @@ const updateProfile = asyncHandler(async (req, res) => {
     }
   }
 
-  // Make sure the new email/phone isn't already used by a *different* account.
   const clash = await pool.query(
     "SELECT id FROM users WHERE (email = $1 OR phone = $2) AND id != $3",
     [email, phone, req.user.id]
@@ -310,19 +251,9 @@ const updateProfile = asyncHandler(async (req, res) => {
          team_year = $6
      WHERE id = $7
      RETURNING ${PUBLIC_USER_COLUMNS}`,
-    [
-      name,
-      email,
-      phone,
-      team_name || null,
-      village_name || null,
-      parsedYear,
-      req.user.id
-    ]
+    [name, email, phone, team_name || null, village_name || null, parsedYear, req.user.id]
   );
 
-  // If the user just set/corrected their team_name to match an existing
-  // team, link team_id right away instead of waiting for their next login.
   const user = await backfillTeamId(result.rows[0]);
 
   res.json({ user, message: "Profile updated" });
@@ -336,8 +267,6 @@ const forgotPassword = asyncHandler(async (req, res) => {
   const result = await pool.query("SELECT id FROM users WHERE email = $1", [email]);
   const user = result.rows[0];
 
-  // Respond the same way whether or not the email exists, so this endpoint
-  // can't be used to discover which emails are registered.
   if (!user) {
     return res.json({ message: "If that email is registered, a reset link has been sent." });
   }
@@ -389,4 +318,84 @@ const resetPassword = asyncHandler(async (req, res) => {
   res.json({ message: "Password has been reset. You can now log in." });
 });
 
-module.exports = { signup, login, me, updateProfile, forgotPassword, resetPassword };
+// DELETE /api/auth/account
+// Body: { password }  — user must re-enter their password to confirm deletion.
+// Deletes/detaches the user's data across every table that references
+// users.id, then deletes the user row itself, all inside one transaction.
+//
+// Order matters here: messages/challenges/tournament_registrations have a
+// plain FK to users (no ON DELETE behaviour), so those rows must be cleared
+// or detached BEFORE the user row is deleted, or Postgres will reject the
+// delete with a foreign key violation. bookings.user_id has ON DELETE
+// CASCADE, so it must be nulled out first too — otherwise deleting the user
+// would silently cascade-delete the booking/payment records we want to keep
+// for accounting. grounds.posted_by_user_id and umpires.created_by /
+// user_id are all declared ON DELETE SET NULL in the schema, so Postgres
+// clears those automatically — no explicit cleanup needed for those two.
+// Note: teams.owner_id is typed UUID while users.id is an integer, so it
+// can never reference a user row — nothing to clean up there either.
+const deleteAccount = asyncHandler(async (req, res) => {
+  const { password } = req.body;
+  if (!password) {
+    return res.status(400).json({ error: "Please re-enter your password to confirm account deletion." });
+  }
+
+  const result = await pool.query("SELECT * FROM users WHERE id = $1", [req.user.id]);
+  const user = result.rows[0];
+  if (!user) {
+    return res.status(404).json({ error: "User not found" });
+  }
+
+  const match = await bcrypt.compare(password, user.password_hash);
+  if (!match) {
+    return res.status(401).json({ error: "Incorrect password." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // 1. Messages this user sent.
+    await client.query("DELETE FROM messages WHERE sender_id = $1", [req.user.id]);
+
+    // 2. Challenges this user created — cascades to any remaining messages
+    //    tied to those challenges (messages.challenge_id ON DELETE CASCADE).
+    await client.query("DELETE FROM challenges WHERE creator_id = $1", [req.user.id]);
+
+    // 3. Challenges this user *accepted* (created by someone else) — keep
+    //    the challenge for the other team, just clear who accepted it.
+    await client.query(
+      "UPDATE challenges SET accepted_by_user_id = NULL WHERE accepted_by_user_id = $1",
+      [req.user.id]
+    );
+
+    // 4. Tournament registrations — keep the team's registration record,
+    //    clear who registered it.
+    await client.query(
+      "UPDATE tournament_registrations SET registered_by = NULL WHERE registered_by = $1",
+      [req.user.id]
+    );
+
+    // 5. Bookings — retain for accounting/Razorpay records, just detach the
+    //    user. Must run before deleting the user row (see comment above).
+    await client.query("UPDATE bookings SET user_id = NULL WHERE user_id = $1", [req.user.id]);
+
+    // 6. In-app notifications (plain text user_id column, no FK).
+    await client.query("DELETE FROM in_app_notifications WHERE user_id = $1::text", [req.user.id]);
+
+    // 7. Finally, delete the user's own row.
+    await client.query("DELETE FROM users WHERE id = $1", [req.user.id]);
+
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  console.log(`🗑️ [Delete Account] User ${user.name} (${user.phone}) deleted their account.`);
+  res.json({ message: "Your account has been deleted." });
+});
+
+module.exports = { signup, login, me, updateProfile, forgotPassword, resetPassword, deleteAccount };

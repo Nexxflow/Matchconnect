@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Bell, Pencil, LogOut, CheckCheck, Trash2, ExternalLink, Sun, Moon } from "lucide-react";
 import EditProfileModal from "./Auth/EditProfileModal.jsx";
+import DeleteAccountModal from "./Auth/DeleteAccountModal.jsx";
 import { cn } from "../utils/helpers.jsx";
 
 export default function Navbar({
@@ -21,6 +22,7 @@ export default function Navbar({
   const [menuOpen, setMenuOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Admin accounts only ever see the Dashboard tab in the top nav — no access
   // to the regular player-facing tabs (Find Match, Grounds, etc). Regular
@@ -349,6 +351,19 @@ export default function Navbar({
                   >
                     <LogOut className="w-3.5 h-3.5" /> Log out
                   </button>
+                  <div style={{ borderTop: `1px solid ${theme === "light" ? "#f1f5f9" : "#2a2a2a"}` }}>
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setDeleting(true);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-medium text-red-600 transition-colors"
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = theme === "light" ? "#fef2f2" : "rgba(220,38,38,0.08)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Delete Account
+                    </button>
+                  </div>
                 </div>
               </>
             )}
@@ -365,6 +380,15 @@ export default function Navbar({
             onUserUpdated(updated);
             setEditing(false);
           }}
+          theme={theme}
+        />
+      )}
+
+      {deleting && (
+        <DeleteAccountModal
+          token={token}
+          onClose={() => setDeleting(false)}
+          onDeleted={onLogout}
           theme={theme}
         />
       )}
