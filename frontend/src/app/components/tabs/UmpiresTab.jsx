@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, X, ChevronDown, Pencil, Trash2, Filter, Search, RotateCcw, Users, ArrowUpDown, Phone, Award, Shield, FileText } from "lucide-react";
+import { Plus, X, ChevronDown, Pencil, Trash2, Filter, Search, RotateCcw, Users, ArrowUpDown, Phone, Award, Shield, FileText, Sparkles } from "lucide-react";
 import { apiRequest } from "../../api";
 import { C, cn, normalizePhone, formatPhoneDisplay } from "../../utils/helpers.jsx";
 import CalendarField, { formatDateDisplay } from "../CalendarField.jsx";
@@ -120,11 +120,15 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
       type="button"
       onClick={() => setOpen(true)}
       className={cn(
-        "px-5 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shrink-0 cursor-pointer",
-        isLight
-          ? "bg-[#16a34a] text-white hover:bg-[#15803d] shadow-sm"
-          : "bg-green-500 text-black hover:bg-green-400"
+        "px-5 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shrink-0 cursor-pointer hover:scale-[1.03] active:scale-[0.97]"
       )}
+      style={{
+        background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
+        color: "#ffffff",
+        boxShadow: isLight
+          ? "0 4px 14px -3px rgba(16,185,129,0.45)"
+          : "0 6px 20px -6px rgba(34,197,94,0.7)"
+      }}
     >
       <Plus className="w-4 h-4" /> Register as Umpire / Scorer
     </button>
@@ -133,15 +137,33 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
   const formElement = (
     <form
       onSubmit={handleSubmit}
-      className={cn(C, "rounded-2xl p-5 space-y-4")}
-      style={isLight ? {
-        backgroundColor: "#ffffff",
-        border: "1px solid #e2e8f0",
-        boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04)"
-      } : undefined}
+      className={cn(C, "rounded-2xl p-5 space-y-4 relative overflow-hidden")}
+      style={
+        isLight
+          ? {
+              backgroundColor: "#ffffff",
+              border: "1px solid #e2e8f0",
+              boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04)"
+            }
+          : {
+              backgroundColor: "#141414",
+              border: "1px solid #2a2a2a",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.6)"
+            }
+      }
     >
-      <div className="flex items-center justify-between pb-1 border-b border-gray-100 dark:border-[#222]">
-        <span className={cn("text-base font-bold", isLight ? "text-slate-900" : "text-white")}>
+      <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#f97316,#ec4899)" }} />
+      <div className="flex items-center justify-between pb-1 border-b" style={{ borderColor: isLight ? "#e2e8f0" : "#222" }}>
+        <span
+          className={cn("text-base font-bold flex items-center gap-2")}
+          style={{
+            background: "linear-gradient(135deg,#22c55e 0%,#3b82f6 100%)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text"
+          }}
+        >
+          <Sparkles className="w-4 h-4" style={{ color: isLight ? "#16a34a" : "#22c55e", WebkitTextFillColor: "initial" }} />
           {editing ? "Edit Umpire / Scorer" : "Register as Umpire / Scorer"}
         </span>
         <button
@@ -221,7 +243,14 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
       </div>
 
       {error && (
-        <div className={cn("text-xs rounded-xl p-3 font-medium", isLight ? "bg-red-50 text-red-700 border border-red-200" : "text-red-400 bg-red-500/10 border border-red-500/20")}>
+        <div
+          className="text-xs rounded-xl p-3 font-medium"
+          style={{
+            backgroundColor: isLight ? "#fef2f2" : "rgba(239,68,68,0.1)",
+            border: `1px solid ${isLight ? "#fecaca" : "rgba(239,68,68,0.2)"}`,
+            color: isLight ? "#dc2626" : "#f87171"
+          }}
+        >
           {error}
         </div>
       )}
@@ -232,11 +261,13 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
             type="button"
             onClick={handleDelete}
             disabled={submitting}
-            className={cn(
-              "flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors cursor-pointer",
-              isLight ? "bg-red-50 hover:bg-red-100 text-red-700 border border-red-200" : "bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20"
-            )}
-            style={submitting ? { opacity: 0.6, cursor: "not-allowed" } : {}}
+            className="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+            style={{
+              background: "linear-gradient(135deg,rgba(239,68,68,0.15) 0%,rgba(220,38,38,0.15) 100%)",
+              border: `1px solid ${isLight ? "#fecaca" : "rgba(239,68,68,0.35)"}`,
+              color: isLight ? "#dc2626" : "#f87171",
+              ...(submitting ? { opacity: 0.6, cursor: "not-allowed", transform: "none" } : {})
+            }}
           >
             Delete Umpire
           </button>
@@ -244,13 +275,15 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
         <button
           type="submit"
           disabled={submitting || !normalizedPhone}
-          className={cn(
-            "flex-1 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer shadow-sm",
-            isLight
-              ? "bg-[#16a34a] text-white hover:bg-[#15803d]"
-              : "bg-green-500 text-black hover:bg-green-400"
-          )}
-          style={(submitting || !normalizedPhone) ? { opacity: 0.6, cursor: "not-allowed" } : {}}
+          className="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+          style={{
+            background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
+            color: "#ffffff",
+            boxShadow: isLight
+              ? "0 4px 14px -3px rgba(16,185,129,0.45)"
+              : "0 6px 20px -6px rgba(34,197,94,0.7)",
+            ...((submitting || !normalizedPhone) ? { opacity: 0.6, cursor: "not-allowed", transform: "none" } : {})
+          }}
         >
           {submitting ? (editing ? "Saving..." : "Registering...") : (editing ? "Save Changes" : "Register as Umpire / Scorer")}
         </button>
@@ -268,7 +301,7 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
       {open && (
         <div
           className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4"
-          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(2px)" }}
+          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)" }}
           onClick={() => { setOpen(false); setError(null); }}
         >
           <div
@@ -379,7 +412,18 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
       {/* Top Header section with Title on left and Register button on right top corner */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3.5 pb-0.5">
         <div>
-          <h2 className={cn("text-xl sm:text-2xl font-bold tracking-tight", isLight ? "text-slate-900" : "text-white")}>
+          <h2
+            className={cn("text-xl sm:text-2xl font-black tracking-tight flex items-center gap-2")}
+            style={{
+              background: isLight
+                ? "linear-gradient(135deg,#0f172a 0%,#15803d 50%,#3b82f6 100%)"
+                : "linear-gradient(135deg,#ffffff 0%,#4ade80 50%,#60a5fa 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text"
+            }}
+          >
+            <span>🧑‍⚖️</span>
             Umpires & Scorers
           </h2>
           <p className={cn("text-xs sm:text-sm mt-1", isLight ? "text-slate-600" : "text-gray-400")}>
@@ -395,11 +439,15 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
               type="button"
               onClick={() => setEditingUmpire(myUmpire)}
               className={cn(
-                "px-5 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shrink-0 cursor-pointer",
-                isLight
-                  ? "bg-[#16a34a] text-white hover:bg-[#15803d] shadow-sm"
-                  : "bg-green-500 text-black hover:bg-green-400"
+                "px-5 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shrink-0 cursor-pointer hover:scale-[1.03] active:scale-[0.97]"
               )}
+              style={{
+                background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
+                color: "#ffffff",
+                boxShadow: isLight
+                  ? "0 4px 14px -3px rgba(16,185,129,0.45)"
+                  : "0 6px 20px -6px rgba(34,197,94,0.7)"
+              }}
             >
               <Pencil className="w-4 h-4" /> Edit Registration
             </button>
@@ -409,30 +457,44 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
 
       {myUmpire && (
         <div
-          className="w-full p-4 rounded-2xl flex items-center justify-between gap-3 transition-all"
+          className="w-full p-4 rounded-2xl flex items-center justify-between gap-3 transition-all relative overflow-hidden"
           style={
             isLight
               ? {
-                  backgroundColor: "#f0fdf4",
-                  border: "1px solid #bbf7d0",
-                  boxShadow: "0 4px 12px -2px rgba(22, 163, 74, 0.08)"
+                  background: "linear-gradient(135deg,#ecfdf5 0%,#f0f9ff 100%)",
+                  border: "1px solid #a7f3d0",
+                  boxShadow: "0 4px 14px -2px rgba(22, 163, 74, 0.12)"
                 }
-              : { backgroundColor: "#151715", border: "1px solid rgba(34,197,94,0.3)" }
+              : {
+                  background: "linear-gradient(135deg,rgba(16,185,129,0.12) 0%,rgba(59,130,246,0.08) 100%)",
+                  border: "1px solid rgba(34,197,94,0.35)",
+                  boxShadow: "0 8px 24px -6px rgba(34,197,94,0.25)"
+                }
           }
         >
+          <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7)" }} />
           <div className="flex items-center gap-3 min-w-0">
             <div
-              className={cn(
-                "w-10 h-10 rounded-full flex items-center justify-center font-bold shrink-0",
-                isLight
-                  ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
-                  : "bg-green-500/10 text-green-400 border border-green-500/20"
-              )}
+              className="w-10 h-10 rounded-full flex items-center justify-center font-bold shrink-0 shadow-md"
+              style={{
+                background: "linear-gradient(135deg,#22c55e 0%,#06b6d4 100%)",
+                color: "#ffffff"
+              }}
             >
               ✓
             </div>
             <div className="min-w-0">
-              <div className={cn("text-sm font-bold flex items-center gap-2 truncate", isLight ? "text-slate-900" : "text-white")}>
+              <div
+                className={cn("text-sm font-bold flex items-center gap-2 truncate")}
+                style={{
+                  background: isLight
+                    ? "linear-gradient(135deg,#15803d 0%,#0284c7 100%)"
+                    : "linear-gradient(135deg,#4ade80 0%,#38bdf8 100%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text"
+                }}
+              >
                 You are registered as {myUmpire.role || "Umpire"}
               </div>
               <div className={cn("text-xs mt-0.5 font-mono truncate", isLight ? "text-slate-600" : "text-gray-400")}>
@@ -444,13 +506,16 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
             type="button"
             onClick={() => setEditingUmpire(myUmpire)}
             className={cn(
-              "px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer",
-              isLight
-                ? "bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 shadow-sm"
-                : "bg-[#252525] hover:bg-[#333] text-white border border-[#333]"
+              "px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer hover:scale-[1.03] active:scale-[0.97]"
             )}
+            style={{
+              backgroundColor: isLight ? "#ffffff" : "#252525",
+              color: isLight ? "#0f172a" : "#ffffff",
+              border: `1px solid ${isLight ? "#e2e8f0" : "#333"}`,
+              boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.06)" : "0 2px 8px rgba(0,0,0,0.3)"
+            }}
           >
-            <Pencil className="w-3.5 h-3.5 text-emerald-600 dark:text-green-400" /> Edit Registration
+            <Pencil className="w-3.5 h-3.5" style={{ color: isLight ? "#16a34a" : "#4ade80" }} /> Edit Registration
           </button>
         </div>
       )}
@@ -458,12 +523,21 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
       {umpires.length === 0 ? (
         <div
           className={cn(
-            "rounded-2xl p-10 text-center border border-dashed",
-            isLight ? "bg-white border-slate-300 shadow-sm" : "border-[#333] bg-[#151515]"
+            "rounded-2xl p-10 text-center border border-dashed relative overflow-hidden"
           )}
+          style={{
+            backgroundColor: isLight ? "#ffffff" : "#151515",
+            borderColor: isLight ? "#cbd5e1" : "#333"
+          }}
         >
-          <div className="text-5xl mb-3">🧑‍⚖️</div>
-          <h3 className={cn("font-semibold text-lg", isLight ? "text-slate-900" : "text-white")}>
+          <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7)" }} />
+          <div
+            className="w-16 h-16 rounded-full mx-auto mb-3 flex items-center justify-center text-3xl shadow-md"
+            style={{ background: "linear-gradient(135deg,#22c55e 0%,#06b6d4 100%)" }}
+          >
+            🧑‍⚖️
+          </div>
+          <h3 className={cn("font-bold text-lg", isLight ? "text-slate-900" : "text-white")}>
             No Umpires Registered
           </h3>
           <p className={cn("text-sm mt-2", isLight ? "text-slate-500" : "text-gray-500")}>
@@ -477,16 +551,16 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
             {/* Header: Title, match count, and reset button */}
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
-                <Filter className="w-3.5 h-3.5 text-emerald-500" />
+                <Filter className="w-3.5 h-3.5" style={{ color: isLight ? "#16a34a" : "#22c55e" }} />
                 <span className="text-xs font-bold uppercase tracking-wider" style={{ color: isLight ? "#334155" : "#a6b5a6" }}>
                   Filter Officials
                 </span>
                 <span
                   className="px-2 py-0.5 rounded-full text-[10px] font-bold"
                   style={{
-                    backgroundColor: isLight ? "#f0fdf4" : "rgba(34,197,94,0.1)",
-                    color: isLight ? "#15803d" : "#22c55e",
-                    border: `1px solid ${isLight ? "#bbf7d0" : "rgba(34,197,94,0.2)"}`
+                    background: "linear-gradient(135deg,#22c55e 0%,#10b981 100%)",
+                    color: "#ffffff",
+                    boxShadow: isLight ? "0 2px 6px -1px rgba(16,185,129,0.4)" : "0 2px 8px -2px rgba(34,197,94,0.6)"
                   }}
                 >
                   {filtered.length} official{filtered.length === 1 ? "" : "s"}
@@ -497,7 +571,7 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                 <button
                   type="button"
                   onClick={clearAllFilters}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-500 hover:text-red-400 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-500 hover:text-red-400 transition-colors cursor-pointer hover:scale-105"
                 >
                   <RotateCcw className="w-3 h-3" />
                   <span>Reset filters</span>
@@ -512,7 +586,7 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                 "flex flex-col md:flex-row md:items-center",
                 isLight
                   ? "bg-white border-slate-200 shadow-sm focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/10"
-                  : "bg-[#111411] border-[#252c25] shadow-lg focus-within:border-emerald-500/60"
+                  : "bg-[#111411] border-[#252c25] shadow-lg focus-within:border-emerald-500/60 focus-within:ring-2 focus-within:ring-emerald-500/10"
               )}
             >
               {/* 1. Search Section */}
@@ -650,13 +724,17 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
 
           {filtered.length === 0 ? (
             <div
-              className={cn(C, "rounded-2xl p-8 text-center")}
+              className={cn(C, "rounded-2xl p-8 text-center relative overflow-hidden")}
               style={{
                 backgroundColor: isLight ? "#ffffff" : undefined,
                 border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`
               }}
             >
-              <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center bg-emerald-500/10 text-emerald-500 text-xl">
+              <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7)" }} />
+              <div
+                className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center text-xl shadow-sm"
+                style={{ background: "linear-gradient(135deg,#22c55e 0%,#06b6d4 100%)" }}
+              >
                 🧑‍⚖️
               </div>
               <div className="text-sm font-bold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
@@ -669,7 +747,12 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                 <button
                   type="button"
                   onClick={clearAllFilters}
-                  className="mt-3.5 px-4 py-2 rounded-xl text-xs font-bold transition-all bg-emerald-500 hover:bg-emerald-400 text-black cursor-pointer inline-flex items-center gap-1.5 shadow-sm"
+                  className="mt-3.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-sm hover:scale-[1.03] active:scale-[0.97]"
+                  style={{
+                    background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
+                    color: "#ffffff",
+                    boxShadow: isLight ? "0 4px 14px -3px rgba(16,185,129,0.45)" : "0 6px 20px -6px rgba(34,197,94,0.7)"
+                  }}
                 >
                   <RotateCcw className="w-3.5 h-3.5" /> Clear All Filters
                 </button>
@@ -685,24 +768,34 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                 const isAvailable = u.avail && !isBookedForDate;
                 const formattedPhone = formatPhoneDisplay(u.mobile);
 
+                const roleGradient =
+                  role === "Scorer"
+                    ? "linear-gradient(135deg,#3b82f6 0%,#0ea5e9 100%)"
+                    : role === "Umpire + Scorer"
+                    ? "linear-gradient(135deg,#f59e0b 0%,#ec4899 100%)"
+                    : "linear-gradient(135deg,#22c55e 0%,#10b981 100%)";
+
                 return (
                   <div
                     key={u.id ?? u.name}
                     className={cn(
-                      "rounded-2xl p-4 sm:p-4.5 transition-all duration-200 border group",
-                      isLight
-                        ? "bg-white border-slate-200 hover:border-slate-300 hover:shadow-md"
-                        : "bg-[#131613] border-[#222922] hover:border-[#2f3a2f] hover:shadow-lg hover:shadow-emerald-950/20"
+                      "rounded-2xl p-4 sm:p-4.5 transition-all duration-200 group relative overflow-hidden hover:shadow-xl"
                     )}
+                    style={{
+                      backgroundColor: isLight ? "#ffffff" : "#131613",
+                      border: `1px solid ${isLight ? "#e2e8f0" : "#222922"}`,
+                      boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.06)" : undefined
+                    }}
                   >
+                    <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: roleGradient }} />
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       {/* Left: Avatar + Details */}
                       <div className="flex items-center gap-3.5 min-w-0 flex-1">
                         {/* Gradient Avatar */}
                         <div
-                          className="w-12 h-12 rounded-2xl flex items-center justify-center text-white text-sm font-black shrink-0 shadow-md transition-transform group-hover:scale-105"
+                          className="w-12 h-12 rounded-2xl flex items-center justify-center text-white text-sm font-black shrink-0 shadow-md transition-transform group-hover:scale-105 group-hover:rotate-3"
                           style={{
-                            background: u.grad || "linear-gradient(135deg, #10b981 0%, #047857 100%)",
+                            background: roleGradient,
                             boxShadow: "0 4px 14px -2px rgba(0, 0, 0, 0.3)"
                           }}
                         >
@@ -723,13 +816,27 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                             </span>
                             <span
                               className={cn(
-                                "px-2.5 py-0.5 rounded-full text-[11px] font-semibold shrink-0 inline-flex items-center gap-1.5",
-                                isAvailable
-                                  ? (isLight ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25")
-                                  : isBookedForDate
-                                  ? (isLight ? "bg-red-50 text-red-700 border border-red-200" : "bg-red-500/10 text-red-400 border border-red-500/25")
-                                  : (isLight ? "bg-slate-100 text-slate-500 border border-slate-200" : "bg-neutral-800/80 text-neutral-400 border border-neutral-700/50")
+                                "px-2.5 py-0.5 rounded-full text-[11px] font-semibold shrink-0 inline-flex items-center gap-1.5"
                               )}
+                              style={
+                                isAvailable
+                                  ? {
+                                      background: "linear-gradient(135deg,rgba(34,197,94,0.15) 0%,rgba(6,182,212,0.12) 100%)",
+                                      color: isLight ? "#15803d" : "#4ade80",
+                                      border: `1px solid ${isLight ? "#a7f3d0" : "rgba(34,197,94,0.35)"}`
+                                    }
+                                  : isBookedForDate
+                                  ? {
+                                      background: "linear-gradient(135deg,rgba(239,68,68,0.15) 0%,rgba(236,72,153,0.12) 100%)",
+                                      color: isLight ? "#dc2626" : "#f87171",
+                                      border: `1px solid ${isLight ? "#fecaca" : "rgba(239,68,68,0.35)"}`
+                                    }
+                                  : {
+                                      backgroundColor: isLight ? "#f1f5f9" : "rgba(115,115,115,0.15)",
+                                      color: isLight ? "#64748b" : "#a3a3a3",
+                                      border: `1px solid ${isLight ? "#e2e8f0" : "rgba(115,115,115,0.3)"}`
+                                    }
+                              }
                             >
                               {isAvailable ? (
                                 <>
@@ -760,19 +867,19 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                                 color: isLight ? "#475569" : "#a6b5a6"
                               }}
                             >
-                              <Phone className="w-3 h-3 text-emerald-500" />
+                              <Phone className="w-3 h-3" style={{ color: isLight ? "#16a34a" : "#22c55e" }} />
                               <span>{formattedPhone}</span>
                             </span>
 
                             <span
                               className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs font-medium"
                               style={{
-                                backgroundColor: isLight ? "#f8fafc" : "#1a1f1a",
-                                border: `1px solid ${isLight ? "#e2e8f0" : "#283228"}`,
-                                color: isLight ? "#475569" : "#a6b5a6"
+                                background: "linear-gradient(135deg,rgba(245,158,11,0.12) 0%,rgba(236,72,153,0.08) 100%)",
+                                border: `1px solid ${isLight ? "#fde68a" : "rgba(245,158,11,0.3)"}`,
+                                color: isLight ? "#b45309" : "#fbbf24"
                               }}
                             >
-                              <Award className="w-3 h-3 text-amber-500" />
+                              <Award className="w-3 h-3" style={{ color: isLight ? "#d97706" : "#fbbf24" }} />
                               <span>{u.exp || `${u.experience || 0} yrs`} experience</span>
                             </span>
                           </div>
@@ -786,7 +893,17 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                           <div className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: isLight ? "#64748b" : "#8a968a" }}>
                             Match Fee
                           </div>
-                          <div className="text-lg font-black" style={{ color: isLight ? "#16a34a" : "#4ade80" }}>
+                          <div
+                            className="text-lg font-black font-mono"
+                            style={{
+                              background: isLight
+                                ? "linear-gradient(135deg,#15803d 0%,#0284c7 100%)"
+                                : "linear-gradient(135deg,#4ade80 0%,#38bdf8 100%)",
+                              WebkitBackgroundClip: "text",
+                              WebkitTextFillColor: "transparent",
+                              backgroundClip: "text"
+                            }}
+                          >
                             {u.price}
                           </div>
                         </div>
@@ -799,11 +916,13 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                               onClick={() => setEditingUmpire(u)}
                               title="Edit Registration"
                               className={cn(
-                                "p-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs",
-                                isLight
-                                  ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
-                                  : "text-gray-300 hover:text-white bg-[#1e241e] hover:bg-[#283228] border border-[#2a342a]"
+                                "p-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer hover:scale-[1.08] active:scale-[0.92] shadow-xs"
                               )}
+                              style={{
+                                backgroundColor: isLight ? "#f1f5f9" : "#1e241e",
+                                color: isLight ? "#475569" : "#c8d0c8",
+                                border: `1px solid ${isLight ? "#e2e8f0" : "#2a342a"}`
+                              }}
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
@@ -820,11 +939,13 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                               }}
                               title="Delete Official"
                               className={cn(
-                                "p-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs",
-                                isLight
-                                  ? "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100"
-                                  : "text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/25 hover:bg-red-500/20"
+                                "p-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer hover:scale-[1.08] active:scale-[0.92] shadow-xs"
                               )}
+                              style={{
+                                background: "linear-gradient(135deg,rgba(239,68,68,0.12) 0%,rgba(220,38,38,0.12) 100%)",
+                                color: isLight ? "#dc2626" : "#f87171",
+                                border: `1px solid ${isLight ? "#fecaca" : "rgba(239,68,68,0.3)"}`
+                              }}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -836,15 +957,25 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                           disabled={!isAvailable}
                           onClick={() => isAvailable && onBook(u, dateFilter)}
                           className={cn(
-                            "px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm",
-                            isLight
-                              ? (isAvailable
-                                  ? "bg-[#16a34a] text-white hover:bg-[#15803d]"
-                                  : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200 shadow-none")
-                              : (isAvailable
-                                  ? "bg-green-500 text-black hover:bg-green-400"
-                                  : "bg-[#1a1f1a] text-neutral-500 cursor-not-allowed border border-[#263026] shadow-none")
+                            "px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:scale-[1.03] active:scale-[0.97]"
                           )}
+                          style={
+                            isAvailable
+                              ? {
+                                  background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
+                                  color: "#ffffff",
+                                  boxShadow: isLight
+                                    ? "0 4px 14px -3px rgba(16,185,129,0.45)"
+                                    : "0 6px 20px -6px rgba(34,197,94,0.7)"
+                                }
+                              : {
+                                  backgroundColor: isLight ? "#f1f5f9" : "#1a1f1a",
+                                  color: isLight ? "#94a3b8" : "#6b726b",
+                                  cursor: "not-allowed",
+                                  transform: "none",
+                                  border: `1px solid ${isLight ? "#e2e8f0" : "#263026"}`
+                                }
+                          }
                         >
                           {isAvailable ? "Book Official" : "Unavailable"}
                         </button>
@@ -886,4 +1017,3 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
     </div>
   );
 }
-

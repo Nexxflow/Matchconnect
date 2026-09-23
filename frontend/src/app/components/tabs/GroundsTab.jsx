@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Filter, Search, ChevronDown, MapPin, Star, Plus, X, Map, Pencil, Trash2, ExternalLink, Hash, RotateCcw, IndianRupee } from "lucide-react";
+import { Filter, Search, ChevronDown, MapPin, Star, Plus, X, Map, Pencil, Trash2, ExternalLink, Hash, RotateCcw, IndianRupee, Sparkles, Zap } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -8,7 +8,8 @@ import { C, cn, Tag, GhostButton, buildGroundMapsEmbedUrl, buildGroundMapsLink }
 import { GROUNDS, TIME_SLOTS } from "../../utils/constants";
 import CalendarField from "../CalendarField.jsx";
 
-function GroundsMap({ grounds, canBookGround, displayPrice, displayLocation }) {
+function GroundsMap({ grounds, canBookGround, displayPrice, displayLocation, theme = "dark" }) {
+  const isLight = theme === "light" || (typeof document !== "undefined" && document.documentElement.classList.contains("light"));
   const withLocation = grounds.filter(g => g.latitude != null && g.longitude != null);
   const withoutLocation = grounds.filter(g => g.latitude == null || g.longitude == null);
 
@@ -24,7 +25,13 @@ function GroundsMap({ grounds, canBookGround, displayPrice, displayLocation }) {
   const availableIcon = L.divIcon({
     className: "",
     html: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 0C7.03 0 3 4.03 3 9c0 6.75 9 15 9 15s9-8.25 9-15c0-4.97-4.03-9-9-9z" fill="#22c55e"/>
+      <defs>
+        <linearGradient id="groundPinAvail" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#22c55e;stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#06b6d4;stop-opacity:1" />
+        </linearGradient>
+      </defs>
+      <path d="M12 0C7.03 0 3 4.03 3 9c0 6.75 9 15 9 15s9-8.25 9-15c0-4.97-4.03-9-9-9z" fill="url(#groundPinAvail)"/>
       <circle cx="12" cy="9" r="3.5" fill="#0d0f0d"/>
     </svg>`,
     iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -28]
@@ -32,21 +39,44 @@ function GroundsMap({ grounds, canBookGround, displayPrice, displayLocation }) {
   const bookedIcon = L.divIcon({
     className: "",
     html: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 0C7.03 0 3 4.03 3 9c0 6.75 9 15 9 15s9-8.25 9-15c0-4.97-4.03-9-9-9z" fill="#ef4444"/>
+      <defs>
+        <linearGradient id="groundPinBooked" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#ef4444;stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#ec4899;stop-opacity:1" />
+        </linearGradient>
+      </defs>
+      <path d="M12 0C7.03 0 3 4.03 3 9c0 6.75 9 15 9 15s9-8.25 9-15c0-4.97-4.03-9-9-9z" fill="url(#groundPinBooked)"/>
       <circle cx="12" cy="9" r="3.5" fill="#0d0f0d"/>
     </svg>`,
     iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -28]
   });
 
   return (
-    <div className={cn(C, "rounded-2xl p-4")}>
+    <div
+      className={cn(C, "rounded-2xl p-4 relative overflow-hidden")}
+      style={{
+        backgroundColor: isLight ? "#ffffff" : undefined,
+        border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
+        boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.06)" : undefined
+      }}
+    >
+      <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#f97316)" }} />
       <div className="flex items-center gap-2 mb-3">
-        <MapPin className="w-3.5 h-3.5 text-green-400" />
-        <span className="text-sm font-semibold text-white">Grounds near you</span>
+        <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg,#22c55e 0%,#06b6d4 100%)" }}>
+          <MapPin className="w-3.5 h-3.5 text-white" />
+        </div>
+        <span className="text-sm font-bold" style={{
+          background: isLight
+            ? "linear-gradient(135deg,#15803d 0%,#0284c7 100%)"
+            : "linear-gradient(135deg,#4ade80 0%,#38bdf8 100%)",
+          WebkitBackgroundClip: "text",
+          WebkitTextFillColor: "transparent",
+          backgroundClip: "text"
+        }}>Grounds near you</span>
       </div>
 
       {withLocation.length > 0 ? (
-        <div className="rounded-xl overflow-hidden" style={{ height: 220 }}>
+        <div className="rounded-xl overflow-hidden" style={{ height: 220, border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}` }}>
           <MapContainer center={center} zoom={11} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -69,17 +99,25 @@ function GroundsMap({ grounds, canBookGround, displayPrice, displayLocation }) {
           </MapContainer>
         </div>
       ) : (
-        <p className="text-xs" style={{ color: "#6b7a6b" }}>No grounds with a saved location yet — see the list below.</p>
+        <p className="text-xs" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>No grounds with a saved location yet — see the list below.</p>
       )}
 
       {withoutLocation.length > 0 && (
         <div className="mt-3">
-          <p className="text-[11px] mb-1.5" style={{ color: "#6b7a6b" }}>
+          <p className="text-[11px] mb-1.5" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
             {withoutLocation.length} more ground{withoutLocation.length > 1 ? "s" : ""} — no location on file, so no pin on the map:
           </p>
           <div className="flex flex-wrap gap-1.5">
             {withoutLocation.map(g => (
-              <span key={g.id || g.name} className="px-2 py-1 rounded-lg text-[11px]" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#c8ccc8" }}>
+              <span
+                key={g.id || g.name}
+                className="px-2 py-1 rounded-lg text-[11px] font-medium"
+                style={{
+                  backgroundColor: isLight ? "#f1f5f9" : "#1a1a1a",
+                  border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
+                  color: isLight ? "#475569" : "#c8ccc8"
+                }}
+              >
                 {g.name}
               </span>
             ))}
@@ -194,11 +232,15 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
       type="button"
       onClick={() => setOpen(true)}
       className={cn(
-        "px-5 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shrink-0 cursor-pointer",
-        isLight
-          ? "bg-[#16a34a] text-white hover:bg-[#15803d] shadow-sm"
-          : "bg-green-500 text-black hover:bg-green-400"
+        "px-5 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shrink-0 cursor-pointer hover:scale-[1.03] active:scale-[0.97]"
       )}
+      style={{
+        background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
+        color: "#ffffff",
+        boxShadow: isLight
+          ? "0 4px 14px -3px rgba(16,185,129,0.45)"
+          : "0 6px 20px -6px rgba(34,197,94,0.7)"
+      }}
     >
       <Plus className="w-4 h-4" /> Register a Ground
     </button>
@@ -207,15 +249,24 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
   const formElement = (
     <form
       onSubmit={handleSubmit}
-      className={cn(C, "rounded-2xl p-4 space-y-3")}
+      className={cn(C, "rounded-2xl p-4 space-y-3 relative overflow-hidden")}
       style={{
-        backgroundColor: isLight ? "#ffffff" : undefined,
+        backgroundColor: isLight ? "#ffffff" : "#141414",
         border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-        boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.06)" : undefined
+        boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.06)" : "0 8px 32px rgba(0,0,0,0.4)"
       }}
     >
-      <div className="flex items-center justify-between pb-1 border-b" style={{ borderColor: isLight ? "#e2e8f0" : "transparent" }}>
-        <span className="text-sm font-semibold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>{editing ? "Edit Ground" : "Register a Ground"}</span>
+      <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#f97316,#ec4899)" }} />
+      <div className="flex items-center justify-between pb-1 border-b" style={{ borderColor: isLight ? "#e2e8f0" : "#2a2a2a" }}>
+        <span className="text-sm font-bold flex items-center gap-2" style={{
+          background: "linear-gradient(135deg,#22c55e 0%,#3b82f6 100%)",
+          WebkitBackgroundClip: "text",
+          WebkitTextFillColor: "transparent",
+          backgroundClip: "text"
+        }}>
+          <Sparkles className="w-3.5 h-3.5" style={{ color: isLight ? "#16a34a" : "#22c55e", WebkitTextFillColor: "initial" }} />
+          {editing ? "Edit Ground" : "Register a Ground"}
+        </span>
         <button
           type="button"
           onClick={() => { if (editing) onClose?.(); else { setOpen(false); setError(null); } }}
@@ -232,8 +283,15 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
           <input
             value={form.name}
             onChange={e => update("name", e.target.value)}
-            className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none"
-            style={{ backgroundColor: isLight ? "#f8fafc" : "#111", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`, color: isLight ? "#0f172a" : "#fff" }}
+            className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none transition-all"
+            style={{
+              backgroundColor: isLight ? "#f8fafc" : "#111",
+              border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
+              color: isLight ? "#0f172a" : "#fff",
+              boxShadow: "none"
+            }}
+            onFocus={e => e.currentTarget.style.boxShadow = isLight ? "0 0 0 3px rgba(22,163,74,0.12)" : "0 0 0 3px rgba(34,197,94,0.18)"}
+            onBlur={e => e.currentTarget.style.boxShadow = "none"}
             placeholder="Green Park Cricket Ground"
           />
         </div>
@@ -242,8 +300,14 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
           <input
             value={form.area}
             onChange={e => update("area", e.target.value)}
-            className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none"
-            style={{ backgroundColor: isLight ? "#f8fafc" : "#111", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`, color: isLight ? "#0f172a" : "#fff" }}
+            className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none transition-all"
+            style={{
+              backgroundColor: isLight ? "#f8fafc" : "#111",
+              border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
+              color: isLight ? "#0f172a" : "#fff"
+            }}
+            onFocus={e => e.currentTarget.style.boxShadow = isLight ? "0 0 0 3px rgba(22,163,74,0.12)" : "0 0 0 3px rgba(34,197,94,0.18)"}
+            onBlur={e => e.currentTarget.style.boxShadow = "none"}
             placeholder="Linking Road, Bandra West"
           />
         </div>
@@ -254,8 +318,14 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
             min="1"
             value={form.price_per_hour}
             onChange={e => update("price_per_hour", e.target.value)}
-            className="w-full rounded-xl px-3 py-2 text-sm font-mono focus:outline-none"
-            style={{ backgroundColor: isLight ? "#f8fafc" : "#111", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`, color: isLight ? "#0f172a" : "#fff" }}
+            className="w-full rounded-xl px-3 py-2 text-sm font-mono focus:outline-none transition-all"
+            style={{
+              backgroundColor: isLight ? "#f8fafc" : "#111",
+              border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
+              color: isLight ? "#0f172a" : "#fff"
+            }}
+            onFocus={e => e.currentTarget.style.boxShadow = isLight ? "0 0 0 3px rgba(22,163,74,0.12)" : "0 0 0 3px rgba(34,197,94,0.18)"}
+            onBlur={e => e.currentTarget.style.boxShadow = "none"}
             placeholder="1200"
           />
         </div>
@@ -264,8 +334,14 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
           <input
             value={form.google_maps_url}
             onChange={e => update("google_maps_url", e.target.value)}
-            className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none"
-            style={{ backgroundColor: isLight ? "#f8fafc" : "#111", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`, color: isLight ? "#0f172a" : "#fff" }}
+            className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none transition-all"
+            style={{
+              backgroundColor: isLight ? "#f8fafc" : "#111",
+              border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
+              color: isLight ? "#0f172a" : "#fff"
+            }}
+            onFocus={e => e.currentTarget.style.boxShadow = isLight ? "0 0 0 3px rgba(22,163,74,0.12)" : "0 0 0 3px rgba(34,197,94,0.18)"}
+            onBlur={e => e.currentTarget.style.boxShadow = "none"}
             placeholder="https://www.google.com/maps/..."
           />
         </div>
@@ -274,8 +350,12 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
           <select
             value={form.availability_mode}
             onChange={e => update("availability_mode", e.target.value)}
-            className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none"
-            style={{ backgroundColor: isLight ? "#f8fafc" : "#111", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`, color: isLight ? "#0f172a" : "#fff" }}
+            className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none transition-all cursor-pointer"
+            style={{
+              backgroundColor: isLight ? "#f8fafc" : "#111",
+              border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
+              color: isLight ? "#0f172a" : "#fff"
+            }}
           >
             <option value="always">Always available</option>
             <option value="scheduled">Available on a date/time</option>
@@ -299,18 +379,31 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
                 type="time"
                 value={form.available_time}
                 onChange={e => update("available_time", e.target.value)}
-                className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none"
-                style={{ backgroundColor: isLight ? "#f8fafc" : "#111", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`, color: isLight ? "#0f172a" : "#fff" }}
+                className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none transition-all"
+                style={{
+                  backgroundColor: isLight ? "#f8fafc" : "#111",
+                  border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
+                  color: isLight ? "#0f172a" : "#fff"
+                }}
               />
             </div>
           </>
         )}
       </div>
 
-      <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`, backgroundColor: isLight ? "#f8fafc" : "#0f0f0f" }}>
-        <div className="flex items-center gap-2 px-3 py-2 border-b" style={{ borderColor: isLight ? "#e2e8f0" : "#1e1e1e" }}>
-          <Map className="w-4 h-4" style={{ color: isLight ? "#16a34a" : "#4ade80" }} />
-          <span className="text-xs font-semibold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>Map Preview</span>
+      <div className="rounded-2xl overflow-hidden relative" style={{ border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`, backgroundColor: isLight ? "#f8fafc" : "#0f0f0f" }}>
+        <div className="flex items-center gap-2 px-3 py-2 border-b" style={{ borderColor: isLight ? "#e2e8f0" : "#1e1e1e", background: "linear-gradient(90deg,rgba(34,197,94,0.08),rgba(59,130,246,0.08))" }}>
+          <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg,#22c55e 0%,#06b6d4 100%)" }}>
+            <Map className="w-3.5 h-3.5 text-white" />
+          </div>
+          <span className="text-xs font-bold" style={{
+            background: isLight
+              ? "linear-gradient(135deg,#15803d 0%,#0284c7 100%)"
+              : "linear-gradient(135deg,#4ade80 0%,#38bdf8 100%)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text"
+          }}>Map Preview</span>
         </div>
         {buildGroundMapsEmbedUrl(form) ? (
           <iframe
@@ -344,7 +437,7 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
         <button
           type="button"
           onClick={() => { if (editing) onClose?.(); else { setOpen(false); setError(null); } }}
-          className="flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors cursor-pointer"
+          className="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
           style={{
             backgroundColor: isLight ? "#f1f5f9" : "#1e1e1e",
             border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
@@ -358,12 +451,13 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
             type="button"
             onClick={handleDelete}
             disabled={submitting}
-            className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors cursor-pointer ${
-              isLight
-                ? "bg-red-50 border border-red-200 text-red-600 hover:bg-red-100"
-                : "bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20"
-            }`}
-            style={submitting ? { opacity: 0.6, cursor: "not-allowed" } : {}}
+            className="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+            style={{
+              background: "linear-gradient(135deg,rgba(239,68,68,0.15) 0%,rgba(220,38,38,0.15) 100%)",
+              border: `1px solid ${isLight ? "#fecaca" : "rgba(239,68,68,0.35)"}`,
+              color: isLight ? "#dc2626" : "#f87171",
+              ...(submitting ? { opacity: 0.6, cursor: "not-allowed", transform: "none" } : {})
+            }}
           >
             Delete Ground
           </button>
@@ -372,12 +466,16 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
           type="submit"
           disabled={submitting}
           className={cn(
-            "flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors shadow-sm cursor-pointer",
-            isLight
-              ? "bg-[#16a34a] hover:bg-[#15803d] text-white shadow-sm"
-              : "bg-green-500 text-black hover:bg-green-400"
+            "flex-1 py-2.5 rounded-xl font-bold text-sm transition-all shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
           )}
-          style={submitting ? { opacity: 0.6, cursor: "not-allowed" } : {}}
+          style={{
+            background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
+            color: "#ffffff",
+            boxShadow: isLight
+              ? "0 4px 14px -3px rgba(16,185,129,0.45)"
+              : "0 6px 20px -6px rgba(34,197,94,0.7)",
+            ...(submitting ? { opacity: 0.6, cursor: "not-allowed", transform: "none" } : {})
+          }}
         >
           {submitting ? (editing ? "Saving..." : "Registering...") : (editing ? "Save Changes" : "Register Ground")}
         </button>
@@ -395,7 +493,7 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
       {open && (
         <div
           className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4"
-          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(2px)" }}
+          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)" }}
           onClick={() => { setOpen(false); setError(null); }}
         >
           <div
@@ -529,7 +627,18 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
       {/* Header section with Title on left and Register a Ground button on the right top corner */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3.5 pb-0.5">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold tracking-tight" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
+          <h2
+            className="text-xl sm:text-2xl font-black tracking-tight flex items-center gap-2"
+            style={{
+              background: isLight
+                ? "linear-gradient(135deg,#0f172a 0%,#15803d 50%,#3b82f6 100%)"
+                : "linear-gradient(135deg,#ffffff 0%,#4ade80 50%,#60a5fa 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text"
+            }}
+          >
+            <span></span>
             Cricket Grounds
           </h2>
           <p className="text-xs sm:text-sm mt-1" style={{ color: isLight ? "#475569" : "#8a968a" }}>
@@ -547,16 +656,16 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
         {/* Header: Title, match count, and reset button */}
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-2">
-            <Filter className="w-3.5 h-3.5 text-emerald-500" />
+            <Filter className="w-3.5 h-3.5" style={{ color: isLight ? "#16a34a" : "#22c55e" }} />
             <span className="text-xs font-bold uppercase tracking-wider" style={{ color: isLight ? "#334155" : "#a6b5a6" }}>
               Filter Grounds
             </span>
             <span
               className="px-2 py-0.5 rounded-full text-[10px] font-bold"
               style={{
-                backgroundColor: isLight ? "#f0fdf4" : "rgba(34,197,94,0.1)",
-                color: isLight ? "#15803d" : "#22c55e",
-                border: `1px solid ${isLight ? "#bbf7d0" : "rgba(34,197,94,0.2)"}`
+                background: "linear-gradient(135deg,#22c55e 0%,#10b981 100%)",
+                color: "#ffffff",
+                boxShadow: isLight ? "0 2px 6px -1px rgba(16,185,129,0.4)" : "0 2px 8px -2px rgba(34,197,94,0.6)"
               }}
             >
               {filteredGrounds.length} ground{filteredGrounds.length === 1 ? "" : "s"}
@@ -567,7 +676,7 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
             <button
               type="button"
               onClick={clearAllFilters}
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-500 hover:text-red-400 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-500 hover:text-red-400 transition-colors cursor-pointer hover:scale-105"
             >
               <RotateCcw className="w-3 h-3" />
               <span>Reset filters</span>
@@ -582,7 +691,7 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
             "flex flex-col md:flex-row md:items-center",
             isLight
               ? "bg-white border-slate-200 shadow-sm focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/10"
-              : "bg-[#111411] border-[#252c25] shadow-lg focus-within:border-emerald-500/60"
+              : "bg-[#111411] border-[#252c25] shadow-lg focus-within:border-emerald-500/60 focus-within:ring-2 focus-within:ring-emerald-500/10"
           )}
         >
           {/* 1. Search Section */}
@@ -728,21 +837,35 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
         canBookGround={canBookGround}
         displayPrice={displayPrice}
         displayLocation={displayLocation}
+        theme={theme}
       />
 
       <div
-        className="rounded-2xl p-5"
+        className="rounded-2xl p-5 relative overflow-hidden"
         style={{
-          background: isLight ? "linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)" : "linear-gradient(135deg,#1a1a1a,#1a2a1a)",
-          border: isLight ? "1px solid #bbf7d0" : "1px solid rgba(22,101,52,0.4)",
-          boxShadow: isLight ? "0 4px 20px rgba(22,163,74,0.08)" : "0 8px 32px rgba(22,101,52,0.08)"
+          background: isLight
+            ? "linear-gradient(135deg, #ecfdf5 0%, #f0f9ff 50%, #f5f3ff 100%)"
+            : "linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(59,130,246,0.08) 50%, rgba(168,85,247,0.1) 100%)",
+          border: isLight ? "1px solid #a7f3d0" : "1px solid rgba(34,197,94,0.35)",
+          boxShadow: isLight ? "0 4px 20px rgba(22,163,74,0.08)" : "0 8px 32px rgba(22,101,52,0.15)"
         }}
       >
+        <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7)" }} />
         <div className="flex items-center gap-2 mb-4">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: isLight ? "#dcfce7" : "rgba(34,197,94,0.15)" }}>
-            <Hash className="w-3.5 h-3.5" style={{ color: isLight ? "#16a34a" : "#4ade80" }} />
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm"
+            style={{ background: "linear-gradient(135deg,#22c55e 0%,#06b6d4 100%)" }}
+          >
+            <Hash className="w-4 h-4 text-white" />
           </div>
-          <span className="font-semibold text-sm" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>Auto Cost Split Calculator</span>
+          <span className="font-bold text-sm" style={{
+            background: isLight
+              ? "linear-gradient(135deg,#15803d 0%,#0284c7 100%)"
+              : "linear-gradient(135deg,#4ade80 0%,#38bdf8 100%)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text"
+          }}>Auto Cost Split Calculator</span>
         </div>
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
@@ -751,12 +874,14 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
               type="number"
               value={cost}
               onChange={e => setCost(e.target.value)}
-              className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none font-mono transition-colors"
+              className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none font-mono transition-all"
               style={{
                 backgroundColor: isLight ? "#ffffff" : "#111",
                 border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
                 color: isLight ? "#0f172a" : "#ffffff"
               }}
+              onFocus={e => e.currentTarget.style.boxShadow = isLight ? "0 0 0 3px rgba(22,163,74,0.12)" : "0 0 0 3px rgba(34,197,94,0.18)"}
+              onBlur={e => e.currentTarget.style.boxShadow = "none"}
               placeholder="1200"
             />
           </div>
@@ -766,7 +891,7 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
               <select
                 value={split}
                 onChange={e => setSplit(e.target.value)}
-                className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none transition-colors cursor-pointer"
+                className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none transition-all cursor-pointer"
                 style={{
                   backgroundColor: isLight ? "#ffffff" : "#111",
                   border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
@@ -781,34 +906,56 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
         </div>
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div
-            className="rounded-xl p-3"
+            className="rounded-xl p-3 relative overflow-hidden"
             style={{
-              backgroundColor: isLight ? "#ffffff" : "#111",
-              border: isLight ? "1px solid #dcfce7" : "1px solid rgba(22,101,52,0.3)",
-              boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.05)" : "none"
+              background: isLight
+                ? "linear-gradient(135deg,#ffffff 0%,#ecfdf5 100%)"
+                : "linear-gradient(135deg,rgba(34,197,94,0.12) 0%,rgba(6,182,212,0.08) 100%)",
+              border: isLight ? "1px solid #a7f3d0" : "1px solid rgba(34,197,94,0.3)",
+              boxShadow: isLight ? "0 2px 8px rgba(16,185,129,0.12)" : "0 4px 14px rgba(34,197,94,0.15)"
             }}
           >
-            <div className="text-xs mb-1 font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Per head</div>
-            <div className="text-2xl font-bold font-mono" style={{ color: isLight ? "#16a34a" : "#4ade80" }}>₹{perHead}</div>
+            <div className="absolute top-0 left-0 bottom-0 w-1" style={{ background: "linear-gradient(180deg,#22c55e,#06b6d4)" }} />
+            <div className="text-xs mb-1 font-medium pl-1.5" style={{ color: isLight ? "#64748b" : "#8a968a" }}>Per head</div>
+            <div className="text-2xl font-black font-mono pl-1.5" style={{
+              background: isLight
+                ? "linear-gradient(135deg,#15803d 0%,#0284c7 100%)"
+                : "linear-gradient(135deg,#4ade80 0%,#38bdf8 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text"
+            }}>₹{perHead}</div>
           </div>
           <div
-            className="rounded-xl p-3"
+            className="rounded-xl p-3 relative overflow-hidden"
             style={{
-              backgroundColor: isLight ? "#ffffff" : "#111",
-              border: isLight ? "1px solid #dcfce7" : "1px solid rgba(22,101,52,0.3)",
-              boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.05)" : "none"
+              background: isLight
+                ? "linear-gradient(135deg,#ffffff 0%,#f5f3ff 100%)"
+                : "linear-gradient(135deg,rgba(168,85,247,0.12) 0%,rgba(236,72,153,0.08) 100%)",
+              border: isLight ? "1px solid #ddd6fe" : "1px solid rgba(168,85,247,0.3)",
+              boxShadow: isLight ? "0 2px 8px rgba(168,85,247,0.12)" : "0 4px 14px rgba(168,85,247,0.15)"
             }}
           >
-            <div className="text-xs mb-1 font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Total cost</div>
-            <div className="text-2xl font-bold font-mono" style={{ color: isLight ? "#047857" : "#86efac" }}>₹{Number(cost || 0).toLocaleString()}</div>
+            <div className="absolute top-0 left-0 bottom-0 w-1" style={{ background: "linear-gradient(180deg,#a855f7,#ec4899)" }} />
+            <div className="text-xs mb-1 font-medium pl-1.5" style={{ color: isLight ? "#64748b" : "#8a968a" }}>Total cost</div>
+            <div className="text-2xl font-black font-mono pl-1.5" style={{
+              background: isLight
+                ? "linear-gradient(135deg,#7e22ce 0%,#be185d 100%)"
+                : "linear-gradient(135deg,#c084fc 0%,#f472b6 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text"
+            }}>₹{Number(cost || 0).toLocaleString()}</div>
           </div>
         </div>
         <button
-          className="w-full py-2.5 rounded-xl font-bold text-sm transition-colors shadow-sm cursor-pointer"
+          className="w-full py-2.5 rounded-xl font-bold text-sm transition-all shadow-sm cursor-pointer hover:scale-[1.01] active:scale-[0.99]"
           style={{
-            backgroundColor: isLight ? "#16a34a" : "#22c55e",
+            background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
             color: "#ffffff",
-            boxShadow: isLight ? "0 2px 8px rgba(22,163,74,0.22)" : "none"
+            boxShadow: isLight
+              ? "0 4px 14px -3px rgba(16,185,129,0.45)"
+              : "0 6px 20px -6px rgba(34,197,94,0.7)"
           }}
         >
           Share Split Request
@@ -817,7 +964,10 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
 
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-semibold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>Available Grounds</h3>
+          <h3 className="text-base font-semibold flex items-center gap-2" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
+            <span className="w-1 h-4 rounded-full" style={{ background: "linear-gradient(180deg,#22c55e,#3b82f6)" }} />
+            Available Grounds
+          </h3>
           <span className="text-xs" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
             {filteredGrounds.length} result{filteredGrounds.length !== 1 ? "s" : ""}
             {activeFilterCount > 0 && ` · ${activeFilterCount} filter${activeFilterCount !== 1 ? "s" : ""} applied`}
@@ -826,13 +976,17 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
         <div className="space-y-3">
           {filteredGrounds.length === 0 && (
             <div
-              className={cn(C, "rounded-2xl p-8 text-center")}
+              className={cn(C, "rounded-2xl p-8 text-center relative overflow-hidden")}
               style={{
                 backgroundColor: isLight ? "#ffffff" : undefined,
                 border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`
               }}
             >
-              <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center bg-emerald-500/10 text-emerald-500 text-xl">
+              <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7)" }} />
+              <div
+                className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center text-xl shadow-sm"
+                style={{ background: "linear-gradient(135deg,#22c55e 0%,#06b6d4 100%)" }}
+              >
                 🏟
               </div>
               <div className="text-sm font-bold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
@@ -845,7 +999,12 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
                 <button
                   type="button"
                   onClick={clearAllFilters}
-                  className="mt-3.5 px-4 py-2 rounded-xl text-xs font-bold transition-all bg-emerald-500 hover:bg-emerald-400 text-black cursor-pointer inline-flex items-center gap-1.5 shadow-sm"
+                  className="mt-3.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-sm hover:scale-[1.03] active:scale-[0.97]"
+                  style={{
+                    background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
+                    color: "#ffffff",
+                    boxShadow: isLight ? "0 4px 14px -3px rgba(16,185,129,0.45)" : "0 6px 20px -6px rgba(34,197,94,0.7)"
+                  }}
                 >
                   <RotateCcw className="w-3.5 h-3.5" /> Clear All Filters
                 </button>
@@ -857,22 +1016,33 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
             const tags = asArray(g.tags);
             const rating = Number(g.rating) || 0;
             const availableNow = canBookGround(g);
+            const priceNum = getPriceNum(g);
+            const isPremium = priceNum > 1000;
             return (
               <div
                 key={g.id ?? g.name}
-                className={cn(C, "rounded-2xl p-4 transition-all")}
+                className={cn(C, "rounded-2xl p-4 transition-all relative overflow-hidden hover:shadow-lg")}
                 style={{
                   backgroundColor: isLight ? "#ffffff" : undefined,
                   border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
                   boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.06)" : undefined
                 }}
               >
+                <div
+                  className="absolute top-0 left-0 right-0 h-0.5"
+                  style={{
+                    background: isPremium
+                      ? "linear-gradient(90deg,#a855f7,#ec4899,#f97316)"
+                      : "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7)"
+                  }}
+                />
                 <div className="flex items-start gap-3">
                   <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm"
+                    className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-md"
                     style={{
-                      backgroundColor: isLight ? "#ecfdf5" : "rgba(22,101,52,0.15)",
-                      border: `1px solid ${isLight ? "#a7f3d0" : "rgba(22,101,52,0.2)"}`
+                      background: isPremium
+                        ? "linear-gradient(135deg,#a855f7 0%,#ec4899 100%)"
+                        : "linear-gradient(135deg,#22c55e 0%,#06b6d4 100%)"
                     }}
                   >
                     <span className="text-2xl">🏟</span>
@@ -882,20 +1052,32 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
                       <div>
                         <div className="font-semibold text-sm" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>{g.name}</div>
                         <div className="flex items-center gap-1 mt-0.5">
-                          <MapPin className="w-3 h-3" style={{ color: isLight ? "#64748b" : "#4a5a4a" }} />
-                          <span className="text-xs" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>{displayLocation(g)}</span>
+                          <MapPin className="w-3 h-3" style={{ color: isLight ? "#16a34a" : "#4ade80" }} />
+                          <span className="text-xs" style={{ color: isLight ? "#64748b" : "#8a968a" }}>{displayLocation(g)}</span>
                         </div>
                         <div className="flex flex-wrap gap-1.5 mt-1.5">
                           <Tag color={availableNow ? "green" : "red"}>{availableNow ? "Available today" : "Booked today"}</Tag>
                           {isOwnedByMyTeam(g) && <Tag color="blue">Your team posted this</Tag>}
+                          {isPremium && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white shadow-sm" style={{ background: "linear-gradient(135deg,#a855f7 0%,#ec4899 100%)" }}>
+                              ✨ Premium
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="font-bold text-sm" style={{ color: isLight ? "#16a34a" : "#4ade80" }}>{displayPrice(g)}</div>
+                        <div className="font-bold text-sm font-mono" style={{
+                          background: isPremium
+                            ? (isLight ? "linear-gradient(135deg,#7e22ce 0%,#be185d 100%)" : "linear-gradient(135deg,#c084fc 0%,#f472b6 100%)")
+                            : (isLight ? "linear-gradient(135deg,#15803d 0%,#0284c7 100%)" : "linear-gradient(135deg,#4ade80 0%,#38bdf8 100%)"),
+                          WebkitBackgroundClip: "text",
+                          WebkitTextFillColor: "transparent",
+                          backgroundClip: "text"
+                        }}>{displayPrice(g)}</div>
                         {rating > 0 && (
                           <div className="flex items-center gap-1 justify-end mt-0.5">
                             <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-                            <span className="text-xs" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>{rating}</span>
+                            <span className="text-xs font-semibold" style={{ color: isLight ? "#64748b" : "#8a968a" }}>{rating}</span>
                           </div>
                         )}
                       </div>
@@ -903,8 +1085,8 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
                     {amenities.length > 0 && (
                       <div className="flex items-center gap-3 mt-2 flex-wrap">
                         {amenities.map((a, i) => (
-                          <span key={a?.label ?? i} className="flex items-center gap-1 text-xs" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
-                            <span style={{ color: isLight ? "#94a3b8" : "#4a5a4a" }}>{a?.icon}</span>{a?.label}
+                          <span key={a?.label ?? i} className="flex items-center gap-1 text-xs" style={{ color: isLight ? "#64748b" : "#8a968a" }}>
+                            <span style={{ color: isLight ? "#16a34a" : "#4ade80" }}>{a?.icon}</span>{a?.label}
                           </span>
                         ))}
                       </div>
@@ -920,12 +1102,14 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
                   <button
                     disabled={!availableNow}
                     onClick={() => onBook(g)}
-                    className="flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                    className="flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
                     style={availableNow
-                      ? { backgroundColor: isLight ? "#16a34a" : "#22c55e", color: "#ffffff", boxShadow: isLight ? "0 2px 8px rgba(22,163,74,0.22)" : "none" }
-                      : { backgroundColor: isLight ? "#f1f5f9" : "#1e211e", color: isLight ? "#94a3b8" : "#3a3a3a", cursor: "not-allowed" }}
-                    onMouseEnter={e => availableNow && (e.currentTarget.style.backgroundColor = isLight ? "#15803d" : "#4ade80")}
-                    onMouseLeave={e => availableNow && (e.currentTarget.style.backgroundColor = isLight ? "#16a34a" : "#22c55e")}
+                      ? {
+                          background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
+                          color: "#ffffff",
+                          boxShadow: isLight ? "0 4px 14px -3px rgba(16,185,129,0.45)" : "0 6px 20px -6px rgba(34,197,94,0.7)"
+                        }
+                      : { backgroundColor: isLight ? "#f1f5f9" : "#1e211e", color: isLight ? "#94a3b8" : "#3a3a3a", cursor: "not-allowed", transform: "none" }}
                   >
                     {availableNow ? "Book Now" : "Unavailable"}
                   </button>
@@ -936,10 +1120,10 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
                         type="button"
                         onClick={() => setEditingGround(g)}
                         title="Edit Ground"
-                        className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                        className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer hover:scale-[1.05] active:scale-[0.95] ${
                           isLight
                             ? "text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200"
-                            : "text-gray-300 hover:text-white bg-[#252525] hover:bg-[#333]"
+                            : "text-gray-300 hover:text-white bg-[#252525] hover:bg-[#333] border border-[#2a2a2a]"
                         }`}
                       >
                         <Pencil className="w-3.5 h-3.5" />
@@ -956,7 +1140,11 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
                           }
                         }}
                         title="Delete Ground"
-                        className="px-3 py-2 rounded-xl text-xs font-bold transition-colors text-red-500 hover:text-red-600 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 cursor-pointer"
+                        className="px-3 py-2 rounded-xl text-xs font-bold transition-all text-red-500 hover:text-red-600 cursor-pointer hover:scale-[1.05] active:scale-[0.95]"
+                        style={{
+                          background: "linear-gradient(135deg,rgba(239,68,68,0.12) 0%,rgba(220,38,38,0.12) 100%)",
+                          border: "1px solid rgba(239,68,68,0.25)"
+                        }}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -972,7 +1160,7 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
       {selectedGround && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
-          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(2px)" }}
+          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)" }}
           onClick={() => setSelectedGround(null)}
         >
           <div
@@ -984,14 +1172,18 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
             }}
             onClick={e => e.stopPropagation()}
           >
+            <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl sm:rounded-t-3xl" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#f97316,#ec4899)" }} />
             <div className="absolute top-4 right-4 flex items-center gap-2">
               <button
                 onClick={() => setShowMap(prev => !prev)}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all cursor-pointer hover:scale-105 active:scale-95"
                 style={{
-                  backgroundColor: showMap ? (isLight ? "#dcfce7" : "#14532d") : (isLight ? "#f1f5f9" : "#1e211e"),
-                  color: showMap ? (isLight ? "#15803d" : "#bbf7d0") : (isLight ? "#64748b" : "#8a978a"),
-                  border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`
+                  background: showMap
+                    ? "linear-gradient(135deg,#22c55e 0%,#06b6d4 100%)"
+                    : (isLight ? "#f1f5f9" : "#1e211e"),
+                  color: showMap ? "#ffffff" : (isLight ? "#64748b" : "#8a978a"),
+                  border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
+                  boxShadow: showMap ? "0 4px 12px -3px rgba(16,185,129,0.5)" : "none"
                 }}
               >
                 <Map className="w-3.5 h-3.5" />
@@ -1006,11 +1198,26 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
               </button>
             </div>
 
-            <div className="pr-24">
-              <div className="text-lg font-bold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>{selectedGround.name}</div>
-              <div className="flex items-center gap-1 mt-1">
-                <MapPin className="w-4 h-4" style={{ color: isLight ? "#16a34a" : "#22c55e" }} />
-                <span className="text-sm" style={{ color: isLight ? "#64748b" : "#c8ccc8" }}>{displayLocation(selectedGround)}</span>
+            <div className="pr-24 flex items-center gap-3">
+              <div
+                className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 shadow-md"
+                style={{ background: "linear-gradient(135deg,#22c55e 0%,#06b6d4 100%)" }}
+              >
+                <span className="text-3xl">🏟</span>
+              </div>
+              <div>
+                <div className="text-lg font-black" style={{
+                  background: isLight
+                    ? "linear-gradient(135deg,#0f172a 0%,#15803d 50%,#0284c7 100%)"
+                    : "linear-gradient(135deg,#ffffff 0%,#4ade80 50%,#38bdf8 100%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text"
+                }}>{selectedGround.name}</div>
+                <div className="flex items-center gap-1 mt-1">
+                  <MapPin className="w-4 h-4" style={{ color: isLight ? "#16a34a" : "#22c55e" }} />
+                  <span className="text-sm" style={{ color: isLight ? "#64748b" : "#c8ccc8" }}>{displayLocation(selectedGround)}</span>
+                </div>
               </div>
             </div>
 
@@ -1036,41 +1243,65 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div
-                  className="rounded-xl p-3"
+                  className="rounded-xl p-3 relative overflow-hidden"
                   style={{
-                    backgroundColor: isLight ? "#ffffff" : "#111",
-                    border: isLight ? "1px solid #e2e8f0" : "1px solid rgba(34,197,94,0.18)",
-                    boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.05)" : "none"
+                    background: isLight
+                      ? "linear-gradient(135deg,#ffffff 0%,#ecfdf5 100%)"
+                      : "linear-gradient(135deg,rgba(34,197,94,0.12) 0%,rgba(6,182,212,0.08) 100%)",
+                    border: isLight ? "1px solid #a7f3d0" : "1px solid rgba(34,197,94,0.3)",
+                    boxShadow: isLight ? "0 2px 8px rgba(16,185,129,0.1)" : "none"
                   }}
                 >
-                  <div className="text-xs mb-1 font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Price</div>
-                  <div className="text-base font-bold" style={{ color: isLight ? "#16a34a" : "#4ade80" }}>{displayPrice(selectedGround)}</div>
+                  <div className="text-xs mb-1 font-medium" style={{ color: isLight ? "#64748b" : "#8a968a" }}>Price</div>
+                  <div className="text-base font-black font-mono" style={{
+                    background: isLight
+                      ? "linear-gradient(135deg,#15803d 0%,#0284c7 100%)"
+                      : "linear-gradient(135deg,#4ade80 0%,#38bdf8 100%)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    backgroundClip: "text"
+                  }}>{displayPrice(selectedGround)}</div>
                 </div>
                 <div
-                  className="rounded-xl p-3"
+                  className="rounded-xl p-3 relative overflow-hidden"
                   style={{
-                    backgroundColor: isLight ? "#ffffff" : "#111",
-                    border: isLight ? "1px solid #e2e8f0" : "1px solid rgba(34,197,94,0.18)",
-                    boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.05)" : "none"
+                    background: isLight
+                      ? "linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%)"
+                      : "linear-gradient(135deg,rgba(245,158,11,0.12) 0%,rgba(236,72,153,0.08) 100%)",
+                    border: isLight ? "1px solid #fde68a" : "1px solid rgba(245,158,11,0.3)",
+                    boxShadow: isLight ? "0 2px 8px rgba(245,158,11,0.1)" : "none"
                   }}
                 >
-                  <div className="text-xs mb-1 font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Rating</div>
-                  <div className="text-base font-bold" style={{ color: isLight ? "#15803d" : "#86efac" }}>{selectedGround.rating || 0}★</div>
+                  <div className="text-xs mb-1 font-medium" style={{ color: isLight ? "#64748b" : "#8a968a" }}>Rating</div>
+                  <div className="text-base font-black font-mono flex items-center gap-1" style={{
+                    background: isLight
+                      ? "linear-gradient(135deg,#b45309 0%,#be185d 100%)"
+                      : "linear-gradient(135deg,#fbbf24 0%,#f472b6 100%)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    backgroundClip: "text"
+                  }}>
+                    <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" style={{ WebkitTextFillColor: "initial" }} />
+                    {selectedGround.rating || 0}★
+                  </div>
                 </div>
               </div>
 
               <div
-                className="rounded-2xl p-3"
+                className="rounded-2xl p-3 relative overflow-hidden"
                 style={{
                   backgroundColor: isLight ? "#ffffff" : "#111",
                   border: `1px solid ${isLight ? "#e2e8f0" : "#1e1e1e"}`,
                   boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.05)" : "none"
                 }}
               >
-                <div className="text-xs uppercase tracking-wide mb-2 font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Today's bookings</div>
-                {bookedTodaySlots(selectedGround).length > 0 ? <div className="flex flex-wrap gap-1.5">{bookedTodaySlots(selectedGround).map(slot => <Tag key={slot} color="amber">{slot}</Tag>)}</div> : <div className="text-xs" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>No bookings yet today.</div>}
-                <div className="text-xs mt-2" style={{ color: isLight ? "#94a3b8" : "#4a5a4a" }}>
-                  Remaining timings: {TIME_SLOTS.filter(slot => !bookedTodaySlots(selectedGround).includes(slot)).join(" · ") || "No slots left today"}
+                <div className="absolute top-0 left-0 bottom-0 w-1" style={{ background: "linear-gradient(180deg,#f59e0b,#ec4899)" }} />
+                <div className="text-xs uppercase tracking-wide mb-2 font-medium pl-2" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Today's bookings</div>
+                <div className="pl-2">
+                  {bookedTodaySlots(selectedGround).length > 0 ? <div className="flex flex-wrap gap-1.5">{bookedTodaySlots(selectedGround).map(slot => <Tag key={slot} color="amber">{slot}</Tag>)}</div> : <div className="text-xs" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>No bookings yet today.</div>}
+                  <div className="text-xs mt-2" style={{ color: isLight ? "#94a3b8" : "#4a5a4a" }}>
+                    Remaining timings: {TIME_SLOTS.filter(slot => !bookedTodaySlots(selectedGround).includes(slot)).join(" · ") || "No slots left today"}
+                  </div>
                 </div>
               </div>
 
@@ -1084,10 +1315,11 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
                 <button
                   type="button"
                   onClick={() => setShowMap(prev => !prev)}
-                  className="px-4 py-2 rounded-xl text-sm font-bold transition-colors shadow-sm cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
                   style={{
-                    backgroundColor: isLight ? "#16a34a" : "#22c55e",
-                    color: "#ffffff"
+                    background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
+                    color: "#ffffff",
+                    boxShadow: isLight ? "0 4px 14px -3px rgba(16,185,129,0.45)" : "0 6px 20px -6px rgba(34,197,94,0.7)"
                   }}
                 >
                   {showMap ? "Hide Map" : "View Map"}
@@ -1096,7 +1328,7 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
                   <button
                     type="button"
                     onClick={() => setEditingGround(selectedGround)}
-                    className="px-4 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2 transition-colors cursor-pointer"
+                    className="px-4 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
                     style={{
                       backgroundColor: isLight ? "#f1f5f9" : "transparent",
                       border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
@@ -1111,11 +1343,11 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
                     href={buildGroundMapsLink(selectedGround)}
                     target="_blank"
                     rel="noreferrer"
-                    className="px-4 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2 transition-colors cursor-pointer"
+                    className="px-4 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
                     style={{
-                      backgroundColor: isLight ? "#f1f5f9" : "transparent",
-                      border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
-                      color: isLight ? "#0f172a" : "#c8ccc8"
+                      backgroundColor: isLight ? "#eff6ff" : "rgba(59,130,246,0.08)",
+                      border: `1px solid ${isLight ? "#bfdbfe" : "rgba(59,130,246,0.3)"}`,
+                      color: isLight ? "#1d4ed8" : "#60a5fa"
                     }}
                   >
                     <ExternalLink className="w-4 h-4" /> Open in Google Maps
@@ -1134,10 +1366,10 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
                         console.error(err.message || "Could not delete ground");
                       }
                     }}
-                    className="px-4 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2 transition-colors cursor-pointer"
+                    className="px-4 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
                     style={{
-                      backgroundColor: isLight ? "#fef2f2" : "transparent",
-                      border: `1px solid ${isLight ? "#fecaca" : "rgba(239,68,68,0.3)"}`,
+                      background: "linear-gradient(135deg,rgba(239,68,68,0.12) 0%,rgba(220,38,38,0.12) 100%)",
+                      border: `1px solid ${isLight ? "#fecaca" : "rgba(239,68,68,0.35)"}`,
                       color: isLight ? "#dc2626" : "#f87171"
                     }}
                   >
@@ -1153,7 +1385,7 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
       {editingGround && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(2px)" }}
+          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)" }}
           onClick={() => setEditingGround(null)}
         >
           <div className="w-full max-w-2xl" onClick={e => e.stopPropagation()}>

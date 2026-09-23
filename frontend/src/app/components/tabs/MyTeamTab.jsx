@@ -4,22 +4,35 @@ import { apiRequest } from "../../api";
 import { C, cn, Tag, normalizePhone } from "../../utils/helpers.jsx";
 import TeamDetailsModal from "../TeamDetailsModal.jsx";
 
+// ─── Colorful accent bar ─────────────────────────────────────────────────
+function ColorBar({ gradient = "from-emerald-400 via-green-500 to-teal-500", className = "" }) {
+  return <div className={cn("absolute top-0 left-0 right-0 h-1 bg-gradient-to-r", gradient, className)} />;
+}
+
 function SquadSection({ members = [], loading, error, currentUserId, effectiveTeam, theme = "dark" }) {
   const isLight = theme === "light";
-  if (loading) return <div className="text-sm text-center py-8" style={{ color: isLight ? "#64748b" : "#4a5a4a" }}>Loading squad...</div>;
+  if (loading) return (
+    <div className="text-sm text-center py-8 flex items-center justify-center gap-2" style={{ color: isLight ? "#64748b" : "#4a5a4a" }}>
+      <span className="w-4 h-4 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
+      Loading squad...
+    </div>
+  );
   if (error) return <div className="text-sm text-center py-8" style={{ color: isLight ? "#dc2626" : "#4a5a4a" }}>{error}</div>;
 
   if (!effectiveTeam) {
     return (
       <div
-        className="rounded-2xl p-8 text-center border border-dashed transition-all"
+        className="rounded-2xl p-8 text-center border border-dashed transition-all relative overflow-hidden"
         style={{
-          borderColor: isLight ? "#cbd5e1" : "#2a2a2a",
+          borderColor: isLight ? "#a7f3d0" : "#2a2a2a",
           backgroundColor: isLight ? "#ffffff" : "#131413",
-          boxShadow: isLight ? "0 2px 8px -2px rgba(0,0,0,0.05)" : undefined,
+          background: isLight ? "linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)" : "linear-gradient(135deg, rgba(16,185,129,0.06) 0%, #131413 100%)",
+          boxShadow: isLight ? "0 2px 8px -2px rgba(22,163,74,0.08)" : undefined,
         }}
       >
-        <div className="text-4xl mb-3 opacity-60">🧑‍🤝‍🧑</div>
+        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 via-green-500 to-teal-500 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-emerald-500/30">
+          <Users className="w-8 h-8 text-white" />
+        </div>
         <div className={cn("text-sm font-bold", isLight ? "text-slate-900" : "text-white")}>No squad yet</div>
         <p className="text-xs mt-1.5 max-w-[26ch] mx-auto font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
           Add your team name, village and the year formed in Edit Profile — anyone with the same three values is grouped with you automatically.
@@ -32,7 +45,9 @@ function SquadSection({ members = [], loading, error, currentUserId, effectiveTe
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Users className={cn("w-4 h-4", isLight ? "text-emerald-600" : "text-green-400")} />
+          <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center", isLight ? "bg-gradient-to-br from-emerald-100 to-green-100 text-emerald-600" : "bg-gradient-to-br from-emerald-500/20 to-green-500/20 text-emerald-400")}>
+            <Users className="w-4 h-4" />
+          </div>
           <h3 className={cn("text-sm font-bold", isLight ? "text-slate-900" : "text-white")}>
             Squad Members ({members.length})
           </h3>
@@ -40,22 +55,23 @@ function SquadSection({ members = [], loading, error, currentUserId, effectiveTe
       </div>
 
       <div
-        className="rounded-2xl overflow-hidden border divide-y transition-all"
+        className="rounded-2xl overflow-hidden border divide-y transition-all relative"
         style={{
-          borderColor: isLight ? "#e2e8f0" : "#2a2a2a",
+          borderColor: isLight ? "#d1fae5" : "#2a2a2a",
           backgroundColor: isLight ? "#ffffff" : "#161616",
           boxShadow: isLight ? "0 2px 8px -2px rgba(0,0,0,0.05)" : undefined,
         }}
       >
+        <ColorBar gradient="from-emerald-400 via-green-500 to-teal-500" />
         {members.length === 0 ? (
           <div className="p-4 text-center text-xs font-medium" style={{ color: isLight ? "#64748b" : "#737373" }}>
             No teammates registered yet with team "{effectiveTeam.team_name}".
           </div>
         ) : (
-          members.map(m => (
+          members.map((m, idx) => (
             <div
               key={m.id}
-              className="flex items-center gap-3 px-4 py-3 transition-colors"
+              className={cn("flex items-center gap-3 px-4 py-3 transition-colors", isLight ? "hover:bg-emerald-50/40" : "hover:bg-emerald-500/5")}
               style={{
                 backgroundColor: isLight ? "#ffffff" : "#161616",
                 borderBottom: isLight ? "1px solid #f1f5f9" : undefined,
@@ -63,8 +79,8 @@ function SquadSection({ members = [], loading, error, currentUserId, effectiveTe
             >
               <div
                 className={cn(
-                  "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0",
-                  isLight ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-green-500/15 text-green-400"
+                  "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 shadow-sm",
+                  isLight ? "bg-gradient-to-br from-emerald-400 to-green-500 text-white border border-emerald-300" : "bg-gradient-to-br from-emerald-500 to-teal-500 text-black"
                 )}
               >
                 {m.name?.split(" ").map(w => w[0]).slice(0, 2).join("")}
@@ -73,13 +89,7 @@ function SquadSection({ members = [], loading, error, currentUserId, effectiveTe
                 <div className={cn("text-sm font-bold truncate flex items-center gap-1.5", isLight ? "text-slate-900" : "text-white")}>
                   {m.name}
                   {m.id === currentUserId && (
-                    <span
-                      className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                      style={isLight
-                        ? { backgroundColor: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" }
-                        : { backgroundColor: "rgba(34,197,94,0.15)", color: "#22c55e" }
-                      }
-                    >
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gradient-to-r from-emerald-400 to-green-500 text-white shadow-sm">
                       You
                     </span>
                   )}
@@ -197,7 +207,6 @@ export default function MyTeamTab({
     };
     window.addEventListener("focus", onFocus);
 
-    // Auto-sync team reviews live every 12s so new reviews appear automatically
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
         loadTeamStats(activeTeamName);
@@ -224,7 +233,6 @@ export default function MyTeamTab({
   const [unopenedReviewIds, setUnopenedReviewIds] = useState(new Set());
   const [modalUnreadReviewIds, setModalUnreadReviewIds] = useState(new Set());
 
-  // Track unopen / unread messages only (never the total posted count)
   useEffect(() => {
     if (!teamNameKey) {
       setUnopenedReviewIds(new Set());
@@ -242,7 +250,6 @@ export default function MyTeamTab({
           readIds = new Set(parsed.map(String));
         }
       } else {
-        // Legacy fallback: if user previously saw reviews via legacy seen count
         const legacySeen = localStorage.getItem(seenStorageKey);
         if (legacySeen !== null) {
           const count = Number(legacySeen);
@@ -268,10 +275,8 @@ export default function MyTeamTab({
   const unopenedCount = unopenedReviewIds.size;
 
   const handleOpenViewTeam = () => {
-    // Preserve current unread IDs for the modal so it can show which reviews have the red dot
     setModalUnreadReviewIds(new Set(unopenedReviewIds));
 
-    // Mark all current reviews as read in localStorage
     if (readIdsStorageKey && effectiveTeam?.team_name) {
       const allReviewIds = (teamStats?.reviews || []).map(r => String(r.id));
       try {
@@ -290,7 +295,6 @@ export default function MyTeamTab({
   const userTeamName = user?.team_name?.trim()?.toLowerCase();
   const myTeamId = myTeam?.id;
 
-  // Filter tournaments published strictly by users present in squad (current user + squad teammates)
   const squadMemberIds = new Set(
     [user?.id, ...(teammateIds || [])]
       .filter(Boolean)
@@ -359,27 +363,43 @@ export default function MyTeamTab({
       {/* 1. Team Banner Card ABOVE the Three Tabs */}
       {effectiveTeam && (
         <div
-          className={cn("rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-4 transition-all", isLight ? "bg-white shadow-sm" : "")}
+          className={cn("rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-4 transition-all relative overflow-hidden", isLight ? "shadow-sm" : "")}
           style={{
-            background: isLight ? "linear-gradient(135deg, #ecfdf5 0%, #ffffff 100%)" : "linear-gradient(135deg, rgba(34, 197, 94, 0.14) 0%, #141714 100%)",
-            border: isLight ? "1px solid #a7f3d0" : "1px solid rgba(34, 197, 94, 0.35)",
-            boxShadow: isLight ? "0 10px 25px -5px rgba(22, 163, 74, 0.12)" : "0 8px 24px rgba(0,0,0,0.35)"
+            background: isLight
+              ? "linear-gradient(135deg, #ecfdf5 0%, #ffffff 50%, #f0fdfa 100%)"
+              : "linear-gradient(135deg, rgba(34, 197, 94, 0.18) 0%, #141714 50%, rgba(20, 184, 166, 0.12) 100%)",
+            border: isLight ? "1.5px solid #a7f3d0" : "1px solid rgba(34, 197, 94, 0.4)",
+            boxShadow: isLight
+              ? "0 10px 25px -5px rgba(22, 163, 74, 0.15), 0 0 0 1px rgba(16,185,129,0.06)"
+              : "0 8px 24px rgba(0,0,0,0.35), 0 0 0 1px rgba(16,185,129,0.08)"
           }}
         >
+          <ColorBar gradient="from-emerald-400 via-green-500 to-teal-500" />
           <div className="flex items-center gap-3.5 min-w-0">
             <div
-              className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-lg shrink-0 shadow-lg"
-              style={{ background: "linear-gradient(135deg,#166534,#14532d)", border: "1px solid #22c55e" }}
+              className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-lg shrink-0 shadow-lg relative overflow-hidden"
+              style={{
+                background: isLight
+                  ? "radial-gradient(circle at 30% 25%, #4ade80, #16a34a 55%, #166534 100%)"
+                  : "radial-gradient(circle at 30% 25%, #22c55e, #16a34a 55%, #0f5132 100%)",
+                border: "1px solid #22c55e",
+                boxShadow: "0 6px 18px rgba(34, 197, 94, 0.35)",
+              }}
             >
+              <span className="absolute top-1 left-1.5 w-3 h-1.5 rounded-full bg-white/40 blur-[2px]" />
               {effectiveTeam.team_name ? effectiveTeam.team_name.split(" ").map(w => w[0]).slice(0, 2).join("") : "TM"}
             </div>
 
             <div className="min-w-0">
               <div className={cn("text-xl font-black tracking-wide truncate drop-shadow-sm flex items-center gap-2", isLight ? "text-slate-900" : "text-white")}>
-                <span>{effectiveTeam.team_name}</span>
+                <span className="bg-gradient-to-r bg-clip-text text-transparent"
+                  style={{ backgroundImage: isLight ? "linear-gradient(to right, #065f46, #16a34a)" : "linear-gradient(to right, #ffffff, #a7f3d0)" }}>
+                  {effectiveTeam.team_name}
+                </span>
                 {teamStats?.rating != null && (
-                  <span className={cn("flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full shrink-0", isLight ? "bg-amber-100 text-amber-800 border border-amber-300" : "text-amber-400 bg-amber-400/10 border border-amber-400/20")}>
-                    <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                  <span className={cn("flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full shrink-0 shadow-sm",
+                    isLight ? "bg-gradient-to-r from-amber-100 to-yellow-100 text-amber-800 border border-amber-300" : "text-amber-300 bg-gradient-to-r from-amber-400/15 to-yellow-400/15 border border-amber-400/25")}>
+                    <Star className="w-3 h-3 fill-amber-400 text-amber-400 drop-shadow" />
                     <span>{Number(teamStats.rating).toFixed(1)}</span>
                   </span>
                 )}
@@ -387,7 +407,7 @@ export default function MyTeamTab({
                   type="button"
                   onClick={() => effectiveTeam?.team_name && loadTeamStats(effectiveTeam.team_name)}
                   disabled={refreshingStats}
-                  className={cn("p-1 rounded-lg transition-colors cursor-pointer", isLight ? "hover:bg-slate-100 text-slate-400 hover:text-emerald-600" : "hover:bg-neutral-800 text-neutral-400 hover:text-green-400")}
+                  className={cn("p-1 rounded-lg transition-colors cursor-pointer", isLight ? "hover:bg-emerald-100 text-emerald-600" : "hover:bg-emerald-500/15 text-emerald-400")}
                   title="Refresh team stats and reviews"
                 >
                   <RotateCw className={cn("w-3 h-3", refreshingStats && cn("animate-spin", isLight ? "text-emerald-600" : "text-green-400"))} />
@@ -397,7 +417,8 @@ export default function MyTeamTab({
               <div className={cn("text-xs mt-0.5 font-medium flex items-center gap-2 flex-wrap", isLight ? "text-slate-600" : "text-neutral-300")}>
                 {effectiveTeam.village_name && <span>📍 {effectiveTeam.village_name}</span>}
                 {effectiveTeam.team_year && <span>· 🗓️ Formed {effectiveTeam.team_year}</span>}
-                <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold", isLight ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-green-500/20 text-green-400 border border-green-500/30")}>
+                <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm bg-gradient-to-r",
+                  isLight ? "from-emerald-100 to-green-100 text-emerald-800 border border-emerald-300" : "from-emerald-500/20 to-green-500/20 text-emerald-300 border border-emerald-500/30")}>
                   {members.length} member{members.length !== 1 ? "s" : ""}
                 </span>
                 <span className={cn("text-[11px] flex items-center gap-1.5 flex-wrap", isLight ? "text-slate-600" : "text-neutral-300")}>
@@ -406,21 +427,20 @@ export default function MyTeamTab({
                     <button
                       type="button"
                       onClick={handleOpenViewTeam}
-                      className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-500 border border-red-500/30 flex items-center gap-1.5 hover:bg-red-500/30 transition-all cursor-pointer shadow-sm"
+                      className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gradient-to-r from-rose-500 to-red-500 text-white border border-red-400/50 flex items-center gap-1.5 hover:from-rose-600 hover:to-red-600 transition-all cursor-pointer shadow-md shadow-red-500/30"
                       title={`${unopenedCount} unopened review message${unopenedCount !== 1 ? "s" : ""}`}
                     >
-                      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
-                      <MessageSquare className="w-3 h-3 text-red-500" />
+                      <span className="w-2 h-2 rounded-full bg-white animate-pulse shrink-0" />
+                      <MessageSquare className="w-3 h-3 text-white" />
                       <span>Review ({unopenedCount})</span>
-                      <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-red-500 text-white animate-pulse">
-                        NEW
-                      </span>
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-white/25 text-white animate-pulse">NEW</span>
                     </button>
                   ) : reviewsCount > 0 ? (
                     <button
                       type="button"
                       onClick={handleOpenViewTeam}
-                      className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer", isLight ? "bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200" : "bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30")}
+                      className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer shadow-sm bg-gradient-to-r",
+                        isLight ? "from-emerald-100 to-green-100 text-emerald-800 border border-emerald-300 hover:from-emerald-200 hover:to-green-200" : "from-emerald-500/20 to-green-500/20 text-emerald-300 border border-emerald-500/30 hover:from-emerald-500/30 hover:to-green-500/30")}
                       title="View feedback reviews"
                     >
                       <MessageSquare className="w-3 h-3" />
@@ -432,22 +452,18 @@ export default function MyTeamTab({
             </div>
           </div>
 
-          {/* Self View Team Button */}
           <button
             type="button"
             onClick={handleOpenViewTeam}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-md hover:scale-105 active:scale-95 cursor-pointer"
-            style={{
-              backgroundColor: isLight ? "#16a34a" : "#22c55e",
-              color: isLight ? "#ffffff" : "#051305",
-              boxShadow: isLight ? "0 4px 14px rgba(22, 163, 74, 0.35)" : "0 4px 14px rgba(34, 197, 94, 0.35)",
-            }}
+            className={cn("px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-lg hover:scale-105 active:scale-95 cursor-pointer",
+              isLight ? "bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-emerald-500/35"
+                      : "bg-gradient-to-r from-emerald-400 to-teal-500 text-black shadow-emerald-500/35")}
             title="View your team performance, rating & feedback reviews"
           >
             <Users className="w-3.5 h-3.5" />
             <span>View Team</span>
             {unopenedCount > 0 && (
-              <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-red-600 text-white border border-red-400/50 flex items-center gap-1 shadow-sm animate-pulse">
+              <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-gradient-to-r from-rose-500 to-red-600 text-white border border-white/30 flex items-center gap-1 shadow-md animate-pulse">
                 <span className="w-1.5 h-1.5 rounded-full bg-white shrink-0" />
                 {unopenedCount}
               </span>
@@ -456,7 +472,7 @@ export default function MyTeamTab({
         </div>
       )}
 
-      {/* 2. Self Team Details Modal (reviews only show in View Team modal) */}
+      {/* 2. Self Team Details Modal */}
       {viewSelfTeam && effectiveTeam && (
         <TeamDetailsModal
           teamName={effectiveTeam.team_name}
@@ -478,9 +494,9 @@ export default function MyTeamTab({
       {/* 3. The Three Tabs */}
       <div className="flex gap-2">
         {[
-          { key: "bookings", label: "My Bookings", icon: CalendarCheck },
-          { key: "squad", label: "Squad", icon: Users },
-          { key: "schedule", label: "Schedule", icon: Calendar }
+          { key: "bookings", label: "My Bookings", icon: CalendarCheck, gradient: "from-sky-400 to-blue-500", glow: "rgba(59,130,246,0.35)" },
+          { key: "squad", label: "Squad", icon: Users, gradient: "from-emerald-400 to-green-500", glow: "rgba(34,197,94,0.35)" },
+          { key: "schedule", label: "Schedule", icon: Calendar, gradient: "from-violet-400 to-purple-500", glow: "rgba(139,92,246,0.35)" },
         ].map(t => {
           const Icon = t.icon;
           const isActive = activeSection === t.key;
@@ -488,18 +504,15 @@ export default function MyTeamTab({
             <button
               key={t.key}
               onClick={() => setActiveSection(t.key)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-full text-xs font-semibold transition-all cursor-pointer"
-              style={isActive
-                ? {
-                    backgroundColor: isLight ? "#16a34a" : "#22c55e",
-                    color: isLight ? "#ffffff" : "#000",
-                    boxShadow: isLight ? "0 2px 10px rgba(22,163,74,0.35)" : "0 2px 10px rgba(34,197,94,0.35)"
-                  }
-                : {
-                    backgroundColor: isLight ? "#ffffff" : "#151715",
-                    color: isLight ? "#475569" : "#c8ccc8",
-                    border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`
-                  }}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-full text-xs font-semibold transition-all cursor-pointer border",
+                isActive
+                  ? cn("text-white border-transparent bg-gradient-to-r shadow-lg", t.gradient)
+                  : isLight
+                  ? "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:shadow-sm"
+                  : "bg-[#151715] text-[#c8ccc8] border-[#2a2a2a] hover:border-[#3a3a3a]"
+              )}
+              style={isActive ? { boxShadow: `0 4px 14px ${t.glow}` } : {}}
             >
               <Icon className="w-3.5 h-3.5" />
               {t.label}
@@ -511,7 +524,9 @@ export default function MyTeamTab({
       {activeSection === "bookings" && bookings.length > 0 && (
         <section>
           <div className="flex items-center gap-2 mb-3">
-            <CalendarCheck className={cn("w-4 h-4", isLight ? "text-emerald-600" : "text-green-400")} />
+            <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center", isLight ? "bg-gradient-to-br from-sky-100 to-blue-100 text-sky-600" : "bg-gradient-to-br from-sky-500/20 to-blue-500/20 text-sky-400")}>
+              <CalendarCheck className="w-4 h-4" />
+            </div>
             <h3 className={cn("text-base font-semibold", isLight ? "text-slate-900" : "text-white")}>My Bookings</h3>
           </div>
           <div className="space-y-2">
@@ -520,16 +535,18 @@ export default function MyTeamTab({
                 key={b.id}
                 className={cn(
                   C,
-                  "rounded-xl p-3 flex items-center justify-between gap-3 border transition-all",
-                  isLight ? "bg-white border-slate-200 shadow-sm" : ""
+                  "rounded-xl p-3 flex items-center justify-between gap-3 border transition-all relative overflow-hidden",
+                  isLight ? "bg-white border-slate-200 shadow-sm hover:shadow-md hover:border-sky-200" : "hover:border-sky-500/30"
                 )}
               >
-                <div className="flex items-center gap-3 min-w-0">
+                <div className={cn("absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b",
+                  b.type === "ground" ? "from-emerald-400 to-green-500" : "from-amber-400 to-orange-500")} />
+                <div className="flex items-center gap-3 min-w-0 pl-1.5">
                   <div
-                    className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                    className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 shadow-sm"
                     style={{
-                      backgroundColor: isLight ? "rgba(22,163,74,0.12)" : "rgba(34,197,94,0.1)",
-                      border: isLight ? "1px solid rgba(22,163,74,0.25)" : "1px solid rgba(34,197,94,0.2)"
+                      backgroundColor: isLight ? "rgba(22,163,74,0.12)" : "rgba(34,197,94,0.12)",
+                      border: isLight ? "1px solid rgba(22,163,74,0.25)" : "1px solid rgba(34,197,94,0.25)"
                     }}
                   >
                     {b.type === "ground" ? (
@@ -544,16 +561,19 @@ export default function MyTeamTab({
                   </div>
                 </div>
                 <div className="flex items-center gap-2.5 shrink-0">
-                  <div className={cn("text-sm font-mono font-bold", isLight ? "text-emerald-700" : "text-green-400")}>₹{b.amount}</div>
+                  <div className={cn("text-sm font-mono font-bold px-2 py-0.5 rounded-lg",
+                    isLight ? "text-emerald-700 bg-emerald-50 border border-emerald-200" : "text-green-400 bg-emerald-500/10 border border-emerald-500/20")}>
+                    ₹{b.amount}
+                  </div>
                   <button
                     type="button"
                     disabled={cancellingBookingId === b.id}
                     onClick={() => handleCancelBooking(b)}
                     className={cn(
-                      "px-2.5 py-1 rounded-xl text-xs font-semibold transition-colors",
+                      "px-2.5 py-1 rounded-xl text-xs font-semibold transition-colors shadow-sm",
                       isLight
-                        ? "bg-red-50 text-red-600 hover:bg-red-100 border border-red-200"
-                        : "bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20"
+                        ? "bg-gradient-to-r from-red-50 to-rose-50 text-red-600 hover:from-red-100 hover:to-rose-100 border border-red-200"
+                        : "bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/25"
                     )}
                   >
                     {cancellingBookingId === b.id ? "Cancelling..." : "Cancel"}
@@ -567,10 +587,15 @@ export default function MyTeamTab({
 
       {activeSection === "bookings" && bookings.length === 0 && (
         <div
-          className="rounded-2xl p-8 text-center border border-dashed"
-          style={{ borderColor: isLight ? "#cbd5e1" : "#2a2a2a", backgroundColor: isLight ? "#ffffff" : "#131413" }}
+          className="rounded-2xl p-8 text-center border border-dashed relative overflow-hidden"
+          style={{
+            borderColor: isLight ? "#bae6fd" : "#2a2a2a",
+            background: isLight ? "linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%)" : "linear-gradient(135deg, rgba(56,189,248,0.06) 0%, #131413 100%)",
+          }}
         >
-          <div className="text-4xl mb-3 opacity-60">🎟️</div>
+          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-500 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-sky-500/30">
+            <CalendarCheck className="w-8 h-8 text-white" />
+          </div>
           <div className={cn("text-sm font-semibold", isLight ? "text-slate-900" : "text-white")}>No bookings yet</div>
           <p className="text-xs mt-1.5 max-w-[26ch] mx-auto" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
             Book a ground or an umpire and it'll show up here.
@@ -593,18 +618,14 @@ export default function MyTeamTab({
         <section className="space-y-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Calendar className={cn("w-4 h-4", isLight ? "text-emerald-600" : "text-green-400")} />
+              <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center", isLight ? "bg-gradient-to-br from-violet-100 to-purple-100 text-violet-600" : "bg-gradient-to-br from-violet-500/20 to-purple-500/20 text-violet-400")}>
+                <Calendar className="w-4 h-4" />
+              </div>
               <h3 className={cn("text-base font-semibold", isLight ? "text-slate-900" : "text-white")}>Schedule</h3>
             </div>
             {scheduleCount > 0 && (
-              <span
-                className="text-xs font-mono px-2 py-0.5 rounded-full"
-                style={{
-                  backgroundColor: isLight ? "#f1f5f9" : "#1a1a1a",
-                  border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
-                  color: isLight ? "#475569" : "#6b7a6b"
-                }}
-              >
+              <span className={cn("text-xs font-bold px-2.5 py-1 rounded-full shadow-sm bg-gradient-to-r",
+                isLight ? "from-violet-100 to-purple-100 text-violet-700 border border-violet-200" : "from-violet-500/20 to-purple-500/20 text-violet-300 border border-violet-500/30")}>
                 {scheduleCount} upcoming
               </span>
             )}
@@ -612,10 +633,15 @@ export default function MyTeamTab({
 
           {postedChallenges.length === 0 && acceptedChallengesFinal.length === 0 && registeredTournaments.length === 0 && (
             <div
-              className="rounded-2xl p-8 text-center border border-dashed"
-              style={{ borderColor: isLight ? "#cbd5e1" : "#2a2a2a", backgroundColor: isLight ? "#ffffff" : "#131413" }}
+              className="rounded-2xl p-8 text-center border border-dashed relative overflow-hidden"
+              style={{
+                borderColor: isLight ? "#ddd6fe" : "#2a2a2a",
+                background: isLight ? "linear-gradient(135deg, #faf5ff 0%, #ffffff 100%)" : "linear-gradient(135deg, rgba(139,92,246,0.06) 0%, #131413 100%)",
+              }}
             >
-              <div className="text-4xl mb-3 opacity-60">🗓️</div>
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-400 via-purple-500 to-fuchsia-500 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-violet-500/30">
+                <Calendar className="w-8 h-8 text-white" />
+              </div>
               <div className={cn("text-sm font-semibold", isLight ? "text-slate-900" : "text-white")}>Nothing on the calendar yet</div>
               <p className="text-xs mt-1.5 max-w-[26ch] mx-auto" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
                 Post or accept a challenge in Find Match, or register your team for a tournament, to see it here.
@@ -626,33 +652,31 @@ export default function MyTeamTab({
           <div className="space-y-4">
             {/* Card 1: Posted Challenges */}
             <div
-              className="rounded-2xl overflow-hidden"
+              className="rounded-2xl overflow-hidden relative"
               style={{
                 backgroundColor: isLight ? "#ffffff" : "#151715",
-                border: isLight ? "1px solid #e2e8f0" : "1px solid rgba(56,189,248,0.22)",
-                boxShadow: isLight ? "0 2px 8px -2px rgba(0,0,0,0.05)" : undefined
+                border: isLight ? "1px solid #bae6fd" : "1px solid rgba(56,189,248,0.3)",
+                boxShadow: isLight ? "0 4px 14px -4px rgba(56,189,248,0.15)" : "0 4px 14px rgba(0,0,0,0.25)"
               }}
             >
+              <ColorBar gradient="from-sky-400 via-cyan-500 to-blue-500" />
               <div
                 className="flex items-center gap-2 px-4 py-3"
                 style={{
-                  borderBottom: `1px solid ${isLight ? "#f1f5f9" : "#1e1e1e"}`,
-                  backgroundColor: isLight ? "#f8fafc" : "transparent"
+                  borderBottom: `1px solid ${isLight ? "#e0f2fe" : "#1e1e1e"}`,
+                  backgroundColor: isLight ? "linear-gradient(90deg, #f0f9ff 0%, #ffffff 100%)" : "transparent"
                 }}
               >
-                <Megaphone className={cn("w-3.5 h-3.5", isLight ? "text-sky-600" : "text-sky-400")} />
-                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: isLight ? "#475569" : "#8fa08f" }}>
+                <div className={cn("w-6 h-6 rounded-lg flex items-center justify-center", isLight ? "bg-gradient-to-br from-sky-400 to-cyan-500 text-white shadow-sm" : "bg-gradient-to-br from-sky-500/30 to-cyan-500/30 text-sky-300")}>
+                  <Megaphone className="w-3.5 h-3.5" />
+                </div>
+                <h4 className={cn("text-xs font-bold uppercase tracking-wide bg-gradient-to-r bg-clip-text text-transparent",
+                  isLight ? "from-sky-700 to-cyan-700" : "from-sky-300 to-cyan-300")}>
                   Posted Challenges
                 </h4>
                 {postedChallenges.length > 0 && (
-                  <span
-                    className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-full"
-                    style={{
-                      backgroundColor: isLight ? "#f1f5f9" : "#1a1a1a",
-                      border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
-                      color: isLight ? "#475569" : "#6b7a6b"
-                    }}
-                  >
+                  <span className={cn("ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm bg-gradient-to-r",
+                    isLight ? "from-sky-400 to-cyan-500 text-white" : "from-sky-500/30 to-cyan-500/30 text-sky-300 border border-sky-500/30")}>
                     {postedChallenges.length}
                   </span>
                 )}
@@ -695,33 +719,31 @@ export default function MyTeamTab({
 
             {/* Card 2: Accepted Challenges */}
             <div
-              className="rounded-2xl overflow-hidden"
+              className="rounded-2xl overflow-hidden relative"
               style={{
                 backgroundColor: isLight ? "#ffffff" : "#151715",
-                border: isLight ? "1px solid #e2e8f0" : "1px solid rgba(245,158,11,0.25)",
-                boxShadow: isLight ? "0 2px 8px -2px rgba(0,0,0,0.05)" : undefined
+                border: isLight ? "1px solid #fcd34d" : "1px solid rgba(245,158,11,0.35)",
+                boxShadow: isLight ? "0 4px 14px -4px rgba(245,158,11,0.15)" : "0 4px 14px rgba(0,0,0,0.25)"
               }}
             >
+              <ColorBar gradient="from-amber-400 via-orange-500 to-rose-500" />
               <div
                 className="flex items-center gap-2 px-4 py-3"
                 style={{
-                  borderBottom: `1px solid ${isLight ? "#f1f5f9" : "#1e1e1e"}`,
-                  backgroundColor: isLight ? "#f8fafc" : "transparent"
+                  borderBottom: `1px solid ${isLight ? "#fef3c7" : "#1e1e1e"}`,
+                  backgroundColor: isLight ? "linear-gradient(90deg, #fffbeb 0%, #ffffff 100%)" : "transparent"
                 }}
               >
-                <Swords className={cn("w-3.5 h-3.5", isLight ? "text-amber-600" : "text-amber-400")} />
-                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: isLight ? "#475569" : "#8fa08f" }}>
+                <div className={cn("w-6 h-6 rounded-lg flex items-center justify-center", isLight ? "bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-sm" : "bg-gradient-to-br from-amber-500/30 to-orange-500/30 text-amber-300")}>
+                  <Swords className="w-3.5 h-3.5" />
+                </div>
+                <h4 className={cn("text-xs font-bold uppercase tracking-wide bg-gradient-to-r bg-clip-text text-transparent",
+                  isLight ? "from-amber-700 to-orange-700" : "from-amber-300 to-orange-300")}>
                   Accepted Challenges
                 </h4>
                 {acceptedChallengesFinal.length > 0 && (
-                  <span
-                    className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-full"
-                    style={{
-                      backgroundColor: isLight ? "#f1f5f9" : "#1a1a1a",
-                      border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
-                      color: isLight ? "#475569" : "#6b7a6b"
-                    }}
-                  >
+                  <span className={cn("ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm bg-gradient-to-r",
+                    isLight ? "from-amber-400 to-orange-500 text-white" : "from-amber-500/30 to-orange-500/30 text-amber-300 border border-amber-500/30")}>
                     {acceptedChallengesFinal.length}
                   </span>
                 )}
@@ -759,8 +781,8 @@ export default function MyTeamTab({
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
                           <a
                             href={`tel:${ac.contact_no}`}
-                            className={cn("rounded-xl p-2.5 flex items-center gap-2 transition-colors", isLight ? "hover:bg-slate-50" : "hover:bg-white/5")}
-                            style={{ backgroundColor: isLight ? "#f8fafc" : "#1a1a1a", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}` }}
+                            className={cn("rounded-xl p-2.5 flex items-center gap-2 transition-colors border",
+                              isLight ? "bg-gradient-to-r from-emerald-50/70 to-green-50/70 border-emerald-200 hover:from-emerald-100 hover:to-green-100" : "bg-gradient-to-r from-emerald-500/8 to-green-500/8 border-emerald-500/20 hover:from-emerald-500/15 hover:to-green-500/15")}
                           >
                             <Phone className={cn("w-3.5 h-3.5 shrink-0", isLight ? "text-emerald-600" : "text-green-400")} />
                             <div className="min-w-0">
@@ -770,10 +792,10 @@ export default function MyTeamTab({
                           </a>
                           <a
                             href={`tel:${ac.accepted_by_contact_no}`}
-                            className={cn("rounded-xl p-2.5 flex items-center gap-2 transition-colors", isLight ? "hover:bg-slate-50" : "hover:bg-white/5")}
-                            style={{ backgroundColor: isLight ? "#f8fafc" : "#1a1a1a", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}` }}
+                            className={cn("rounded-xl p-2.5 flex items-center gap-2 transition-colors border",
+                              isLight ? "bg-gradient-to-r from-sky-50/70 to-blue-50/70 border-sky-200 hover:from-sky-100 hover:to-blue-100" : "bg-gradient-to-r from-sky-500/8 to-blue-500/8 border-sky-500/20 hover:from-sky-500/15 hover:to-blue-500/15")}
                           >
-                            <Phone className={cn("w-3.5 h-3.5 shrink-0", isLight ? "text-emerald-600" : "text-green-400")} />
+                            <Phone className={cn("w-3.5 h-3.5 shrink-0", isLight ? "text-sky-600" : "text-sky-400")} />
                             <div className="min-w-0">
                               <div className="text-xs truncate" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>{ac.accepted_by_team_name}</div>
                               <div className={cn("text-xs font-mono", isLight ? "text-slate-900 font-bold" : "text-white")}>{ac.accepted_by_contact_no}</div>
@@ -786,8 +808,8 @@ export default function MyTeamTab({
                             type="button"
                             onClick={() => onOpenChat(ac)}
                             className={cn(
-                              "flex-1 py-2.5 sm:py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 text-center shadow-sm cursor-pointer",
-                              isLight ? "bg-[#16a34a] hover:bg-[#15803d] text-white" : "bg-green-500 text-black hover:bg-green-400"
+                              "flex-1 py-2.5 sm:py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 text-center shadow-lg cursor-pointer",
+                              isLight ? "bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white shadow-emerald-500/30" : "bg-gradient-to-r from-emerald-400 to-teal-500 text-black hover:from-emerald-300 hover:to-teal-400 shadow-emerald-500/30"
                             )}
                           >
                             💬 Chat
@@ -797,8 +819,8 @@ export default function MyTeamTab({
                             disabled={cancelling}
                             onClick={() => onCancelChallenge(ac.id)}
                             className={cn(
-                              "flex-1 py-2.5 sm:py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 text-center cursor-pointer",
-                              isLight ? "bg-red-50 hover:bg-red-100 text-red-600 border border-red-200" : "bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20"
+                              "flex-1 py-2.5 sm:py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 text-center cursor-pointer shadow-sm border",
+                              isLight ? "bg-gradient-to-r from-red-50 to-rose-50 hover:from-red-100 hover:to-rose-100 text-red-600 border-red-200" : "bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20"
                             )}
                             style={cancelling ? { opacity: 0.6, cursor: "not-allowed" } : {}}
                           >
@@ -816,33 +838,31 @@ export default function MyTeamTab({
           <div className="space-y-4">
             {/* Card 3: Our Team Published Tournaments */}
             <div
-              className="rounded-2xl overflow-hidden"
+              className="rounded-2xl overflow-hidden relative"
               style={{
                 backgroundColor: isLight ? "#ffffff" : "#151715",
-                border: isLight ? "1px solid #e2e8f0" : "1px solid rgba(34,197,94,0.25)",
-                boxShadow: isLight ? "0 2px 8px -2px rgba(0,0,0,0.05)" : undefined
+                border: isLight ? "1px solid #a7f3d0" : "1px solid rgba(34,197,94,0.35)",
+                boxShadow: isLight ? "0 4px 14px -4px rgba(34,197,94,0.15)" : "0 4px 14px rgba(0,0,0,0.25)"
               }}
             >
+              <ColorBar gradient="from-emerald-400 via-green-500 to-teal-500" />
               <div
                 className="flex items-center gap-2 px-4 py-3"
                 style={{
-                  borderBottom: `1px solid ${isLight ? "#f1f5f9" : "#1e1e1e"}`,
-                  backgroundColor: isLight ? "#f8fafc" : "transparent"
+                  borderBottom: `1px solid ${isLight ? "#d1fae5" : "#1e1e1e"}`,
+                  backgroundColor: isLight ? "linear-gradient(90deg, #f0fdf4 0%, #ffffff 100%)" : "transparent"
                 }}
               >
-                <Trophy className={cn("w-3.5 h-3.5", isLight ? "text-emerald-600" : "text-green-400")} />
-                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: isLight ? "#475569" : "#8fa08f" }}>
+                <div className={cn("w-6 h-6 rounded-lg flex items-center justify-center", isLight ? "bg-gradient-to-br from-emerald-400 to-green-500 text-white shadow-sm" : "bg-gradient-to-br from-emerald-500/30 to-green-500/30 text-emerald-300")}>
+                  <Trophy className="w-3.5 h-3.5" />
+                </div>
+                <h4 className={cn("text-xs font-bold uppercase tracking-wide bg-gradient-to-r bg-clip-text text-transparent",
+                  isLight ? "from-emerald-700 to-green-700" : "from-emerald-300 to-green-300")}>
                   Our Team Published Tournaments
                 </h4>
                 {ourPublishedTournaments.length > 0 && (
-                  <span
-                    className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-full"
-                    style={{
-                      backgroundColor: isLight ? "#f1f5f9" : "#1a1a1a",
-                      border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
-                      color: isLight ? "#475569" : "#6b7a6b"
-                    }}
-                  >
+                  <span className={cn("ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm bg-gradient-to-r",
+                    isLight ? "from-emerald-400 to-green-500 text-white" : "from-emerald-500/30 to-green-500/30 text-emerald-300 border border-emerald-500/30")}>
                     {ourPublishedTournaments.length}
                   </span>
                 )}
@@ -858,10 +878,10 @@ export default function MyTeamTab({
                     <div key={t.id} className="p-4 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
                         <div
-                          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm"
                           style={{
-                            backgroundColor: isLight ? "rgba(22,163,74,0.12)" : "rgba(34,197,94,0.1)",
-                            border: isLight ? "1px solid rgba(22,163,74,0.25)" : "1px solid rgba(34,197,94,0.2)"
+                            backgroundColor: isLight ? "rgba(22,163,74,0.12)" : "rgba(34,197,94,0.12)",
+                            border: isLight ? "1px solid rgba(22,163,74,0.3)" : "1px solid rgba(34,197,94,0.3)"
                           }}
                         >
                           <Trophy className={cn("w-4 h-4", isLight ? "text-emerald-600" : "text-green-400")} />
@@ -873,7 +893,9 @@ export default function MyTeamTab({
                           </div>
                         </div>
                       </div>
-                      <Tag color="green">Organizing</Tag>
+                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-full text-white shadow-sm bg-gradient-to-r from-emerald-400 to-green-500 shrink-0">
+                        Organizing
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -882,33 +904,31 @@ export default function MyTeamTab({
 
             {/* Card 4: Registered Tournaments */}
             <div
-              className="rounded-2xl overflow-hidden"
+              className="rounded-2xl overflow-hidden relative"
               style={{
                 backgroundColor: isLight ? "#ffffff" : "#151715",
-                border: isLight ? "1px solid #e2e8f0" : "1px solid rgba(59,130,246,0.25)",
-                boxShadow: isLight ? "0 2px 8px -2px rgba(0,0,0,0.05)" : undefined
+                border: isLight ? "1px solid #bfdbfe" : "1px solid rgba(59,130,246,0.35)",
+                boxShadow: isLight ? "0 4px 14px -4px rgba(59,130,246,0.15)" : "0 4px 14px rgba(0,0,0,0.25)"
               }}
             >
+              <ColorBar gradient="from-sky-400 via-blue-500 to-indigo-500" />
               <div
                 className="flex items-center gap-2 px-4 py-3"
                 style={{
-                  borderBottom: `1px solid ${isLight ? "#f1f5f9" : "#1e1e1e"}`,
-                  backgroundColor: isLight ? "#f8fafc" : "transparent"
+                  borderBottom: `1px solid ${isLight ? "#dbeafe" : "#1e1e1e"}`,
+                  backgroundColor: isLight ? "linear-gradient(90deg, #eff6ff 0%, #ffffff 100%)" : "transparent"
                 }}
               >
-                <Trophy className={cn("w-3.5 h-3.5", isLight ? "text-blue-600" : "text-blue-400")} />
-                <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: isLight ? "#475569" : "#8fa08f" }}>
+                <div className={cn("w-6 h-6 rounded-lg flex items-center justify-center", isLight ? "bg-gradient-to-br from-sky-400 to-blue-500 text-white shadow-sm" : "bg-gradient-to-br from-sky-500/30 to-blue-500/30 text-sky-300")}>
+                  <Trophy className="w-3.5 h-3.5" />
+                </div>
+                <h4 className={cn("text-xs font-bold uppercase tracking-wide bg-gradient-to-r bg-clip-text text-transparent",
+                  isLight ? "from-sky-700 to-blue-700" : "from-sky-300 to-blue-300")}>
                   Registered Tournaments
                 </h4>
                 {registeredTournaments.length > 0 && (
-                  <span
-                    className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-full"
-                    style={{
-                      backgroundColor: isLight ? "#f1f5f9" : "#1a1a1a",
-                      border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
-                      color: isLight ? "#475569" : "#6b7a6b"
-                    }}
-                  >
+                  <span className={cn("ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm bg-gradient-to-r",
+                    isLight ? "from-sky-400 to-blue-500 text-white" : "from-sky-500/30 to-blue-500/30 text-sky-300 border border-sky-500/30")}>
                     {registeredTournaments.length}
                   </span>
                 )}
@@ -924,10 +944,10 @@ export default function MyTeamTab({
                     <div key={t.id} className="p-4 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
                         <div
-                          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm"
                           style={{
-                            backgroundColor: isLight ? "rgba(59,130,246,0.12)" : "rgba(59,130,246,0.1)",
-                            border: isLight ? "1px solid rgba(59,130,246,0.25)" : "1px solid rgba(59,130,246,0.2)"
+                            backgroundColor: isLight ? "rgba(59,130,246,0.12)" : "rgba(59,130,246,0.12)",
+                            border: isLight ? "1px solid rgba(59,130,246,0.3)" : "1px solid rgba(59,130,246,0.3)"
                           }}
                         >
                           <Trophy className={cn("w-4 h-4", isLight ? "text-blue-600" : "text-blue-400")} />
@@ -940,14 +960,16 @@ export default function MyTeamTab({
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <Tag color="blue">Registered</Tag>
+                        <span className="text-[10px] font-bold px-2.5 py-1 rounded-full text-white shadow-sm bg-gradient-to-r from-sky-400 to-blue-500">
+                          Registered
+                        </span>
                         {onUnregisterTournament && (
                           <button
                             type="button"
                             onClick={() => onUnregisterTournament(t.id)}
                             className={cn(
-                              "px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer",
-                              isLight ? "bg-red-50 border border-red-200 text-red-600 hover:bg-red-100" : "bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20"
+                              "px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer shadow-sm border",
+                              isLight ? "bg-gradient-to-r from-red-50 to-rose-50 border-red-200 text-red-600 hover:from-red-100 hover:to-rose-100" : "bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20"
                             )}
                           >
                             Cancel

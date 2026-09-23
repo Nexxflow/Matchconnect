@@ -12,7 +12,21 @@ import CalendarField from "../CalendarField.jsx";
 const challengePinIcon = L.divIcon({
   className: "",
   html: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M12 0C7.03 0 3 4.03 3 9c0 6.75 9 15 9 15s9-8.25 9-15c0-4.97-4.03-9-9-9z" fill="#22c55e"/>
+    <defs>
+      <linearGradient id="pinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#22c55e;stop-opacity:1" />
+        <stop offset="50%" style="stop-color:#10b981;stop-opacity:1" />
+        <stop offset="100%" style="stop-color:#06b6d4;stop-opacity:1" />
+      </linearGradient>
+      <filter id="pinGlow">
+        <feGaussianBlur stdDeviation="1.2" result="coloredBlur"/>
+        <feMerge>
+          <feMergeNode in="coloredBlur"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+    </defs>
+    <path d="M12 0C7.03 0 3 4.03 3 9c0 6.75 9 15 9 15s9-8.25 9-15c0-4.97-4.03-9-9-9z" fill="url(#pinGrad)" filter="url(#pinGlow)"/>
     <circle cx="12" cy="9" r="3.5" fill="#0d0f0d"/>
   </svg>`,
   iconSize: [28, 28],
@@ -24,49 +38,136 @@ const MONTH_NAMES = ["January","February","March","April","May","June","July","A
 const FORMAT_THEMES = {
   T20: {
     accent: "#10b981",
-    bgActiveDark: "linear-gradient(135deg, rgba(16,185,129,0.18) 0%, rgba(6,78,59,0.12) 100%)",
-    bgActiveLight: "linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)",
+    accentBright: "#34d399",
+    bgActiveDark: "linear-gradient(135deg, rgba(16,185,129,0.28) 0%, rgba(6,78,59,0.18) 100%)",
+    bgActiveLight: "linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)",
     borderActiveDark: "#10b981",
     borderActiveLight: "#059669",
-    glowDark: "0 0 20px -3px rgba(16,185,129,0.28)",
-    glowLight: "0 6px 16px -2px rgba(16,185,129,0.22)",
+    glowDark: "0 0 28px -3px rgba(16,185,129,0.5), 0 4px 12px -2px rgba(0,0,0,0.4)",
+    glowLight: "0 10px 24px -6px rgba(16,185,129,0.35), 0 4px 12px -2px rgba(15,23,42,0.08)",
     pillDark: "rgba(16,185,129,0.18)",
     pillLight: "#d1fae5",
+    gradient: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
+    gradientHover: "linear-gradient(135deg,#16a34a 0%,#059669 50%,#0891b2 100%)",
   },
   ODI: {
     accent: "#0ea5e9",
-    bgActiveDark: "linear-gradient(135deg, rgba(14,165,233,0.18) 0%, rgba(3,105,161,0.12) 100%)",
-    bgActiveLight: "linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)",
+    accentBright: "#38bdf8",
+    bgActiveDark: "linear-gradient(135deg, rgba(14,165,233,0.28) 0%, rgba(3,105,161,0.18) 100%)",
+    bgActiveLight: "linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)",
     borderActiveDark: "#0ea5e9",
     borderActiveLight: "#0284c7",
-    glowDark: "0 0 20px -3px rgba(14,165,233,0.28)",
-    glowLight: "0 6px 16px -2px rgba(14,165,233,0.22)",
+    glowDark: "0 0 28px -3px rgba(14,165,233,0.5), 0 4px 12px -2px rgba(0,0,0,0.4)",
+    glowLight: "0 10px 24px -6px rgba(14,165,233,0.35), 0 4px 12px -2px rgba(15,23,42,0.08)",
     pillDark: "rgba(14,165,233,0.18)",
     pillLight: "#e0f2fe",
+    gradient: "linear-gradient(135deg,#3b82f6 0%,#0ea5e9 50%,#06b6d4 100%)",
+    gradientHover: "linear-gradient(135deg,#2563eb 0%,#0284c7 50%,#0891b2 100%)",
   },
   Turf: {
     accent: "#f59e0b",
-    bgActiveDark: "linear-gradient(135deg, rgba(245,158,11,0.18) 0%, rgba(180,83,9,0.12) 100%)",
-    bgActiveLight: "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
+    accentBright: "#fbbf24",
+    bgActiveDark: "linear-gradient(135deg, rgba(245,158,11,0.28) 0%, rgba(180,83,9,0.18) 100%)",
+    bgActiveLight: "linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)",
     borderActiveDark: "#f59e0b",
     borderActiveLight: "#d97706",
-    glowDark: "0 0 20px -3px rgba(245,158,11,0.28)",
-    glowLight: "0 6px 16px -2px rgba(245,158,11,0.22)",
+    glowDark: "0 0 28px -3px rgba(245,158,11,0.5), 0 4px 12px -2px rgba(0,0,0,0.4)",
+    glowLight: "0 10px 24px -6px rgba(245,158,11,0.35), 0 4px 12px -2px rgba(15,23,42,0.08)",
     pillDark: "rgba(245,158,11,0.18)",
     pillLight: "#fef3c7",
+    gradient: "linear-gradient(135deg,#f59e0b 0%,#f97316 50%,#ec4899 100%)",
+    gradientHover: "linear-gradient(135deg,#d97706 0%,#ea580c 50%,#db2777 100%)",
   },
   Test: {
     accent: "#a855f7",
-    bgActiveDark: "linear-gradient(135deg, rgba(168,85,247,0.18) 0%, rgba(126,34,206,0.12) 100%)",
-    bgActiveLight: "linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%)",
+    accentBright: "#c084fc",
+    bgActiveDark: "linear-gradient(135deg, rgba(168,85,247,0.28) 0%, rgba(126,34,206,0.18) 100%)",
+    bgActiveLight: "linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%)",
     borderActiveDark: "#a855f7",
     borderActiveLight: "#9333ea",
-    glowDark: "0 0 20px -3px rgba(168,85,247,0.28)",
-    glowLight: "0 6px 16px -2px rgba(168,85,247,0.22)",
+    glowDark: "0 0 28px -3px rgba(168,85,247,0.5), 0 4px 12px -2px rgba(0,0,0,0.4)",
+    glowLight: "0 10px 24px -6px rgba(168,85,247,0.35), 0 4px 12px -2px rgba(15,23,42,0.08)",
     pillDark: "rgba(168,85,247,0.18)",
     pillLight: "#f3e8ff",
+    gradient: "linear-gradient(135deg,#a855f7 0%,#ec4899 50%,#f97316 100%)",
+    gradientHover: "linear-gradient(135deg,#9333ea 0%,#db2777 50%,#ea580c 100%)",
   }
 };
+
+/* ================= Smooth Animation Keyframes ================= */
+const ANIMATION_STYLES = `
+  @keyframes cc-fade-in-up {
+    0% { opacity: 0; transform: translateY(12px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes cc-fade-in {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+  @keyframes cc-scale-in {
+    0% { opacity: 0; transform: scale(0.94); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+  @keyframes cc-slide-in-right {
+    0% { opacity: 0; transform: translateX(16px); }
+    100% { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes cc-pulse-ring {
+    0% { transform: scale(0.9); opacity: 0.7; }
+    70% { transform: scale(1.6); opacity: 0; }
+    100% { transform: scale(1.6); opacity: 0; }
+  }
+  @keyframes cc-shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  @keyframes cc-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+  }
+  @keyframes cc-gradient-shift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  @keyframes cc-bounce-in {
+    0% { opacity: 0; transform: scale(0.85) translateY(8px); }
+    60% { opacity: 1; transform: scale(1.02) translateY(-2px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .cc-anim-fade-in-up { animation: cc-fade-in-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .cc-anim-fade-in { animation: cc-fade-in 0.35s ease-out both; }
+  .cc-anim-scale-in { animation: cc-scale-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .cc-anim-slide-in-right { animation: cc-slide-in-right 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .cc-anim-bounce-in { animation: cc-bounce-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .cc-anim-float { animation: cc-float 3s ease-in-out infinite; }
+  .cc-anim-gradient-shift { background-size: 200% 200%; animation: cc-gradient-shift 6s ease infinite; }
+  .cc-anim-pulse-ring::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    border: 2px solid currentColor;
+    animation: cc-pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    pointer-events: none;
+  }
+  .cc-hover-lift { transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease; }
+  .cc-hover-lift:hover { transform: translateY(-3px); }
+  .cc-hover-scale { transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease; }
+  .cc-hover-scale:hover { transform: scale(1.03); }
+  .cc-hover-scale:active { transform: scale(0.97); }
+  .cc-btn-smooth { transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease, background-position 0.5s ease; }
+  .cc-btn-smooth:hover { transform: translateY(-1px) scale(1.02); }
+  .cc-btn-smooth:active { transform: translateY(0) scale(0.97); }
+  .cc-avatar-smooth { transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s ease; }
+  .cc-avatar-smooth:hover { transform: scale(1.08) rotate(3deg); }
+  .cc-stagger-1 { animation-delay: 0.04s; }
+  .cc-stagger-2 { animation-delay: 0.08s; }
+  .cc-stagger-3 { animation-delay: 0.12s; }
+  .cc-stagger-4 { animation-delay: 0.16s; }
+  .cc-stagger-5 { animation-delay: 0.20s; }
+  .cc-stagger-6 { animation-delay: 0.24s; }
+`;
 
 function toISODate(d) {
   const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
@@ -112,22 +213,23 @@ function TimeField({ value, onChange, theme }) {
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full rounded-xl px-3 py-2 text-sm text-left focus:outline-none flex items-center justify-between transition-colors shadow-sm"
+        className="cc-btn-smooth w-full rounded-xl px-3 py-2 text-sm text-left focus:outline-none flex items-center justify-between shadow-sm"
         style={{
           backgroundColor: isLight ? "#ffffff" : "#111",
           border: `1px solid ${open ? (isLight ? "#16a34a" : "#22c55e") : (isLight ? "#e2e8f0" : "#2a2a2a")}`,
-          color: value ? (isLight ? "#0f172a" : "#fff") : (isLight ? "#94a3b8" : "#4a5a4a")
+          color: value ? (isLight ? "#0f172a" : "#fff") : (isLight ? "#94a3b8" : "#4a5a4a"),
+          boxShadow: open ? (isLight ? "0 0 0 3px rgba(22,163,74,0.12)" : "0 0 0 3px rgba(34,197,94,0.18)") : "none"
         }}
       >
         <span>{value ? formatTimeDisplay(value) : "Select a time"}</span>
-        <Clock className="w-3.5 h-3.5 shrink-0" style={{ color: isLight ? "#64748b" : "#6b7a6b" }} />
+        <Clock className="w-3.5 h-3.5 shrink-0" style={{ color: isLight ? "#16a34a" : "#22c55e" }} />
       </button>
 
       {open && (
         <>
-          <div className="fixed inset-0 z-40 bg-black/50 sm:bg-black/30" onClick={() => setOpen(false)} />
+          <div className="fixed inset-0 z-40 bg-black/50 sm:bg-black/30 cc-anim-fade-in" onClick={() => setOpen(false)} />
           <div
-            className="fixed sm:absolute inset-x-4 sm:inset-x-auto sm:left-0 top-1/2 -translate-y-1/2 sm:top-[calc(100%+6px)] sm:translate-y-0 z-50 rounded-2xl p-4 w-auto sm:w-60 max-w-xs mx-auto sm:mx-0 shadow-2xl"
+            className="fixed sm:absolute inset-x-4 sm:inset-x-auto sm:left-0 top-1/2 -translate-y-1/2 sm:top-[calc(100%+6px)] sm:translate-y-0 z-50 rounded-2xl p-4 w-auto sm:w-60 max-w-xs mx-auto sm:mx-0 shadow-2xl cc-anim-scale-in"
             style={{
               backgroundColor: isLight ? "#ffffff" : "#151715",
               border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
@@ -165,9 +267,9 @@ function TimeField({ value, onChange, theme }) {
                       key={p}
                       type="button"
                       onClick={() => set(hour12, minute, p)}
-                      className="flex-1 py-1.5 text-xs font-bold transition-colors"
+                      className="flex-1 py-1.5 text-xs font-bold transition-all"
                       style={{
-                        backgroundColor: ampm === p ? (isLight ? "#16a34a" : "#22c55e") : (isLight ? "#f8fafc" : "#111"),
+                        background: ampm === p ? "linear-gradient(135deg,#22c55e 0%,#10b981 100%)" : (isLight ? "#f8fafc" : "#111"),
                         color: ampm === p ? "#ffffff" : (isLight ? "#64748b" : "#6b7a6b")
                       }}
                     >
@@ -180,8 +282,8 @@ function TimeField({ value, onChange, theme }) {
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="w-full py-2 rounded-lg text-xs font-bold transition-colors shadow-sm cursor-pointer"
-              style={{ backgroundColor: isLight ? "#16a34a" : "#22c55e", color: "#ffffff" }}
+              className="cc-btn-smooth w-full py-2 rounded-lg text-xs font-bold cursor-pointer"
+              style={{ background: "linear-gradient(135deg,#22c55e 0%,#10b981 100%)", color: "#ffffff", boxShadow: "0 4px 12px -3px rgba(34,197,94,0.5)" }}
             >
               Done
             </button>
@@ -306,12 +408,15 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
         if (err) return;
         setOpen(true);
       }}
-      className={cn(
-        "px-5 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shrink-0 cursor-pointer",
-        isLight
-          ? "bg-[#16a34a] text-white hover:bg-[#15803d] shadow-sm"
-          : "bg-green-500 text-black hover:bg-green-400"
-      )}
+      className="cc-btn-smooth cc-anim-gradient-shift px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shrink-0 cursor-pointer"
+      style={{
+        background: "linear-gradient(135deg,#22c55e 0%,#10b981 40%,#06b6d4 70%,#22c55e 100%)",
+        backgroundSize: "200% 200%",
+        color: "#ffffff",
+        boxShadow: isLight
+          ? "0 6px 18px -4px rgba(16,185,129,0.5), 0 2px 6px -2px rgba(15,23,42,0.08)"
+          : "0 8px 24px -6px rgba(34,197,94,0.75), 0 2px 8px -2px rgba(0,0,0,0.4)",
+      }}
     >
       <Plus className="w-4 h-4" /> Post a Match Challenge
     </button>
@@ -323,12 +428,11 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
         type="button"
         disabled
         title={disabledReason}
-        className={cn(
-          "px-5 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shrink-0 cursor-not-allowed opacity-60",
-          isLight
-            ? "bg-[#16a34a] text-white shadow-sm"
-            : "bg-green-500 text-black"
-        )}
+        className="px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shrink-0 cursor-not-allowed opacity-60"
+        style={{
+          background: "linear-gradient(135deg,#22c55e 0%,#10b981 100%)",
+          color: "#ffffff",
+        }}
       >
         <Plus className="w-4 h-4" /> Post a Match Challenge
       </button>
@@ -337,16 +441,17 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
 
   return (
     <>
+      <style>{ANIMATION_STYLES}</style>
       {renderTriggerButton()}
       {open && (
         <div
-          className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4"
-          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(2px)" }}
+          className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 cc-anim-fade-in"
+          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.55)" : "rgba(0,0,0,0.8)", backdropFilter: "blur(6px)" }}
           onClick={() => setOpen(false)}
         >
       <form
         onSubmit={handleSubmit}
-        className={cn(C, "w-full sm:max-w-lg max-h-[90vh] sm:max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl p-4 sm:p-5 space-y-3 pb-[max(1.25rem,env(safe-area-inset-bottom))]")}
+        className={cn(C, "cc-anim-bounce-in w-full sm:max-w-lg max-h-[90vh] sm:max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl p-4 sm:p-5 space-y-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] relative")}
         style={{
           backgroundColor: isLight ? "#ffffff" : "#151715",
           border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
@@ -354,12 +459,21 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
         }}
         onClick={e => e.stopPropagation()}
       >
+        <div className="absolute top-0 left-0 right-0 h-1 rounded-t-3xl sm:rounded-t-2xl cc-anim-gradient-shift" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#f97316,#ec4899,#22c55e)", backgroundSize: "200% 200%" }} />
         <div className="flex items-center justify-between pb-2 border-b" style={{ borderColor: isLight ? "#e2e8f0" : "#2a2a2a" }}>
-          <span className="text-base font-semibold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>Post a Match Challenge</span>
+          <span className="text-base font-bold flex items-center gap-2" style={{
+            background: "linear-gradient(135deg,#22c55e 0%,#3b82f6 100%)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text"
+          }}>
+            <Sparkles className="w-4 h-4 cc-anim-float" style={{ color: isLight ? "#16a34a" : "#22c55e", WebkitTextFillColor: "initial" }} />
+            Post a Match Challenge
+          </span>
           <button
             type="button"
             onClick={() => { setOpen(false); setError(null); }}
-            className="w-7 h-7 rounded-full flex items-center justify-center hover:opacity-80 transition-colors"
+            className="cc-hover-scale w-7 h-7 rounded-full flex items-center justify-center"
             style={{ backgroundColor: isLight ? "#f1f5f9" : "#222" }}
           >
             <X className="w-4 h-4" style={{ color: isLight ? "#475569" : "#c8ccc8" }} />
@@ -398,7 +512,7 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
               <select
                 value={form.format}
                 onChange={e => handleFormatChange(e.target.value)}
-                className="w-full rounded-xl px-3 py-2 text-sm appearance-none pr-7 focus:outline-none"
+                className="w-full rounded-xl px-3 py-2 text-sm appearance-none pr-7 focus:outline-none transition-all cursor-pointer"
                 style={{ backgroundColor: isLight ? "#f8fafc" : "#111", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`, color: isLight ? "#0f172a" : "#fff" }}
               >
                 {FORMATS.map(f => <option key={f.key} value={f.key}>{f.title}</option>)}
@@ -419,7 +533,7 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
               onChange={e => update("overs", e.target.value)}
               placeholder={form.format === "Test" ? "Not applicable" : String(DEFAULT_OVERS[form.format])}
               disabled={form.format === "Test"}
-              className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               style={{ backgroundColor: isLight ? "#f8fafc" : "#111", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`, color: isLight ? "#0f172a" : "#fff" }}
             />
           </div>
@@ -430,7 +544,7 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
               <select
                 value={form.hasGround ? "yes" : "no"}
                 onChange={e => update("hasGround", e.target.value === "yes")}
-                className="w-full rounded-xl px-3 py-2 text-sm appearance-none pr-7 focus:outline-none"
+                className="w-full rounded-xl px-3 py-2 text-sm appearance-none pr-7 focus:outline-none transition-all cursor-pointer"
                 style={{ backgroundColor: isLight ? "#f8fafc" : "#111", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`, color: isLight ? "#0f172a" : "#fff" }}
               >
                 <option value="no">Not booked yet</option>
@@ -451,7 +565,7 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
           </div>
 
           {form.hasGround && (
-            <div className="col-span-2">
+            <div className="col-span-2 cc-anim-fade-in-up">
               <label className="text-xs mb-1 block font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Ground</label>
               {grounds.length > 0 ? (
                 <>
@@ -459,7 +573,7 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
                     <select
                       value={form.ground_id}
                       onChange={e => update("ground_id", e.target.value)}
-                      className="w-full rounded-xl px-3 py-2 text-sm appearance-none pr-7 focus:outline-none"
+                      className="w-full rounded-xl px-3 py-2 text-sm appearance-none pr-7 focus:outline-none transition-all cursor-pointer"
                       style={{ backgroundColor: isLight ? "#f8fafc" : "#111", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`, color: isLight ? "#0f172a" : "#fff" }}
                     >
                       <option value="">Select a ground</option>
@@ -472,7 +586,7 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
                     <input
                       value={form.ground_custom}
                       onChange={e => update("ground_custom", e.target.value)}
-                      className="w-full mt-2 rounded-xl px-3 py-2 text-sm focus:outline-none"
+                      className="w-full mt-2 rounded-xl px-3 py-2 text-sm focus:outline-none cc-anim-fade-in-up"
                       style={{ backgroundColor: isLight ? "#f8fafc" : "#111", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`, color: isLight ? "#0f172a" : "#fff" }}
                       placeholder="Ground name"
                     />
@@ -496,7 +610,7 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
               value={form.note}
               onChange={e => update("note", e.target.value)}
               rows={3}
-              className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none resize-none"
+              className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none resize-none transition-all"
               style={{ backgroundColor: isLight ? "#f8fafc" : "#111", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`, color: isLight ? "#0f172a" : "#fff" }}
               placeholder="Looking for a friendly T20 match, intermediate level..."
             />
@@ -505,7 +619,7 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
 
         {error && (
           <div
-            className="text-xs rounded-lg p-2 font-medium"
+            className="text-xs rounded-lg p-2 font-medium cc-anim-fade-in-up"
             style={{
               backgroundColor: isLight ? "#fef2f2" : "rgba(239,68,68,0.1)",
               border: `1px solid ${isLight ? "#fecaca" : "rgba(239,68,68,0.2)"}`,
@@ -519,13 +633,15 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
         <button
           type="submit"
           disabled={submitting || !normalizedContact}
-          className={cn(
-            "w-full py-2.5 rounded-xl font-bold text-sm transition-colors shadow-sm cursor-pointer",
-            isLight
-              ? "bg-[#16a34a] hover:bg-[#15803d] text-white shadow-sm"
-              : "bg-green-500 text-black hover:bg-green-400"
-          )}
-          style={(submitting || !normalizedContact) ? { opacity: 0.6, cursor: "not-allowed" } : {}}
+          className="cc-btn-smooth w-full py-2.5 rounded-xl font-bold text-sm cursor-pointer"
+          style={{
+            background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
+            color: "#ffffff",
+            boxShadow: isLight
+              ? "0 6px 18px -4px rgba(16,185,129,0.5), 0 2px 6px -2px rgba(15,23,42,0.08)"
+              : "0 8px 24px -6px rgba(34,197,94,0.75)",
+            ...((submitting || !normalizedContact) ? { opacity: 0.6, cursor: "not-allowed", transform: "none" } : {})
+          }}
         >
           {submitting ? "Posting..." : "Post Challenge"}
         </button>
@@ -586,26 +702,36 @@ function AcceptChallengeModal({ challenge, token, user, hasActiveAcceptedChallen
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-end md:items-center justify-center"
-      style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.7)", backdropFilter: "blur(2px)" }}
+      className="fixed inset-0 z-[100] flex items-end md:items-center justify-center cc-anim-fade-in"
+      style={{ backgroundColor: isLight ? "rgba(15,23,42,0.55)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)" }}
       onClick={onClose}
     >
+      <style>{ANIMATION_STYLES}</style>
       <form
         onSubmit={handleSubmit}
-        className="w-full md:max-w-sm rounded-t-2xl md:rounded-2xl p-5"
+        className="cc-anim-bounce-in w-full md:max-w-sm rounded-t-2xl md:rounded-2xl p-5 relative overflow-hidden"
         style={{
           backgroundColor: isLight ? "#ffffff" : "#151715",
           border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-          boxShadow: isLight ? "0 20px 50px rgba(15,23,42,0.15)" : "none"
+          boxShadow: isLight ? "0 20px 50px rgba(15,23,42,0.15)" : "0 20px 40px rgba(0,0,0,0.8)"
         }}
         onClick={e => e.stopPropagation()}
       >
+        <div className="absolute top-0 left-0 right-0 h-1 cc-anim-gradient-shift" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#ec4899,#22c55e)", backgroundSize: "200% 200%" }} />
         <div className="flex items-center justify-between mb-4">
-          <span className="text-sm font-semibold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>Accept Challenge vs {challenge.team}</span>
+          <span className="text-sm font-bold flex items-center gap-1.5" style={{
+            background: "linear-gradient(135deg,#22c55e 0%,#3b82f6 100%)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text"
+          }}>
+            <Zap className="w-3.5 h-3.5 cc-anim-float" style={{ color: isLight ? "#16a34a" : "#22c55e", WebkitTextFillColor: "initial" }} />
+            Accept vs {challenge.team}
+          </span>
           <button
             type="button"
             onClick={onClose}
-            className="w-6 h-6 rounded-full flex items-center justify-center hover:opacity-80 transition-colors"
+            className="cc-hover-scale w-6 h-6 rounded-full flex items-center justify-center"
             style={{ backgroundColor: isLight ? "#f1f5f9" : "#222" }}
           >
             <X className="w-3.5 h-3.5" style={{ color: isLight ? "#475569" : "#c8ccc8" }} />
@@ -640,7 +766,7 @@ function AcceptChallengeModal({ challenge, token, user, hasActiveAcceptedChallen
         </div>
         {error && (
           <div
-            className="text-xs rounded-lg p-2 mt-3 font-medium"
+            className="text-xs rounded-lg p-2 mt-3 font-medium cc-anim-fade-in-up"
             style={{
               backgroundColor: isLight ? "#fef2f2" : "rgba(239,68,68,0.1)",
               border: `1px solid ${isLight ? "#fecaca" : "rgba(239,68,68,0.2)"}`,
@@ -653,12 +779,14 @@ function AcceptChallengeModal({ challenge, token, user, hasActiveAcceptedChallen
         <button
           type="submit"
           disabled={submitting || !contact}
-          className="w-full py-2.5 rounded-xl font-bold text-sm mt-4 transition-colors shadow-sm cursor-pointer"
+          className="cc-btn-smooth w-full py-2.5 rounded-xl font-bold text-sm mt-4 cursor-pointer"
           style={{
-            backgroundColor: isLight ? "#16a34a" : "#22c55e",
+            background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
             color: "#ffffff",
-            boxShadow: isLight ? "0 2px 8px rgba(22,163,74,0.25)" : "none",
-            ...((submitting || !contact) ? { opacity: 0.6, cursor: "not-allowed" } : {})
+            boxShadow: isLight
+              ? "0 6px 18px -4px rgba(16,185,129,0.5), 0 2px 6px -2px rgba(15,23,42,0.08)"
+              : "0 8px 24px -6px rgba(34,197,94,0.75)",
+            ...((submitting || !contact) ? { opacity: 0.6, cursor: "not-allowed", transform: "none" } : {})
           }}
         >
           {submitting ? "Accepting..." : "Confirm & Accept"}
@@ -722,29 +850,36 @@ function ChatModal({ challenge, token, onClose, theme }) {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-end md:items-center justify-center"
-      style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.7)", backdropFilter: "blur(2px)" }}
+      className="fixed inset-0 z-[100] flex items-end md:items-center justify-center cc-anim-fade-in"
+      style={{ backgroundColor: isLight ? "rgba(15,23,42,0.55)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)" }}
       onClick={onClose}
     >
+      <style>{ANIMATION_STYLES}</style>
       <div
-        className="w-full md:max-w-sm rounded-t-2xl md:rounded-2xl p-5 flex flex-col shadow-2xl"
+        className="cc-anim-bounce-in w-full md:max-w-sm rounded-t-2xl md:rounded-2xl p-5 flex flex-col shadow-2xl relative overflow-hidden"
         style={{
           backgroundColor: isLight ? "#ffffff" : "#151715",
           border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
           height: "70vh",
           maxHeight: 520,
-          boxShadow: isLight ? "0 20px 50px rgba(15,23,42,0.15)" : "none"
+          boxShadow: isLight ? "0 20px 50px rgba(15,23,42,0.15)" : "0 20px 40px rgba(0,0,0,0.8)"
         }}
         onClick={e => e.stopPropagation()}
       >
+        <div className="absolute top-0 left-0 right-0 h-1 cc-anim-gradient-shift" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#ec4899,#22c55e)", backgroundSize: "200% 200%" }} />
         <div className="flex items-center justify-between mb-3">
           <div>
-            <div className="text-sm font-semibold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>Match Chat</div>
+            <div className="text-sm font-bold" style={{
+              background: "linear-gradient(135deg,#22c55e 0%,#3b82f6 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text"
+            }}>Match Chat</div>
             <div className="text-xs" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>{challenge.team_name} vs {challenge.accepted_by_team_name}</div>
           </div>
           <button
             onClick={onClose}
-            className="w-6 h-6 rounded-full flex items-center justify-center hover:opacity-80 transition-colors"
+            className="cc-hover-scale w-6 h-6 rounded-full flex items-center justify-center"
             style={{ backgroundColor: isLight ? "#f1f5f9" : "#222" }}
           >
             <X className="w-3.5 h-3.5" style={{ color: isLight ? "#475569" : "#c8ccc8" }} />
@@ -755,12 +890,16 @@ function ChatModal({ challenge, token, onClose, theme }) {
           {loading && <div className="text-xs text-center py-6" style={{ color: isLight ? "#94a3b8" : "#4a5a4a" }}>Loading chat history...</div>}
           {!loading && messages.length === 0 && <div className="text-xs text-center py-6" style={{ color: isLight ? "#94a3b8" : "#4a5a4a" }}>No messages yet — say hello!</div>}
           {messages.map(m => (
-            <div key={m.id} className="max-w-[80%]" style={{ marginLeft: m.sender_team_name === challenge.myTeamName ? "auto" : 0 }}>
+            <div
+              key={m.id}
+              className="max-w-[80%] cc-anim-slide-in-right"
+              style={{ marginLeft: m.sender_team_name === challenge.myTeamName ? "auto" : 0 }}
+            >
               <div className="text-xs px-1 mb-0.5" style={{ color: isLight ? "#94a3b8" : "#4a5a4a" }}>{m.sender_team_name}</div>
               <div
-                className="rounded-xl px-3 py-2 text-xs"
+                className="rounded-xl px-3 py-2 text-xs transition-all"
                 style={m.sender_team_name === challenge.myTeamName
-                  ? { backgroundColor: isLight ? "#16a34a" : "#22c55e", color: "#ffffff" }
+                  ? { background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)", color: "#ffffff", boxShadow: "0 6px 16px -5px rgba(34,197,94,0.6)" }
                   : { backgroundColor: isLight ? "#f1f5f9" : "#1a1a1a", color: isLight ? "#1e293b" : "#c8ccc8", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}` }
                 }
               >
@@ -773,7 +912,7 @@ function ChatModal({ challenge, token, onClose, theme }) {
 
         {error && (
           <div
-            className="text-xs rounded-lg p-2 mb-2 font-medium"
+            className="text-xs rounded-lg p-2 mb-2 font-medium cc-anim-fade-in"
             style={{
               backgroundColor: isLight ? "#fef2f2" : "rgba(239,68,68,0.1)",
               border: `1px solid ${isLight ? "#fecaca" : "rgba(239,68,68,0.2)"}`,
@@ -788,7 +927,7 @@ function ChatModal({ challenge, token, onClose, theme }) {
             value={text}
             onChange={e => setText(e.target.value)}
             onKeyDown={e => e.key === "Enter" && send()}
-            className="flex-1 rounded-xl px-3 py-2 text-sm focus:outline-none"
+            className="flex-1 rounded-xl px-3 py-2 text-sm focus:outline-none transition-all"
             style={{
               backgroundColor: isLight ? "#f8fafc" : "#111",
               border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
@@ -799,11 +938,14 @@ function ChatModal({ challenge, token, onClose, theme }) {
           <button
             onClick={send}
             disabled={sending}
-            className="px-4 py-2 rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer"
+            className="cc-btn-smooth px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
             style={{
-              backgroundColor: isLight ? "#16a34a" : "#22c55e",
+              background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
               color: "#ffffff",
-              ...(sending ? { opacity: 0.6, cursor: "not-allowed" } : {})
+              boxShadow: isLight
+                ? "0 4px 12px -3px rgba(16,185,129,0.5)"
+                : "0 6px 16px -4px rgba(34,197,94,0.65)",
+              ...(sending ? { opacity: 0.6, cursor: "not-allowed", transform: "none" } : {})
             }}
           >
             Send
@@ -870,15 +1012,16 @@ function DateCalendarPicker({ value, onChange, theme }) {
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full rounded-xl px-3 py-2 text-xs flex items-center justify-between focus:outline-none transition-colors shadow-sm"
+        className="cc-btn-smooth w-full rounded-xl px-3 py-2 text-xs flex items-center justify-between focus:outline-none shadow-sm"
         style={{
           backgroundColor: isLight ? "#ffffff" : "#111",
           border: open ? (isLight ? "1px solid #16a34a" : "1px solid #22c55e") : (isLight ? "1px solid #e2e8f0" : "1px solid #2a2a2a"),
-          color: value ? (isLight ? "#0f172a" : "#fff") : (isLight ? "#94a3b8" : "#c8ccc8")
+          color: value ? (isLight ? "#0f172a" : "#fff") : (isLight ? "#94a3b8" : "#c8ccc8"),
+          boxShadow: open ? (isLight ? "0 0 0 3px rgba(22,163,74,0.12)" : "0 0 0 3px rgba(34,197,94,0.18)") : "none"
         }}
       >
         <span className="flex items-center gap-1.5 truncate">
-          <Calendar className="w-3.5 h-3.5 shrink-0" style={{ color: isLight ? "#64748b" : "#6b7a6b" }} />
+          <Calendar className="w-3.5 h-3.5 shrink-0" style={{ color: value ? (isLight ? "#16a34a" : "#22c55e") : (isLight ? "#64748b" : "#6b7a6b") }} />
           {value
             ? new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" })
             : "Any Date"}
@@ -888,7 +1031,7 @@ function DateCalendarPicker({ value, onChange, theme }) {
 
       {open && (
         <div
-          className="absolute left-1/2 -translate-x-1/2 z-20 mt-2 rounded-2xl p-3 w-64 shadow-2xl"
+          className="absolute left-1/2 -translate-x-1/2 z-20 mt-2 rounded-2xl p-3 w-64 shadow-2xl cc-anim-scale-in"
           style={{
             backgroundColor: isLight ? "#ffffff" : "#161616",
             border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
@@ -899,7 +1042,7 @@ function DateCalendarPicker({ value, onChange, theme }) {
             <button
               type="button"
               onClick={() => { onChange(null); setOpen(false); }}
-              className="px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors"
+              className="cc-hover-scale px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all"
               style={!value
                 ? (isLight ? { backgroundColor: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0" } : { backgroundColor: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid #22c55e" })
                 : (isLight ? { backgroundColor: "#f1f5f9", color: "#64748b", border: "1px solid #e2e8f0" } : { backgroundColor: "#1e211e", color: "#8a938a", border: "1px solid #2a2a2a" })}
@@ -914,7 +1057,7 @@ function DateCalendarPicker({ value, onChange, theme }) {
                   key={q.label}
                   type="button"
                   onClick={() => { onChange(iso); setViewDate(q.date); setOpen(false); }}
-                  className="px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors"
+                  className="cc-hover-scale px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all"
                   style={active
                     ? (isLight ? { backgroundColor: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0" } : { backgroundColor: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid #22c55e" })
                     : (isLight ? { backgroundColor: "#f1f5f9", color: "#64748b", border: "1px solid #e2e8f0" } : { backgroundColor: "#1e211e", color: "#8a938a", border: "1px solid #2a2a2a" })}
@@ -926,11 +1069,11 @@ function DateCalendarPicker({ value, onChange, theme }) {
           </div>
 
           <div className="flex items-center justify-between mb-2">
-            <button type="button" onClick={() => setViewDate(new Date(year, month - 1, 1))} className="p-1 rounded-lg transition-colors" style={{ color: isLight ? "#0f172a" : "#6b7a6b" }}>
+            <button type="button" onClick={() => setViewDate(new Date(year, month - 1, 1))} className="cc-hover-scale p-1 rounded-lg" style={{ color: isLight ? "#0f172a" : "#6b7a6b" }}>
               <ChevronDown className="w-3.5 h-3.5 rotate-90" />
             </button>
             <span className="text-xs font-bold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>{monthLabel}</span>
-            <button type="button" onClick={() => setViewDate(new Date(year, month + 1, 1))} className="p-1 rounded-lg transition-colors" style={{ color: isLight ? "#0f172a" : "#6b7a6b" }}>
+            <button type="button" onClick={() => setViewDate(new Date(year, month + 1, 1))} className="cc-hover-scale p-1 rounded-lg" style={{ color: isLight ? "#0f172a" : "#6b7a6b" }}>
               <ChevronDown className="w-3.5 h-3.5 -rotate-90" />
             </button>
           </div>
@@ -953,10 +1096,10 @@ function DateCalendarPicker({ value, onChange, theme }) {
                   type="button"
                   disabled={isPast}
                   onClick={() => { onChange(iso); setOpen(false); }}
-                  className="aspect-square rounded-lg text-[11px] font-medium transition-colors flex items-center justify-center"
+                  className="cc-hover-scale aspect-square rounded-lg text-[11px] font-medium flex items-center justify-center"
                   style={
                     isSelected
-                      ? { backgroundColor: "#16a34a", color: "#ffffff" }
+                      ? { background: "linear-gradient(135deg,#22c55e 0%,#10b981 100%)", color: "#ffffff", boxShadow: "0 4px 10px -3px rgba(34,197,94,0.7)" }
                       : isPast
                       ? { color: isLight ? "#cbd5e1" : "#3a3a3a", cursor: "not-allowed" }
                       : isToday
@@ -1014,7 +1157,7 @@ function TimePicker({ value, onChange, theme, embedded = false }) {
     <div className="relative w-full" ref={wrapRef}>
       {!embedded && (
         <label className="text-xs mb-1.5 block font-semibold flex items-center gap-1.5" style={{ color: isLight ? "#475569" : "#8a968a" }}>
-          <Clock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+          <Clock className="w-3.5 h-3.5" style={{ color: isLight ? "#16a34a" : "#22c55e" }} />
           <span>Time Slot</span>
         </label>
       )}
@@ -1022,8 +1165,8 @@ function TimePicker({ value, onChange, theme, embedded = false }) {
         type="button"
         onClick={() => setOpen(o => !o)}
         className={cn(
-          "w-full text-xs flex items-center justify-between focus:outline-none transition-all cursor-pointer",
-          embedded ? "p-0 bg-transparent border-0 shadow-none" : "rounded-xl px-3 py-2 shadow-xs"
+          "w-full text-xs flex items-center justify-between focus:outline-none cursor-pointer",
+          embedded ? "p-0 bg-transparent border-0 shadow-none cc-btn-smooth" : "cc-btn-smooth rounded-xl px-3 py-2 shadow-xs"
         )}
         style={embedded ? {
           color: value ? (isLight ? "#0f172a" : "#fff") : (isLight ? "#94a3b8" : "#8a968a"),
@@ -1033,7 +1176,8 @@ function TimePicker({ value, onChange, theme, embedded = false }) {
           border: open
             ? (isLight ? "1.5px solid #16a34a" : "1.5px solid #22c55e")
             : (isLight ? "1px solid #e2e8f0" : "1px solid #252b25"),
-          color: value ? (isLight ? "#0f172a" : "#fff") : (isLight ? "#94a3b8" : "#8a968a")
+          color: value ? (isLight ? "#0f172a" : "#fff") : (isLight ? "#94a3b8" : "#8a968a"),
+          boxShadow: open ? (isLight ? "0 0 0 3px rgba(22,163,74,0.12)" : "0 0 0 3px rgba(34,197,94,0.18)") : "none"
         }}
       >
         <span className="flex items-center gap-1.5 truncate">
@@ -1043,7 +1187,7 @@ function TimePicker({ value, onChange, theme, embedded = false }) {
         {value ? (
           <span
             role="button"
-            className="p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-neutral-800 transition-colors ml-1"
+            className="cc-hover-scale p-0.5 rounded-full ml-1"
             onClick={e => { e.stopPropagation(); onChange(""); }}
             title="Clear time"
           >
@@ -1056,7 +1200,7 @@ function TimePicker({ value, onChange, theme, embedded = false }) {
 
       {open && (
         <div
-          className="absolute right-0 sm:left-0 z-30 mt-2 rounded-2xl p-4 w-72 shadow-2xl animate-[fadeIn_.15s_ease-out]"
+          className="absolute right-0 sm:left-0 z-30 mt-2 rounded-2xl p-4 w-72 shadow-2xl cc-anim-scale-in"
           style={{
             backgroundColor: isLight ? "#ffffff" : "#131613",
             border: `1px solid ${isLight ? "#e2e8f0" : "#242a24"}`,
@@ -1073,14 +1217,14 @@ function TimePicker({ value, onChange, theme, embedded = false }) {
                 type="button"
                 onClick={() => { onChange(slot); setOpen(false); }}
                 className={cn(
-                  "py-1.5 px-1 rounded-lg text-[10px] font-bold text-center transition-all cursor-pointer truncate",
-                  value === slot ? "shadow-xs scale-[1.02]" : "hover:border-emerald-500/50"
+                  "cc-hover-scale py-1.5 px-1 rounded-lg text-[10px] font-bold text-center cursor-pointer truncate"
                 )}
                 style={
                   value === slot
                     ? {
-                        backgroundColor: isLight ? "#16a34a" : "#22c55e",
-                        color: "#ffffff"
+                        background: "linear-gradient(135deg,#22c55e 0%,#10b981 100%)",
+                        color: "#ffffff",
+                        boxShadow: "0 4px 12px -3px rgba(34,197,94,0.6)"
                       }
                     : {
                         backgroundColor: isLight ? "#f1f5f9" : "#1c221c",
@@ -1104,7 +1248,7 @@ function TimePicker({ value, onChange, theme, embedded = false }) {
               <select
                 value={draft.hour}
                 onChange={e => setDraft(d => ({ ...d, hour: parseInt(e.target.value, 10) }))}
-                className="w-full rounded-xl px-2 py-1.5 text-xs text-center font-bold focus:outline-none transition-colors cursor-pointer"
+                className="w-full rounded-xl px-2 py-1.5 text-xs text-center font-bold focus:outline-none cursor-pointer"
                 style={{
                   backgroundColor: isLight ? "#f8fafc" : "#1c221c",
                   border: `1px solid ${isLight ? "#e2e8f0" : "#273027"}`,
@@ -1119,7 +1263,7 @@ function TimePicker({ value, onChange, theme, embedded = false }) {
               <select
                 value={draft.minute}
                 onChange={e => setDraft(d => ({ ...d, minute: parseInt(e.target.value, 10) }))}
-                className="w-full rounded-xl px-2 py-1.5 text-xs text-center font-bold focus:outline-none transition-colors cursor-pointer"
+                className="w-full rounded-xl px-2 py-1.5 text-xs text-center font-bold focus:outline-none cursor-pointer"
                 style={{
                   backgroundColor: isLight ? "#f8fafc" : "#1c221c",
                   border: `1px solid ${isLight ? "#e2e8f0" : "#273027"}`,
@@ -1143,13 +1287,13 @@ function TimePicker({ value, onChange, theme, embedded = false }) {
                     key={p}
                     type="button"
                     onClick={() => setDraft(d => ({ ...d, period: p }))}
-                    className="flex-1 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                    className="cc-hover-scale flex-1 py-1 rounded-lg text-xs font-bold cursor-pointer"
                     style={
                       draft.period === p
                         ? {
-                            backgroundColor: isLight ? "#ffffff" : "#22c55e",
-                            color: isLight ? "#16a34a" : "#0d0f0d",
-                            boxShadow: isLight ? "0 1px 3px rgba(0,0,0,0.1)" : undefined
+                            background: "linear-gradient(135deg,#22c55e 0%,#10b981 100%)",
+                            color: "#ffffff",
+                            boxShadow: "0 3px 8px -2px rgba(34,197,94,0.6)"
                           }
                         : {
                             color: isLight ? "#64748b" : "#8a968a"
@@ -1167,7 +1311,7 @@ function TimePicker({ value, onChange, theme, embedded = false }) {
             <button
               type="button"
               onClick={() => { onChange(""); setOpen(false); }}
-              className="flex-1 rounded-xl py-2 text-xs font-semibold transition-colors cursor-pointer"
+              className="cc-btn-smooth flex-1 rounded-xl py-2 text-xs font-semibold cursor-pointer"
               style={{
                 backgroundColor: isLight ? "#f1f5f9" : "#1c221c",
                 color: isLight ? "#64748b" : "#8a968a",
@@ -1179,8 +1323,8 @@ function TimePicker({ value, onChange, theme, embedded = false }) {
             <button
               type="button"
               onClick={apply}
-              className="flex-1 rounded-xl py-2 text-xs font-bold transition-all cursor-pointer shadow-sm text-white"
-              style={{ backgroundColor: isLight ? "#16a34a" : "#22c55e" }}
+              className="cc-btn-smooth flex-1 rounded-xl py-2 text-xs font-bold text-white cursor-pointer"
+              style={{ background: "linear-gradient(135deg,#22c55e 0%,#10b981 100%)", boxShadow: "0 4px 12px -3px rgba(34,197,94,0.6)" }}
             >
               Set Time
             </button>
@@ -1213,18 +1357,20 @@ function MyPostedChallengeCard({ challenge, token, onDeleted, onViewTeam, theme 
 
   return (
     <div
-      className={cn(C, "rounded-2xl p-4 transition-all")}
+      className={cn(C, "cc-hover-lift rounded-2xl p-4 relative overflow-hidden")}
       style={{
         backgroundColor: isLight ? "#ffffff" : undefined,
         border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
         boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.06)" : undefined
       }}
     >
+      <div className="absolute top-0 left-0 right-0 h-0.5 cc-anim-gradient-shift" style={{ background: "linear-gradient(90deg,#3b82f6,#a855f7,#ec4899,#3b82f6)", backgroundSize: "200% 200%" }} />
       <div className="flex items-center justify-between mb-2">
         <span
-          className="text-xs font-semibold uppercase tracking-wide"
+          className="text-xs font-semibold uppercase tracking-wide flex items-center gap-1"
           style={{ color: isLight ? "#16a34a" : "#4ade80" }}
         >
+          <Sparkles className="w-3 h-3 cc-anim-float" />
           Your Posted Challenge
         </span>
         <Tag color="blue">{challenge.status === "on_hold" ? "On Hold" : "Open"}</Tag>
@@ -1295,7 +1441,7 @@ function MyPostedChallengeCard({ challenge, token, onDeleted, onViewTeam, theme 
 
       {error && (
         <div
-          className="text-xs rounded-lg p-2 mt-3 font-medium"
+          className="text-xs rounded-lg p-2 mt-3 font-medium cc-anim-fade-in"
           style={{
             backgroundColor: isLight ? "#fef2f2" : "rgba(239,68,68,0.1)",
             border: `1px solid ${isLight ? "#fecaca" : "rgba(239,68,68,0.2)"}`,
@@ -1311,11 +1457,14 @@ function MyPostedChallengeCard({ challenge, token, onDeleted, onViewTeam, theme 
           <button
             type="button"
             onClick={() => onViewTeam(challenge)}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
-              isLight
-                ? "bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100"
-                : "bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20"
-            }`}
+            className="cc-btn-smooth flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+            style={{
+              background: isLight
+                ? "linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%)"
+                : "linear-gradient(135deg,rgba(34,197,94,0.15) 0%,rgba(6,182,212,0.1) 100%)",
+              color: isLight ? "#15803d" : "#4ade80",
+              border: `1px solid ${isLight ? "#a7f3d0" : "rgba(34,197,94,0.35)"}`,
+            }}
             title="View team profile, performance and feedback reviews"
           >
             <Users className="w-3.5 h-3.5" /> View Team & Reviews
@@ -1326,23 +1475,25 @@ function MyPostedChallengeCard({ challenge, token, onDeleted, onViewTeam, theme 
             type="button"
             onClick={() => setConfirming(true)}
             className={cn(
-              "py-2 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer",
-              isLight
-                ? "bg-red-50 border border-red-200 text-red-600 hover:bg-red-100"
-                : "bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20",
-              onViewTeam ? "px-3" : "w-full"
+              "cc-btn-smooth py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer",
+              onViewTeam ? "px-3" : "flex-1"
             )}
+            style={{
+              background: "linear-gradient(135deg,rgba(239,68,68,0.12) 0%,rgba(220,38,38,0.08) 100%)",
+              color: isLight ? "#dc2626" : "#f87171",
+              border: `1px solid ${isLight ? "#fecaca" : "rgba(239,68,68,0.3)"}`
+            }}
           >
             <XCircle className="w-3.5 h-3.5" /> Delete
           </button>
         ) : (
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 cc-anim-fade-in">
             <GhostButton onClick={() => setConfirming(false)} disabled={deleting} className="text-center py-1.5 px-2.5 text-xs">Keep</GhostButton>
             <button
               disabled={deleting}
               onClick={handleDelete}
-              className="py-1.5 px-3 rounded-xl font-bold text-xs transition-colors shadow-sm cursor-pointer"
-              style={{ backgroundColor: isLight ? "#dc2626" : "#ef4444", color: "#ffffff" }}
+              className="cc-btn-smooth py-1.5 px-3 rounded-xl font-bold text-xs text-white cursor-pointer"
+              style={{ background: "linear-gradient(135deg,#ef4444 0%,#dc2626 100%)", boxShadow: "0 4px 12px -3px rgba(239,68,68,0.5)" }}
             >
               {deleting ? "..." : "Confirm"}
             </button>
@@ -1398,7 +1549,8 @@ function ChallengesMap({ challenges }) {
     : [13.0827, 80.2707];
 
   return (
-    <div className={cn(C, "rounded-2xl p-4")}>
+    <div className={cn(C, "cc-anim-fade-in-up rounded-2xl p-4 relative overflow-hidden")}>
+      <div className="absolute top-0 left-0 right-0 h-0.5 cc-anim-gradient-shift" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#22c55e)", backgroundSize: "200% 200%" }} />
       <div className="flex items-center gap-2 mb-3">
         <MapPin className="w-3.5 h-3.5 text-green-400" />
         <span className="text-sm font-semibold text-white">Where teams are playing</span>
@@ -1437,7 +1589,7 @@ function ChallengesMap({ challenges }) {
           </p>
           <div className="flex flex-wrap gap-1.5">
             {withoutLocation.map(c => (
-              <span key={c.id} className="px-2 py-1 rounded-lg text-[11px]" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#c8ccc8" }}>
+              <span key={c.id} className="cc-hover-scale px-2 py-1 rounded-lg text-[11px]" style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", color: "#c8ccc8" }}>
                 {c.team} · {c.format}
               </span>
             ))}
@@ -1681,10 +1833,21 @@ export default function FindMatchTab({
 
   return (
     <div className="space-y-6">
+      <style>{ANIMATION_STYLES}</style>
       {/* Header section with Title on left and Post Challenge button on the right top corner */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3.5 pb-0.5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3.5 pb-0.5 cc-anim-fade-in-up">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold tracking-tight" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
+          <h2
+            className="text-xl sm:text-2xl font-black tracking-tight"
+            style={{
+              background: isLight
+                ? "linear-gradient(135deg,#0f172a 0%,#15803d 50%,#3b82f6 100%)"
+                : "linear-gradient(135deg,#ffffff 0%,#4ade80 50%,#60a5fa 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text"
+            }}
+          >
             Find a Match
           </h2>
           <p className="text-xs sm:text-sm mt-1" style={{ color: isLight ? "#475569" : "#8a968a" }}>
@@ -1720,8 +1883,9 @@ export default function FindMatchTab({
                   type="button"
                   onClick={() => setSelectedFormat(i)}
                   className={cn(
-                    "relative p-4 rounded-2xl text-left transition-all duration-200 cursor-pointer overflow-hidden group",
-                    isSelected ? "shadow-md scale-[1.01]" : "hover:-translate-y-0.5 hover:shadow-sm opacity-85 hover:opacity-100"
+                    `relative p-4 rounded-2xl text-left cursor-pointer overflow-hidden group cc-anim-fade-in-up cc-stagger-${i + 1}`,
+                    "cc-hover-lift",
+                    isSelected ? "shadow-md scale-[1.01]" : "opacity-90 hover:opacity-100"
                   )}
                   style={{
                     background: isSelected
@@ -1738,19 +1902,18 @@ export default function FindMatchTab({
                   {/* Subtle decorative glow in corner */}
                   {isSelected && (
                     <div
-                      className="absolute -right-4 -bottom-4 w-20 h-20 rounded-full blur-xl pointer-events-none opacity-30"
+                      className="absolute -right-4 -bottom-4 w-20 h-20 rounded-full blur-xl pointer-events-none opacity-40 cc-anim-float"
                       style={{ backgroundColor: themeConfig.accent }}
                     />
                   )}
 
-                  <div className="flex items-start justify-between gap-2 mb-2.5">
+                  <div className="flex items-start justify-between gap-2 mb-2.5 relative">
                     <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shadow-xs transition-transform group-hover:scale-110"
+                      className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shadow-xs cc-avatar-smooth"
                       style={{
-                        backgroundColor: isSelected
-                          ? (isLight ? "#ffffff" : "rgba(255,255,255,0.08)")
-                          : (isLight ? "#f8fafc" : "#1a1f1a"),
-                        border: `1px solid ${isLight ? "#e2e8f0" : "#2a332a"}`
+                        background: isSelected ? themeConfig.gradient : (isLight ? "#f8fafc" : "#1a1f1a"),
+                        border: `1px solid ${isLight ? "#e2e8f0" : "#2a332a"}`,
+                        boxShadow: isSelected ? `0 6px 16px -3px ${themeConfig.accent}66` : "none"
                       }}
                     >
                       {f.emoji}
@@ -1758,10 +1921,10 @@ export default function FindMatchTab({
 
                     {count > 0 ? (
                       <span
-                        className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-tight shadow-xs"
+                        className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-tight shadow-sm"
                         style={
                           isSelected
-                            ? { backgroundColor: themeConfig.accent, color: "#ffffff" }
+                            ? { background: themeConfig.gradient, color: "#ffffff", boxShadow: `0 3px 8px -2px ${themeConfig.accent}88` }
                             : (isLight ? { backgroundColor: "#f1f5f9", color: "#475569" } : { backgroundColor: "#1e241e", color: "#9ca3af" })
                         }
                       >
@@ -1774,15 +1937,15 @@ export default function FindMatchTab({
                     )}
                   </div>
 
-                  <div className="font-bold text-sm truncate" style={{ color: isSelected ? (isLight ? "#0f172a" : "#ffffff") : (isLight ? "#334155" : "#e2e8f0") }}>
+                  <div className="font-bold text-sm truncate relative" style={{ color: isSelected ? (isLight ? "#0f172a" : "#ffffff") : (isLight ? "#334155" : "#e2e8f0") }}>
                     {f.title}
                   </div>
-                  <div className="text-[11px] mt-0.5 line-clamp-1" style={{ color: isLight ? "#64748b" : "#8a968a" }}>
+                  <div className="text-[11px] mt-0.5 line-clamp-1 relative" style={{ color: isLight ? "#64748b" : "#8a968a" }}>
                     {f.desc}
                   </div>
 
                   {isSelected && (
-                    <div className="mt-2.5 flex items-center gap-1.5 text-[11px] font-bold" style={{ color: isLight ? themeConfig.borderActiveLight : themeConfig.accent }}>
+                    <div className="mt-2.5 flex items-center gap-1.5 text-[11px] font-bold relative" style={{ color: isLight ? themeConfig.borderActiveLight : themeConfig.accentBright }}>
                       <span className="w-1.5 h-1.5 rounded-full animate-ping" style={{ backgroundColor: themeConfig.accent }} />
                       <span>Active Selection</span>
                     </div>
@@ -1800,16 +1963,16 @@ export default function FindMatchTab({
             {/* Header: Title and match count badge */}
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
-                <Filter className="w-3.5 h-3.5 text-emerald-500" />
+                <Filter className="w-3.5 h-3.5" style={{ color: isLight ? "#16a34a" : "#22c55e" }} />
                 <span className="text-xs font-bold uppercase tracking-wider" style={{ color: isLight ? "#334155" : "#a6b5a6" }}>
                   Filter {format.title}
                 </span>
                 <span
                   className="px-2 py-0.5 rounded-full text-[10px] font-bold"
                   style={{
-                    backgroundColor: isLight ? "#f0fdf4" : "rgba(34,197,94,0.1)",
-                    color: isLight ? "#15803d" : "#22c55e",
-                    border: `1px solid ${isLight ? "#bbf7d0" : "rgba(34,197,94,0.2)"}`
+                    background: "linear-gradient(135deg,#22c55e 0%,#10b981 100%)",
+                    color: "#ffffff",
+                    boxShadow: isLight ? "0 3px 8px -2px rgba(16,185,129,0.5)" : "0 3px 10px -2px rgba(34,197,94,0.7)"
                   }}
                 >
                   {filtered.length} match{filtered.length === 1 ? "" : "es"}
@@ -1820,7 +1983,7 @@ export default function FindMatchTab({
                 <button
                   type="button"
                   onClick={clearAllFilters}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-500 hover:text-red-400 transition-colors cursor-pointer"
+                  className="cc-hover-scale inline-flex items-center gap-1 text-[11px] font-semibold text-red-500 hover:text-red-400"
                 >
                   <RotateCcw className="w-3 h-3" />
                   <span>Reset filters</span>
@@ -1831,11 +1994,11 @@ export default function FindMatchTab({
             {/* UNIFIED MERGED FILTER BAR: SEARCH + DATE + TIME */}
             <div
               className={cn(
-                "rounded-2xl transition-all duration-200 border",
+                "rounded-2xl transition-all duration-300 border cc-anim-fade-in-up",
                 "flex flex-col sm:flex-row sm:items-center",
                 isLight
                   ? "bg-white border-slate-200 shadow-sm focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/10"
-                  : "bg-[#111411] border-[#252c25] shadow-lg focus-within:border-emerald-500/60"
+                  : "bg-[#111411] border-[#252c25] shadow-lg focus-within:border-emerald-500/60 focus-within:ring-2 focus-within:ring-emerald-500/10"
               )}
             >
               {/* 1. Search Section */}
@@ -1856,7 +2019,7 @@ export default function FindMatchTab({
                   <button
                     type="button"
                     onClick={() => setSearchQuery("")}
-                    className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer shrink-0 ml-1"
+                    className="cc-hover-scale p-1 rounded-full shrink-0 ml-1"
                     title="Clear search"
                   >
                     <X className="w-3.5 h-3.5" style={{ color: isLight ? "#64748b" : "#9ca3af" }} />
@@ -1912,7 +2075,7 @@ export default function FindMatchTab({
                     <button
                       type="button"
                       onClick={clearAllFilters}
-                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-red-500 hover:bg-red-500/10 transition-colors flex items-center gap-1 cursor-pointer"
+                      className="cc-hover-scale px-2.5 py-1 rounded-lg text-[11px] font-bold text-red-500 hover:bg-red-500/10 flex items-center gap-1 cursor-pointer"
                       title="Clear all filters"
                     >
                       <X className="w-3.5 h-3.5" />
@@ -1925,14 +2088,14 @@ export default function FindMatchTab({
 
             {/* Active filter tags */}
             {activeFilters.length > 0 && (
-              <div className="flex items-center gap-1.5 flex-wrap pt-0.5 px-1">
+              <div className="flex items-center gap-1.5 flex-wrap pt-0.5 px-1 cc-anim-fade-in">
                 <span className="text-[10px] font-semibold uppercase tracking-wider mr-0.5" style={{ color: isLight ? "#94a3b8" : "#6b7a6b" }}>
                   Active:
                 </span>
                 {activeFilters.map(f => (
                   <span
                     key={f.id}
-                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border shadow-2xs"
+                    className="cc-hover-scale inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border shadow-2xs"
                     style={{
                       backgroundColor: isLight ? "#ecfdf5" : "rgba(34,197,94,0.12)",
                       color: isLight ? "#065f46" : "#4ade80",
@@ -1943,7 +2106,7 @@ export default function FindMatchTab({
                     <button
                       type="button"
                       onClick={f.clear}
-                      className="p-0.5 rounded-full hover:bg-emerald-200 dark:hover:bg-emerald-900/60 transition-colors cursor-pointer"
+                      className="p-0.5 rounded-full transition-colors cursor-pointer"
                     >
                       <X className="w-2.5 h-2.5" />
                     </button>
@@ -1964,9 +2127,12 @@ export default function FindMatchTab({
       })()}
 
       {myOwnOpenChallenges.length > 0 && (
-        <div className="space-y-3">
+        <div className="space-y-3 cc-anim-fade-in-up">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>Your Posted Challenges ({myOwnOpenChallenges.length})</h3>
+            <h3 className="text-base font-semibold flex items-center gap-2" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
+              <span className="w-1 h-4 rounded-full" style={{ background: "linear-gradient(180deg,#3b82f6,#a855f7)" }} />
+              Your Posted Challenges ({myOwnOpenChallenges.length})
+            </h3>
           </div>
           {myOwnOpenChallenges.map(ch => (
             <MyPostedChallengeCard
@@ -1984,14 +2150,17 @@ export default function FindMatchTab({
         </div>
       )}
 
-      <section>
+      <section className="cc-anim-fade-in-up">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-semibold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>Challenge Requests</h3>
+          <h3 className="text-base font-semibold flex items-center gap-2" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
+            <span className="w-1 h-4 rounded-full" style={{ background: "linear-gradient(180deg,#22c55e,#3b82f6)" }} />
+            Challenge Requests
+          </h3>
         </div>
 
         {hasActiveAcceptedChallenge && (
           <div
-            className="flex items-center gap-2.5 text-xs rounded-xl p-3 mb-3"
+            className="flex items-center gap-2.5 text-xs rounded-xl p-3 mb-3 cc-anim-fade-in-up"
             style={{
               backgroundColor: isLight ? "#fffbeb" : "rgba(245,158,11,0.08)",
               border: `1px solid ${isLight ? "#fde68a" : "rgba(245,158,11,0.25)"}`,
@@ -2006,22 +2175,33 @@ export default function FindMatchTab({
         )}
 
         <div className="space-y-3">
-          {filtered.length === 0 && <div className="text-sm text-center py-8" style={{ color: isLight ? "#64748b" : "#4a5a4a" }}>No challenges match your filters right now.</div>}
-          {filtered.map(t => {
+          {filtered.length === 0 && (
+            <div className="text-sm text-center py-8 cc-anim-fade-in" style={{ color: isLight ? "#64748b" : "#4a5a4a" }}>
+              No challenges match your filters right now.
+            </div>
+          )}
+          {filtered.map((t, idx) => {
             const blocked = hasActiveOnDate(t.rawDate);
             const postedAgo = formatPostedAgo(t.postedAt);
             return (
               <div
                 key={t.id}
-                className={cn(C, "rounded-2xl p-4 transition-all")}
+                className={cn(C, "cc-hover-lift rounded-2xl p-4 relative overflow-hidden", `cc-anim-fade-in-up cc-stagger-${(idx % 6) + 1}`)}
                 style={{
                   borderColor: t.urgent ? "rgba(245,158,11,0.35)" : (isLight ? "#e2e8f0" : "#2a2a2a"),
                   backgroundColor: isLight ? "#ffffff" : undefined,
                   boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.06)" : undefined
                 }}
               >
+                <div className="absolute top-0 left-0 right-0 h-0.5 cc-anim-gradient-shift" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#22c55e)", backgroundSize: "200% 200%" }} />
                 <div className="flex items-start gap-3">
-                  <div className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-sm" style={{ background: "linear-gradient(135deg,#166534,#14532d)" }}>
+                  <div
+                    className="cc-avatar-smooth w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0"
+                    style={{
+                      background: "linear-gradient(135deg,#166534,#14532d,#22c55e)",
+                      boxShadow: "0 6px 16px -4px rgba(22,101,52,0.6)"
+                    }}
+                  >
                     {t.team.split(" ").map(w => w[0]).slice(0, 2).join("")}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -2076,18 +2256,34 @@ export default function FindMatchTab({
                     {postedAgo && (
                       <span className="text-[10px] font-medium" style={{ color: isLight ? "#64748b" : "#4a5a4a" }}>{postedAgo}</span>
                     )}
-                    {t.urgent && <span className="text-xs font-bold px-2 py-1 rounded-full" style={{ backgroundColor: isLight ? "#fffbeb" : "rgba(245,158,11,0.15)", color: isLight ? "#b45309" : "#f59e0b", border: isLight ? "1px solid #fde68a" : "none" }}>⚡ Urgent</span>}
+                    {t.urgent && (
+                      <span
+                        className="text-xs font-bold px-2 py-1 rounded-full relative cc-anim-pulse-ring"
+                        style={{
+                          background: isLight
+                            ? "linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%)"
+                            : "linear-gradient(135deg,rgba(245,158,11,0.2) 0%,rgba(236,72,153,0.15) 100%)",
+                          color: isLight ? "#b45309" : "#f59e0b",
+                          border: isLight ? "1px solid #fde68a" : "1px solid rgba(245,158,11,0.4)"
+                        }}
+                      >
+                        ⚡ Urgent
+                      </span>
+                    )}
                   </div>
                 </div> 
 
                 <div
-                  className="mt-3 rounded-2xl p-4 space-y-3"
+                  className="mt-3 rounded-2xl p-4 space-y-3 relative overflow-hidden"
                   style={{
-                    backgroundColor: isLight ? "#f8fafc" : "#111",
+                    background: isLight
+                      ? "linear-gradient(135deg,#f8fafc 0%,#eff6ff 100%)"
+                      : "linear-gradient(135deg,#111 0%,#0f1420 100%)",
                     border: `1px solid ${isLight ? "#e2e8f0" : "#1e1e1e"}`
                   }}
                 >
-                  <div className="space-y-2">
+                  <div className="absolute left-0 top-0 bottom-0 w-0.5" style={{ background: "linear-gradient(180deg,#22c55e,#3b82f6)" }} />
+                  <div className="space-y-2 pl-2">
                     <div className="flex items-center gap-2 text-xs" style={{ color: isLight ? "#334155" : "#c8d0c8" }}>
                       <Calendar className="w-3.5 h-3.5 shrink-0" style={{ color: isLight ? "#16a34a" : "#22c55e" }} />
                       <span className="font-medium">{t.date}</span>
@@ -2111,12 +2307,14 @@ export default function FindMatchTab({
                     <button
                       disabled={blocked}
                       onClick={() => setAcceptTarget(t)}
-                      className="flex-1 py-2.5 sm:py-2 rounded-xl text-xs font-bold transition-all text-center cursor-pointer"
+                      className="cc-btn-smooth flex-1 py-2.5 sm:py-2 rounded-xl text-xs font-bold text-center cursor-pointer"
                       style={blocked
-                        ? { backgroundColor: isLight ? "#f1f5f9" : "#1e211e", color: isLight ? "#94a3b8" : "#3a3a3a", cursor: "not-allowed" }
-                        : { backgroundColor: isLight ? "#16a34a" : "#22c55e", color: "#ffffff", boxShadow: isLight ? "0 2px 8px rgba(22,163,74,0.22)" : "none" }}
-                      onMouseEnter={e => !blocked && (e.currentTarget.style.backgroundColor = isLight ? "#15803d" : "#4ade80")}
-                      onMouseLeave={e => !blocked && (e.currentTarget.style.backgroundColor = isLight ? "#16a34a" : "#22c55e")}
+                        ? { backgroundColor: isLight ? "#f1f5f9" : "#1e211e", color: isLight ? "#94a3b8" : "#3a3a3a", cursor: "not-allowed", transform: "none" }
+                        : {
+                            background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
+                            color: "#ffffff",
+                            boxShadow: isLight ? "0 6px 18px -4px rgba(16,185,129,0.5)" : "0 8px 22px -6px rgba(34,197,94,0.7)"
+                          }}
                     >
                       {blocked ? "Unavailable" : "Accept Challenge"}
                     </button>
@@ -2125,11 +2323,14 @@ export default function FindMatchTab({
                   <button
                     type="button"
                     onClick={() => setViewTeamTarget(t)}
-                    className={`px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer ${
-                      isLight
-                        ? "text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100"
-                        : "text-green-400 bg-green-500/10 border border-green-500/30 hover:bg-green-500/20"
-                    }`}
+                    className="cc-btn-smooth px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                    style={{
+                      background: isLight
+                        ? "linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%)"
+                        : "linear-gradient(135deg,rgba(34,197,94,0.12) 0%,rgba(6,182,212,0.08) 100%)",
+                      color: isLight ? "#15803d" : "#4ade80",
+                      border: `1px solid ${isLight ? "#a7f3d0" : "rgba(34,197,94,0.35)"}`
+                    }}
                     title={`View ${t.team} reviews and performance`}
                   >
                     <Users className="w-3.5 h-3.5" />
@@ -2144,12 +2345,12 @@ export default function FindMatchTab({
 
       {detailsTarget && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(2px)" }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 cc-anim-fade-in"
+          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.55)" : "rgba(0,0,0,0.78)", backdropFilter: "blur(6px)" }}
           onClick={() => setDetailsTarget(null)}
         >
           <div
-            className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl sm:rounded-3xl p-4 sm:p-5 relative animate-in fade-in zoom-in-95 duration-150"
+            className="cc-anim-bounce-in w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl sm:rounded-3xl p-4 sm:p-5 relative"
             style={{
               backgroundColor: isLight ? "#ffffff" : "#141414",
               border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
@@ -2157,6 +2358,7 @@ export default function FindMatchTab({
             }}
             onClick={e => e.stopPropagation()}
           >
+            <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl sm:rounded-t-3xl cc-anim-gradient-shift" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#f97316,#ec4899,#22c55e)", backgroundSize: "200% 200%" }} />
             <div className="absolute top-4 right-4 flex items-center gap-2">
               {formatPostedAgo(detailsTarget.postedAt) && (
                 <span
@@ -2172,7 +2374,7 @@ export default function FindMatchTab({
               )}
               <button
                 onClick={() => setDetailsTarget(null)}
-                className="w-7 h-7 rounded-full flex items-center justify-center hover:opacity-80 transition-colors"
+                className="cc-hover-scale w-7 h-7 rounded-full flex items-center justify-center"
                 style={{ backgroundColor: isLight ? "#f1f5f9" : "#1e211e" }}
               >
                 <X className="w-4 h-4" style={{ color: isLight ? "#475569" : "#9ca39c" }} />
@@ -2180,18 +2382,26 @@ export default function FindMatchTab({
             </div>
 
             <div className="flex items-center gap-3 pr-20">
-              <div className="w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-lg shrink-0 shadow-sm" style={{ background: "linear-gradient(135deg,#166534,#14532d)" }}>
+              <div
+                className="cc-avatar-smooth w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-lg shrink-0"
+                style={{
+                  background: "linear-gradient(135deg,#166534,#14532d,#22c55e)",
+                  boxShadow: "0 8px 20px -6px rgba(22,101,52,0.7)"
+                }}
+              >
                 {detailsTarget.team.split(" ").map(w => w[0]).slice(0, 2).join("")}
               </div>
               <div className="flex flex-wrap gap-1.5">
                 <Tag color="blue">{format.title}</Tag>
                 {detailsTarget.urgent && (
                   <span
-                    className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                    className="text-[11px] font-bold px-2 py-0.5 rounded-full cc-anim-pulse-ring relative"
                     style={{
-                      backgroundColor: isLight ? "#fffbeb" : "rgba(245,158,11,0.15)",
+                      background: isLight
+                        ? "linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%)"
+                        : "linear-gradient(135deg,rgba(245,158,11,0.2) 0%,rgba(236,72,153,0.15) 100%)",
                       color: isLight ? "#b45309" : "#f59e0b",
-                      border: isLight ? "1px solid #fde68a" : "none"
+                      border: isLight ? "1px solid #fde68a" : "1px solid rgba(245,158,11,0.4)"
                     }}
                   >
                     ⚡ Urgent
@@ -2268,12 +2478,14 @@ export default function FindMatchTab({
                 <button
                   type="button"
                   onClick={() => setViewTeamTarget(detailsTarget)}
-                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                  className="cc-btn-smooth shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer"
                   style={{
-                    backgroundColor: isLight ? "#ecfdf5" : "rgba(34, 197, 94, 0.12)",
+                    background: isLight
+                      ? "linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%)"
+                      : "linear-gradient(135deg,rgba(34,197,94,0.15) 0%,rgba(6,182,212,0.1) 100%)",
                     color: isLight ? "#047857" : "#4ade80",
                     border: `1px solid ${isLight ? "#a7f3d0" : "rgba(34, 197, 94, 0.35)"}`,
-                    boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.06)" : "0 2px 10px rgba(0,0,0,0.3)"
+                    boxShadow: isLight ? "0 4px 10px -3px rgba(16,185,129,0.4)" : "0 4px 12px -3px rgba(34,197,94,0.5)"
                   }}
                   title={`View ${detailsTarget.team} details, ratings and reviews`}
                 >
@@ -2312,12 +2524,14 @@ export default function FindMatchTab({
                 <button
                   disabled={hasActiveOnDate(detailsTarget.rawDate)}
                   onClick={() => { setAcceptTarget(detailsTarget); setDetailsTarget(null); }}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-colors cursor-pointer"
+                  className="cc-btn-smooth flex-1 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
                   style={hasActiveOnDate(detailsTarget.rawDate)
-                    ? { backgroundColor: isLight ? "#f1f5f9" : "#1e211e", color: isLight ? "#94a3b8" : "#3a3a3a", cursor: "not-allowed" }
-                    : { backgroundColor: isLight ? "#16a34a" : "#22c55e", color: "#ffffff", boxShadow: isLight ? "0 2px 8px rgba(22,163,74,0.22)" : "none" }}
-                  onMouseEnter={e => !hasActiveOnDate(detailsTarget.rawDate) && (e.currentTarget.style.backgroundColor = isLight ? "#15803d" : "#4ade80")}
-                  onMouseLeave={e => !hasActiveOnDate(detailsTarget.rawDate) && (e.currentTarget.style.backgroundColor = isLight ? "#16a34a" : "#22c55e")}
+                    ? { backgroundColor: isLight ? "#f1f5f9" : "#1e211e", color: isLight ? "#94a3b8" : "#3a3a3a", cursor: "not-allowed", transform: "none" }
+                    : {
+                        background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
+                        color: "#ffffff",
+                        boxShadow: isLight ? "0 6px 18px -4px rgba(16,185,129,0.5)" : "0 8px 22px -6px rgba(34,197,94,0.7)"
+                      }}
                 >
                   {hasActiveOnDate(detailsTarget.rawDate) ? "Unavailable" : "Accept Challenge"}
                 </button>
