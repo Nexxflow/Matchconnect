@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Filter, Search, ChevronDown, MapPin, Star, Plus, X, Map, Pencil, Trash2, ExternalLink, Hash } from "lucide-react";
+import { Filter, Search, ChevronDown, MapPin, Star, Plus, X, Map, Pencil, Trash2, ExternalLink, Hash, RotateCcw, IndianRupee } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -189,24 +189,22 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
     }
   };
 
-  if (!open && !editing) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        className="w-full py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 transition-all hover:opacity-90 cursor-pointer"
-        style={{
-          border: `1px dashed ${isLight ? "#86efac" : "#2a2a2a"}`,
-          backgroundColor: isLight ? "#f0fdf4" : "transparent",
-          color: isLight ? "#16a34a" : "#22c55e",
-          boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.05)" : "none"
-        }}
-      >
-        <Plus className="w-4 h-4" /> Register a Ground
-      </button>
-    );
-  }
+  const renderTriggerButton = () => (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      className={cn(
+        "px-5 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shrink-0 cursor-pointer",
+        isLight
+          ? "bg-[#16a34a] text-white hover:bg-[#15803d] shadow-sm"
+          : "bg-green-500 text-black hover:bg-green-400"
+      )}
+    >
+      <Plus className="w-4 h-4" /> Register a Ground
+    </button>
+  );
 
-  return (
+  const formElement = (
     <form
       onSubmit={handleSubmit}
       className={cn(C, "rounded-2xl p-4 space-y-3")}
@@ -343,6 +341,18 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
       )}
 
       <div className="flex gap-2 pt-1">
+        <button
+          type="button"
+          onClick={() => { if (editing) onClose?.(); else { setOpen(false); setError(null); } }}
+          className="flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors cursor-pointer"
+          style={{
+            backgroundColor: isLight ? "#f1f5f9" : "#1e1e1e",
+            border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
+            color: isLight ? "#0f172a" : "#c8ccc8"
+          }}
+        >
+          Cancel
+        </button>
         {editing && (
           <button
             type="button"
@@ -361,18 +371,42 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
         <button
           type="submit"
           disabled={submitting}
-          className="flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors shadow-sm cursor-pointer"
-          style={{
-            backgroundColor: isLight ? "#16a34a" : "#22c55e",
-            color: "#ffffff",
-            boxShadow: isLight ? "0 2px 8px rgba(22,163,74,0.22)" : "none",
-            ...(submitting ? { opacity: 0.6, cursor: "not-allowed" } : {})
-          }}
+          className={cn(
+            "flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors shadow-sm cursor-pointer",
+            isLight
+              ? "bg-[#16a34a] hover:bg-[#15803d] text-white shadow-sm"
+              : "bg-green-500 text-black hover:bg-green-400"
+          )}
+          style={submitting ? { opacity: 0.6, cursor: "not-allowed" } : {}}
         >
           {submitting ? (editing ? "Saving..." : "Registering...") : (editing ? "Save Changes" : "Register Ground")}
         </button>
       </div>
     </form>
+  );
+
+  if (editing) {
+    return formElement;
+  }
+
+  return (
+    <>
+      {renderTriggerButton()}
+      {open && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4"
+          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(2px)" }}
+          onClick={() => { setOpen(false); setError(null); }}
+        >
+          <div
+            className="w-full sm:max-w-lg max-h-[90vh] sm:max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+            onClick={e => e.stopPropagation()}
+          >
+            {formElement}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -438,12 +472,44 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
     })
     .sort((a, b) => (Number(b.rating) || 0) - (Number(a.rating) || 0));
 
-  const activeFilterCount = [
-    ratingFilter !== "Any Rating",
-    locationFilter !== "All Locations",
-    priceFilter !== "Any Price",
-    searchQuery.trim() !== ""
-  ].filter(Boolean).length;
+  const activeFilters = [];
+  if (searchQuery.trim()) {
+    activeFilters.push({
+      id: "search",
+      label: `"${searchQuery.trim()}"`,
+      clear: () => setSearchQuery("")
+    });
+  }
+  if (locationFilter !== "All Locations") {
+    activeFilters.push({
+      id: "location",
+      label: `📍 ${locationFilter}`,
+      clear: () => setLocationFilter("All Locations")
+    });
+  }
+  if (priceFilter !== "Any Price") {
+    activeFilters.push({
+      id: "price",
+      label: `💰 ${priceFilter}`,
+      clear: () => setPriceFilter("Any Price")
+    });
+  }
+  if (ratingFilter !== "Any Rating") {
+    activeFilters.push({
+      id: "rating",
+      label: `⭐ ${ratingFilter}`,
+      clear: () => setRatingFilter("Any Rating")
+    });
+  }
+
+  const activeFilterCount = activeFilters.length;
+
+  const clearAllFilters = () => {
+    setRatingFilter("Any Rating");
+    setLocationFilter("All Locations");
+    setPriceFilter("Any Price");
+    setSearchQuery("");
+  };
 
   const asArray = v => {
     if (Array.isArray(v)) return v;
@@ -459,101 +525,202 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
   };
 
   return (
-    <div className="space-y-8">
-      <div
-        className={cn(C, "rounded-2xl p-4 transition-all")}
-        style={{
-          backgroundColor: isLight ? "#ffffff" : undefined,
-          border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-          boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.06)" : undefined
-        }}
-      >
-        <div className="flex items-center justify-between mb-3">
+    <div className="space-y-6">
+      {/* Header section with Title on left and Register a Ground button on the right top corner */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3.5 pb-0.5">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
+            Cricket Grounds
+          </h2>
+          <p className="text-xs sm:text-sm mt-1" style={{ color: isLight ? "#475569" : "#8a968a" }}>
+            Explore, book, or register cricket grounds for your matches
+          </p>
+        </div>
+
+        <div className="shrink-0 self-start sm:self-auto">
+          <GroundForm token={token} onCreated={onGroundCreated} theme={theme} />
+        </div>
+      </div>
+
+      {/* FILTER GROUNDS BAR */}
+      <div className="space-y-2.5">
+        {/* Header: Title, match count, and reset button */}
+        <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-2">
-            <Filter className="w-3.5 h-3.5" style={{ color: isLight ? "#16a34a" : "#4ade80" }} />
-            <span className="text-sm font-semibold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>Filter Grounds</span>
+            <Filter className="w-3.5 h-3.5 text-emerald-500" />
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: isLight ? "#334155" : "#a6b5a6" }}>
+              Filter Grounds
+            </span>
+            <span
+              className="px-2 py-0.5 rounded-full text-[10px] font-bold"
+              style={{
+                backgroundColor: isLight ? "#f0fdf4" : "rgba(34,197,94,0.1)",
+                color: isLight ? "#15803d" : "#22c55e",
+                border: `1px solid ${isLight ? "#bbf7d0" : "rgba(34,197,94,0.2)"}`
+              }}
+            >
+              {filteredGrounds.length} ground{filteredGrounds.length === 1 ? "" : "s"}
+            </span>
           </div>
-          {activeFilterCount > 0 && (
+
+          {activeFilters.length > 0 && (
             <button
               type="button"
-              onClick={() => { setRatingFilter("Any Rating"); setLocationFilter("All Locations"); setPriceFilter("Any Price"); setSearchQuery(""); }}
-              className="text-[11px] font-semibold transition-colors cursor-pointer"
-              style={{ color: isLight ? "#64748b" : "#6b7a6b" }}
+              onClick={clearAllFilters}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-500 hover:text-red-400 transition-colors cursor-pointer"
             >
-              Clear filters ({activeFilterCount})
+              <RotateCcw className="w-3 h-3" />
+              <span>Reset filters</span>
             </button>
           )}
         </div>
 
-        <div className="relative mb-3">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: isLight ? "#64748b" : "#6b7a6b" }} />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search by ground name or area"
-            className="w-full rounded-xl pl-9 pr-8 py-2.5 text-sm focus:outline-none transition-colors"
-            style={{
-              backgroundColor: isLight ? "#f8fafc" : "#111",
-              border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-              color: isLight ? "#0f172a" : "#fff"
-            }}
-          />
-          {searchQuery && (
-            <button type="button" onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer">
-              <X className="w-3.5 h-3.5" style={{ color: isLight ? "#64748b" : "#6b7a6b" }} />
-            </button>
+        {/* UNIFIED MERGED FILTER BAR */}
+        <div
+          className={cn(
+            "rounded-2xl transition-all duration-200 border",
+            "flex flex-col md:flex-row md:items-center",
+            isLight
+              ? "bg-white border-slate-200 shadow-sm focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/10"
+              : "bg-[#111411] border-[#252c25] shadow-lg focus-within:border-emerald-500/60"
           )}
+        >
+          {/* 1. Search Section */}
+          <div className="flex-1 flex items-center px-3.5 py-2.5 min-w-0">
+            <Search
+              className="w-4 h-4 shrink-0 mr-2.5 transition-colors"
+              style={{ color: searchQuery ? (isLight ? "#16a34a" : "#22c55e") : (isLight ? "#94a3b8" : "#6b7a6b") }}
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search by ground name or area..."
+              className="w-full text-xs font-medium bg-transparent focus:outline-none placeholder:text-slate-400 dark:placeholder:text-[#556055]"
+              style={{ color: isLight ? "#0f172a" : "#ffffff" }}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer shrink-0 ml-1"
+                title="Clear search"
+              >
+                <X className="w-3.5 h-3.5" style={{ color: isLight ? "#64748b" : "#9ca3af" }} />
+              </button>
+            )}
+          </div>
+
+          {/* Divider between Search and Dropdowns */}
+          <div className="hidden md:block w-[1px] h-7 bg-slate-200 dark:bg-[#252d25] shrink-0" />
+          <div className="block md:hidden h-[1px] w-full bg-slate-100 dark:bg-[#1b221b]" />
+
+          {/* 2. Dropdowns Section: Location, Price, Rating */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 dark:divide-[#252d25] shrink-0">
+            {/* Location */}
+            <div className="relative px-3.5 py-2.5 flex items-center min-w-[135px]">
+              <MapPin
+                className="w-3.5 h-3.5 shrink-0 mr-2"
+                style={{ color: locationFilter !== "All Locations" ? (isLight ? "#16a34a" : "#4ade80") : (isLight ? "#64748b" : "#6b7a6b") }}
+              />
+              <select
+                value={locationFilter}
+                onChange={e => setLocationFilter(e.target.value)}
+                className="w-full text-xs bg-transparent focus:outline-none appearance-none pr-5 cursor-pointer font-medium truncate"
+                style={{
+                  color: locationFilter !== "All Locations" ? (isLight ? "#0f172a" : "#ffffff") : (isLight ? "#64748b" : "#8a968a"),
+                  fontWeight: locationFilter !== "All Locations" ? "600" : "500"
+                }}
+              >
+                <option value="All Locations" className={isLight ? "bg-white text-slate-800" : "bg-[#161a16] text-[#c8ccc8]"}>All Locations</option>
+                {uniqueLocations.map(loc => (
+                  <option key={loc} value={loc} className={isLight ? "bg-white text-slate-800" : "bg-[#161a16] text-[#c8ccc8]"}>
+                    {loc}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none opacity-60" style={{ color: isLight ? "#64748b" : "#8a968a" }} />
+            </div>
+
+            {/* Price */}
+            <div className="relative px-3.5 py-2.5 flex items-center min-w-[130px]">
+              <IndianRupee
+                className="w-3.5 h-3.5 shrink-0 mr-1.5"
+                style={{ color: priceFilter !== "Any Price" ? (isLight ? "#16a34a" : "#4ade80") : (isLight ? "#64748b" : "#6b7a6b") }}
+              />
+              <select
+                value={priceFilter}
+                onChange={e => setPriceFilter(e.target.value)}
+                className="w-full text-xs bg-transparent focus:outline-none appearance-none pr-5 cursor-pointer font-medium truncate"
+                style={{
+                  color: priceFilter !== "Any Price" ? (isLight ? "#0f172a" : "#ffffff") : (isLight ? "#64748b" : "#8a968a"),
+                  fontWeight: priceFilter !== "Any Price" ? "600" : "500"
+                }}
+              >
+                {["Any Price", "Under ₹500/hr", "₹500–₹1000/hr", "₹1000+/hr"].map(o => (
+                  <option key={o} value={o} className={isLight ? "bg-white text-slate-800" : "bg-[#161a16] text-[#c8ccc8]"}>
+                    {o}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none opacity-60" style={{ color: isLight ? "#64748b" : "#8a968a" }} />
+            </div>
+
+            {/* Rating */}
+            <div className="relative px-3.5 py-2.5 flex items-center min-w-[115px]">
+              <Star
+                className={cn("w-3.5 h-3.5 shrink-0 mr-1.5", ratingFilter !== "Any Rating" ? "fill-amber-400 text-amber-400" : "")}
+                style={{ color: ratingFilter !== "Any Rating" ? "#f59e0b" : (isLight ? "#64748b" : "#6b7a6b") }}
+              />
+              <select
+                value={ratingFilter}
+                onChange={e => setRatingFilter(e.target.value)}
+                className="w-full text-xs bg-transparent focus:outline-none appearance-none pr-5 cursor-pointer font-medium truncate"
+                style={{
+                  color: ratingFilter !== "Any Rating" ? (isLight ? "#0f172a" : "#ffffff") : (isLight ? "#64748b" : "#8a968a"),
+                  fontWeight: ratingFilter !== "Any Rating" ? "600" : "500"
+                }}
+              >
+                {["Any Rating", "4.7+", "4.5+", "4.0+"].map(o => (
+                  <option key={o} value={o} className={isLight ? "bg-white text-slate-800" : "bg-[#161a16] text-[#c8ccc8]"}>
+                    {o === "Any Rating" ? o : `${o} ★`}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none opacity-60" style={{ color: isLight ? "#64748b" : "#8a968a" }} />
+            </div>
+          </div>
         </div>
 
-        <div className="flex gap-3">
-          <div className="relative flex-1">
-            <select
-              value={locationFilter}
-              onChange={e => setLocationFilter(e.target.value)}
-              className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none transition-colors cursor-pointer"
-              style={{
-                backgroundColor: isLight ? "#f8fafc" : "#1a1a1a",
-                border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-                color: isLight ? "#0f172a" : "#c8ccc8"
-              }}
-            >
-              <option>All Locations</option>
-              {uniqueLocations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: isLight ? "#64748b" : "#6b7a6b" }} />
+        {/* 3. Active filter tags pill chips */}
+        {activeFilters.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap pt-0.5 px-1 animate-[fadeIn_.15s_ease-out]">
+            <span className="text-[10px] font-bold uppercase tracking-wider mr-1" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
+              Active:
+            </span>
+            {activeFilters.map(af => (
+              <span
+                key={af.id}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all group"
+                style={{
+                  backgroundColor: isLight ? "#f0fdf4" : "rgba(34,197,94,0.12)",
+                  border: `1px solid ${isLight ? "#bbf7d0" : "rgba(34,197,94,0.3)"}`,
+                  color: isLight ? "#15803d" : "#4ade80"
+                }}
+              >
+                <span>{af.label}</span>
+                <button
+                  type="button"
+                  onClick={af.clear}
+                  className="hover:opacity-70 transition-opacity p-0.5 rounded-full cursor-pointer"
+                  title="Remove this filter"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
           </div>
-          <div className="relative flex-1">
-            <select
-              value={priceFilter}
-              onChange={e => setPriceFilter(e.target.value)}
-              className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none transition-colors cursor-pointer"
-              style={{
-                backgroundColor: isLight ? "#f8fafc" : "#1a1a1a",
-                border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-                color: isLight ? "#0f172a" : "#c8ccc8"
-              }}
-            >
-              {["Any Price", "Under ₹500/hr", "₹500–₹1000/hr", "₹1000+/hr"].map(o => <option key={o}>{o}</option>)}
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: isLight ? "#64748b" : "#6b7a6b" }} />
-          </div>
-          <div className="relative flex-1">
-            <select
-              value={ratingFilter}
-              onChange={e => setRatingFilter(e.target.value)}
-              className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none transition-colors cursor-pointer"
-              style={{
-                backgroundColor: isLight ? "#f8fafc" : "#1a1a1a",
-                border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-                color: isLight ? "#0f172a" : "#c8ccc8"
-              }}
-            >
-              {["Any Rating", "4.7+", "4.5+", "4.0+"].map(o => <option key={o}>{o}</option>)}
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: isLight ? "#64748b" : "#6b7a6b" }} />
-          </div>
-        </div>
+        )}
       </div>
 
       <GroundsMap
@@ -648,8 +815,6 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
         </button>
       </div>
 
-      <GroundForm token={token} onCreated={onGroundCreated} theme={theme} />
-
       <section>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-base font-semibold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>Available Grounds</h3>
@@ -659,7 +824,34 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
           </span>
         </div>
         <div className="space-y-3">
-          {filteredGrounds.length === 0 && <div className="text-sm text-center py-8" style={{ color: isLight ? "#64748b" : "#4a5a4a" }}>No grounds match your filters.</div>}
+          {filteredGrounds.length === 0 && (
+            <div
+              className={cn(C, "rounded-2xl p-8 text-center")}
+              style={{
+                backgroundColor: isLight ? "#ffffff" : undefined,
+                border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`
+              }}
+            >
+              <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center bg-emerald-500/10 text-emerald-500 text-xl">
+                🏟
+              </div>
+              <div className="text-sm font-bold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
+                No grounds match your filters
+              </div>
+              <p className="text-xs mt-1" style={{ color: isLight ? "#64748b" : "#8a968a" }}>
+                Try adjusting your search query, location, price range, or rating threshold.
+              </p>
+              {activeFilters.length > 0 && (
+                <button
+                  type="button"
+                  onClick={clearAllFilters}
+                  className="mt-3.5 px-4 py-2 rounded-xl text-xs font-bold transition-all bg-emerald-500 hover:bg-emerald-400 text-black cursor-pointer inline-flex items-center gap-1.5 shadow-sm"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Clear All Filters
+                </button>
+              )}
+            </div>
+          )}
           {filteredGrounds.map(g => {
             const amenities = asArray(g.amenities);
             const tags = asArray(g.tags);

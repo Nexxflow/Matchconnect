@@ -66,6 +66,30 @@ const app = express();
       ALTER TABLE matches ADD COLUMN IF NOT EXISTS match_date TIMESTAMPTZ;
       CREATE INDEX IF NOT EXISTS idx_matches_tournament_id ON matches(tournament_id);
 
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS phone VARCHAR(20);
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS co_phone VARCHAR(20);
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS entry_fee NUMERIC DEFAULT 0;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS description TEXT;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS prizes JSONB DEFAULT '[]'::jsonb;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS max_teams INT DEFAULT 16;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS creator_team_id UUID;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS created_by INTEGER;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS creator_included BOOLEAN DEFAULT true;
+
+      -- Auto-confirm any existing match teams in tournament_registrations
+      INSERT INTO tournament_registrations (tournament_id, team_id, status)
+      SELECT DISTINCT m.tournament_id, m.team1_id, 'confirmed'
+      FROM matches m
+      WHERE m.tournament_id IS NOT NULL AND m.team1_id IS NOT NULL
+      ON CONFLICT (tournament_id, team_id) DO UPDATE SET status = 'confirmed';
+
+      INSERT INTO tournament_registrations (tournament_id, team_id, status)
+      SELECT DISTINCT m.tournament_id, m.team2_id, 'confirmed'
+      FROM matches m
+      WHERE m.tournament_id IS NOT NULL AND m.team2_id IS NOT NULL
+      ON CONFLICT (tournament_id, team_id) DO UPDATE SET status = 'confirmed';
+
       CREATE TABLE IF NOT EXISTS in_app_notifications (
         id SERIAL PRIMARY KEY,
         user_id TEXT NOT NULL,

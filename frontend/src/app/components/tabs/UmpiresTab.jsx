@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Plus, X, ChevronDown, Pencil, Trash2 } from "lucide-react";
+import { Plus, X, ChevronDown, Pencil, Trash2, Filter, Search, RotateCcw, Users, ArrowUpDown, Phone, Award, Shield, FileText } from "lucide-react";
 import { apiRequest } from "../../api";
-import { C, cn, normalizePhone } from "../../utils/helpers.jsx";
+import { C, cn, normalizePhone, formatPhoneDisplay } from "../../utils/helpers.jsx";
 import CalendarField, { formatDateDisplay } from "../CalendarField.jsx";
 
 function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpire = null, onClose, theme = "dark" }) {
@@ -115,25 +115,22 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
     }
   };
 
-  if (!open && !editing) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        className={cn(
-          "w-full py-3.5 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 transition-all",
-          isLight ? "hover:bg-emerald-50 text-emerald-700 shadow-sm" : "hover:bg-white/5 text-green-400"
-        )}
-        style={{
-          border: isLight ? "1.5px dashed #86efac" : "1px dashed #2a2a2a",
-          backgroundColor: isLight ? "#f0fdf4" : "transparent"
-        }}
-      >
-        <Plus className="w-4 h-4" /> Register as Umpire / Scorer
-      </button>
-    );
-  }
+  const renderTriggerButton = () => (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      className={cn(
+        "px-5 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shrink-0 cursor-pointer",
+        isLight
+          ? "bg-[#16a34a] text-white hover:bg-[#15803d] shadow-sm"
+          : "bg-green-500 text-black hover:bg-green-400"
+      )}
+    >
+      <Plus className="w-4 h-4" /> Register as Umpire / Scorer
+    </button>
+  );
 
-  return (
+  const formElement = (
     <form
       onSubmit={handleSubmit}
       className={cn(C, "rounded-2xl p-5 space-y-4")}
@@ -150,7 +147,7 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
         <button
           type="button"
           onClick={() => { if (editing) onClose?.(); else { setOpen(false); setError(null); } }}
-          className="w-7 h-7 rounded-full flex items-center justify-center transition-colors"
+          className="w-7 h-7 rounded-full flex items-center justify-center transition-colors cursor-pointer"
           style={{ backgroundColor: isLight ? "#f1f5f9" : "#222" }}
         >
           <X className={cn("w-4 h-4", isLight ? "text-slate-600" : "text-[#c8ccc8]")} />
@@ -236,7 +233,7 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
             onClick={handleDelete}
             disabled={submitting}
             className={cn(
-              "flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors",
+              "flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors cursor-pointer",
               isLight ? "bg-red-50 hover:bg-red-100 text-red-700 border border-red-200" : "bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20"
             )}
             style={submitting ? { opacity: 0.6, cursor: "not-allowed" } : {}}
@@ -248,17 +245,41 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
           type="submit"
           disabled={submitting || !normalizedPhone}
           className={cn(
-            "flex-1 py-2.5 rounded-xl font-bold text-sm transition-all",
+            "flex-1 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer shadow-sm",
             isLight
-              ? "bg-[#16a34a] text-white hover:bg-[#15803d] shadow-sm"
+              ? "bg-[#16a34a] text-white hover:bg-[#15803d]"
               : "bg-green-500 text-black hover:bg-green-400"
           )}
           style={(submitting || !normalizedPhone) ? { opacity: 0.6, cursor: "not-allowed" } : {}}
         >
-          {submitting ? (editing ? "Saving..." : "Registering...") : (editing ? "Save Changes" : "Register")}
+          {submitting ? (editing ? "Saving..." : "Registering...") : (editing ? "Save Changes" : "Register as Umpire / Scorer")}
         </button>
       </div>
     </form>
+  );
+
+  if (editing) {
+    return formElement;
+  }
+
+  return (
+    <>
+      {renderTriggerButton()}
+      {open && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4"
+          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(2px)" }}
+          onClick={() => { setOpen(false); setError(null); }}
+        >
+          <div
+            className="w-full sm:max-w-lg max-h-[90vh] sm:max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+            onClick={e => e.stopPropagation()}
+          >
+            {formElement}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -309,36 +330,84 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
       return 0;
     });
 
+  const activeFilters = [];
+  if (query.trim()) {
+    activeFilters.push({
+      id: "search",
+      label: `"${query.trim()}"`,
+      clear: () => setQuery("")
+    });
+  }
+  if (dateFilter) {
+    activeFilters.push({
+      id: "date",
+      label: `📅 ${formatDateDisplay(dateFilter)}`,
+      clear: () => setDateFilter(null)
+    });
+  }
+  if (roleFilter !== "All") {
+    activeFilters.push({
+      id: "role",
+      label: `🧑‍⚖️ ${roleFilter}`,
+      clear: () => setRoleFilter("All")
+    });
+  }
+  if (sortBy !== "default") {
+    const sortLabels = {
+      price_low: "Price: Low to High",
+      price_high: "Price: High to Low",
+      exp_high: "Experience: High to Low",
+      exp_low: "Experience: Low to High",
+      name: "Name: A to Z"
+    };
+    activeFilters.push({
+      id: "sort",
+      label: `↕️ ${sortLabels[sortBy] || sortBy}`,
+      clear: () => setSortBy("default")
+    });
+  }
+
+  const clearAllFilters = () => {
+    setQuery("");
+    setDateFilter(null);
+    setRoleFilter("All");
+    setSortBy("default");
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Top Header section with Title on left and Register button on right top corner */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3.5 pb-0.5">
         <div>
-          <h2 className={cn("text-2xl font-bold tracking-tight", isLight ? "text-slate-900" : "text-white")}>
+          <h2 className={cn("text-xl sm:text-2xl font-bold tracking-tight", isLight ? "text-slate-900" : "text-white")}>
             Umpires & Scorers
           </h2>
-          <p className={cn("text-sm mt-1", isLight ? "text-slate-600" : "text-gray-400")}>
-            Book experienced umpires and scorers for your cricket matches.
+          <p className={cn("text-xs sm:text-sm mt-1", isLight ? "text-slate-600" : "text-gray-400")}>
+            Book experienced umpires and scorers for your cricket matches
           </p>
         </div>
 
-        <div
-          className={cn(
-            "px-4 py-2 rounded-xl transition-all",
-            isLight
-              ? "bg-white border border-slate-200 shadow-sm"
-              : "bg-[#171717] border border-[#2a2a2a]"
+        <div className="shrink-0 self-start sm:self-auto">
+          {!myUmpire ? (
+            <UmpireForm user={user} token={token} onCreated={onCreated} theme={theme} />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditingUmpire(myUmpire)}
+              className={cn(
+                "px-5 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shrink-0 cursor-pointer",
+                isLight
+                  ? "bg-[#16a34a] text-white hover:bg-[#15803d] shadow-sm"
+                  : "bg-green-500 text-black hover:bg-green-400"
+              )}
+            >
+              <Pencil className="w-4 h-4" /> Edit Registration
+            </button>
           )}
-        >
-          <div className={cn("text-2xl font-extrabold", isLight ? "text-emerald-600" : "text-green-400")}>
-            {umpires.length}
-          </div>
-          <div className={cn("text-xs font-medium", isLight ? "text-slate-500" : "text-gray-500")}>
-            Available
-          </div>
         </div>
       </div>
 
-      {myUmpire ? (
+      {myUmpire && (
         <div
           className="w-full p-4 rounded-2xl flex items-center justify-between gap-3 transition-all"
           style={
@@ -375,7 +444,7 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
             type="button"
             onClick={() => setEditingUmpire(myUmpire)}
             className={cn(
-              "px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shrink-0",
+              "px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer",
               isLight
                 ? "bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 shadow-sm"
                 : "bg-[#252525] hover:bg-[#333] text-white border border-[#333]"
@@ -384,8 +453,6 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
             <Pencil className="w-3.5 h-3.5 text-emerald-600 dark:text-green-400" /> Edit Registration
           </button>
         </div>
-      ) : (
-        <UmpireForm user={user} token={token} onCreated={onCreated} theme={theme} />
       )}
 
       {umpires.length === 0 ? (
@@ -405,157 +472,337 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
         </div>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by name"
-              className={cn(
-                "flex-1 min-w-[160px] rounded-xl px-3.5 py-2 text-sm focus:outline-none transition-all",
-                isLight
-                  ? "bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 shadow-sm"
-                  : "bg-[#171717] border border-[#2a2a2a] text-white focus:border-green-500"
-              )}
-            />
+          {/* FILTER OFFICIALS BAR */}
+          <div className="space-y-2.5">
+            {/* Header: Title, match count, and reset button */}
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                <Filter className="w-3.5 h-3.5 text-emerald-500" />
+                <span className="text-xs font-bold uppercase tracking-wider" style={{ color: isLight ? "#334155" : "#a6b5a6" }}>
+                  Filter Officials
+                </span>
+                <span
+                  className="px-2 py-0.5 rounded-full text-[10px] font-bold"
+                  style={{
+                    backgroundColor: isLight ? "#f0fdf4" : "rgba(34,197,94,0.1)",
+                    color: isLight ? "#15803d" : "#22c55e",
+                    border: `1px solid ${isLight ? "#bbf7d0" : "rgba(34,197,94,0.2)"}`
+                  }}
+                >
+                  {filtered.length} official{filtered.length === 1 ? "" : "s"}
+                </span>
+              </div>
 
-            <div className="w-full sm:w-48">
-              <CalendarField
-                value={dateFilter}
-                onChange={setDateFilter}
-                theme={theme}
-                placeholder="Filter by date"
-                clearable={true}
-              />
+              {activeFilters.length > 0 && (
+                <button
+                  type="button"
+                  onClick={clearAllFilters}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-500 hover:text-red-400 transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Reset filters</span>
+                </button>
+              )}
             </div>
 
-            <select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
+            {/* UNIFIED MERGED FILTER BAR */}
+            <div
               className={cn(
-                "rounded-xl px-3 py-2 text-sm focus:outline-none transition-all",
+                "rounded-2xl transition-all duration-200 border",
+                "flex flex-col md:flex-row md:items-center",
                 isLight
-                  ? "bg-white border border-slate-200 text-slate-900 shadow-sm"
-                  : "bg-[#171717] border border-[#2a2a2a] text-white"
+                  ? "bg-white border-slate-200 shadow-sm focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/10"
+                  : "bg-[#111411] border-[#252c25] shadow-lg focus-within:border-emerald-500/60"
               )}
             >
-              {roles.map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-            </select>
+              {/* 1. Search Section */}
+              <div className="flex-1 flex items-center px-3.5 py-2.5 min-w-0">
+                <Search
+                  className="w-4 h-4 shrink-0 mr-2.5 transition-colors"
+                  style={{ color: query ? (isLight ? "#16a34a" : "#22c55e") : (isLight ? "#94a3b8" : "#6b7a6b") }}
+                />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="Search by umpire or scorer name..."
+                  className="w-full text-xs font-medium bg-transparent focus:outline-none placeholder:text-slate-400 dark:placeholder:text-[#556055]"
+                  style={{ color: isLight ? "#0f172a" : "#ffffff" }}
+                />
+                {query && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery("")}
+                    className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer shrink-0 ml-1"
+                    title="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5" style={{ color: isLight ? "#64748b" : "#9ca3af" }} />
+                  </button>
+                )}
+              </div>
 
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className={cn(
-                "rounded-xl px-3 py-2 text-sm focus:outline-none transition-all",
-                isLight
-                  ? "bg-white border border-slate-200 text-slate-900 shadow-sm"
-                  : "bg-[#171717] border border-[#2a2a2a] text-white"
-              )}
-            >
-              <option value="default">Sort: default</option>
-              <option value="price_low">Price: low to high</option>
-              <option value="price_high">Price: high to low</option>
-            </select>
+              {/* Divider between Search and Filters */}
+              <div className="hidden md:block w-[1px] h-7 bg-slate-200 dark:bg-[#252d25] shrink-0" />
+              <div className="block md:hidden h-[1px] w-full bg-slate-100 dark:bg-[#1b221b]" />
+
+              {/* 2. Dropdowns Section: Date, Role, Sort */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 dark:divide-[#252d25] shrink-0">
+                {/* Date */}
+                <div className="px-3.5 py-2 sm:py-2.5 flex items-center min-w-[145px]">
+                  <CalendarField
+                    value={dateFilter}
+                    onChange={setDateFilter}
+                    theme={theme}
+                    placeholder="Any Date"
+                    clearable={true}
+                    iconPosition="left"
+                    className="w-full"
+                    buttonStyle={{
+                      backgroundColor: "transparent",
+                      border: "none",
+                      boxShadow: "none",
+                      padding: "0",
+                      fontSize: "0.75rem",
+                      fontWeight: dateFilter ? "600" : "500",
+                    }}
+                  />
+                </div>
+
+                {/* Role */}
+                <div className="relative px-3.5 py-2.5 flex items-center min-w-[130px]">
+                  <Users
+                    className="w-3.5 h-3.5 shrink-0 mr-2"
+                    style={{ color: roleFilter !== "All" ? (isLight ? "#16a34a" : "#4ade80") : (isLight ? "#64748b" : "#6b7a6b") }}
+                  />
+                  <select
+                    value={roleFilter}
+                    onChange={e => setRoleFilter(e.target.value)}
+                    className="w-full text-xs bg-transparent focus:outline-none appearance-none pr-5 cursor-pointer font-medium truncate"
+                    style={{
+                      color: roleFilter !== "All" ? (isLight ? "#0f172a" : "#ffffff") : (isLight ? "#64748b" : "#8a968a"),
+                      fontWeight: roleFilter !== "All" ? "600" : "500"
+                    }}
+                  >
+                    {roles.map(r => (
+                      <option key={r} value={r} className={isLight ? "bg-white text-slate-800" : "bg-[#161a16] text-[#c8ccc8]"}>
+                        {r === "All" ? "All Roles" : r}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none opacity-60" style={{ color: isLight ? "#64748b" : "#8a968a" }} />
+                </div>
+
+                {/* Sort */}
+                <div className="relative px-3.5 py-2.5 flex items-center min-w-[135px]">
+                  <ArrowUpDown
+                    className="w-3.5 h-3.5 shrink-0 mr-2"
+                    style={{ color: sortBy !== "default" ? (isLight ? "#16a34a" : "#4ade80") : (isLight ? "#64748b" : "#6b7a6b") }}
+                  />
+                  <select
+                    value={sortBy}
+                    onChange={e => setSortBy(e.target.value)}
+                    className="w-full text-xs bg-transparent focus:outline-none appearance-none pr-5 cursor-pointer font-medium truncate"
+                    style={{
+                      color: sortBy !== "default" ? (isLight ? "#0f172a" : "#ffffff") : (isLight ? "#64748b" : "#8a968a"),
+                      fontWeight: sortBy !== "default" ? "600" : "500"
+                    }}
+                  >
+                    <option value="default" className={isLight ? "bg-white text-slate-800" : "bg-[#161a16] text-[#c8ccc8]"}>Default Sort</option>
+                    <option value="price_low" className={isLight ? "bg-white text-slate-800" : "bg-[#161a16] text-[#c8ccc8]"}>Price: Low to High</option>
+                    <option value="price_high" className={isLight ? "bg-white text-slate-800" : "bg-[#161a16] text-[#c8ccc8]"}>Price: High to Low</option>
+                    <option value="exp_high" className={isLight ? "bg-white text-slate-800" : "bg-[#161a16] text-[#c8ccc8]"}>Experience: High to Low</option>
+                  </select>
+                  <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none opacity-60" style={{ color: isLight ? "#64748b" : "#8a968a" }} />
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Active filter tags pill chips */}
+            {activeFilters.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap pt-0.5 px-1 animate-[fadeIn_.15s_ease-out]">
+                <span className="text-[10px] font-bold uppercase tracking-wider mr-1" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
+                  Active:
+                </span>
+                {activeFilters.map(af => (
+                  <span
+                    key={af.id}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all group"
+                    style={{
+                      backgroundColor: isLight ? "#f0fdf4" : "rgba(34,197,94,0.12)",
+                      border: `1px solid ${isLight ? "#bbf7d0" : "rgba(34,197,94,0.3)"}`,
+                      color: isLight ? "#15803d" : "#4ade80"
+                    }}
+                  >
+                    <span>{af.label}</span>
+                    <button
+                      type="button"
+                      onClick={af.clear}
+                      className="hover:opacity-70 transition-opacity p-0.5 rounded-full cursor-pointer"
+                      title="Remove this filter"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           {filtered.length === 0 ? (
             <div
-              className={cn(
-                "rounded-2xl p-8 text-center border border-dashed",
-                isLight ? "bg-white border-slate-300 text-slate-500 shadow-sm" : "border-[#333] bg-[#151515] text-gray-500"
-              )}
+              className={cn(C, "rounded-2xl p-8 text-center")}
+              style={{
+                backgroundColor: isLight ? "#ffffff" : undefined,
+                border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`
+              }}
             >
-              <p>No umpires match your filters.</p>
+              <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center bg-emerald-500/10 text-emerald-500 text-xl">
+                🧑‍⚖️
+              </div>
+              <div className="text-sm font-bold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
+                No umpires or scorers match your filters
+              </div>
+              <p className="text-xs mt-1" style={{ color: isLight ? "#64748b" : "#8a968a" }}>
+                Try adjusting your search query, date availability, role, or sorting.
+              </p>
+              {activeFilters.length > 0 && (
+                <button
+                  type="button"
+                  onClick={clearAllFilters}
+                  className="mt-3.5 px-4 py-2 rounded-xl text-xs font-bold transition-all bg-emerald-500 hover:bg-emerald-400 text-black cursor-pointer inline-flex items-center gap-1.5 shadow-sm"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Clear All Filters
+                </button>
+              )}
             </div>
           ) : (
-            <div
-              className={cn(
-                "rounded-2xl overflow-hidden border divide-y transition-all",
-                isLight
-                  ? "bg-white border-slate-200 divide-slate-100 shadow-sm"
-                  : "border-[#2a2a2a] divide-[#2a2a2a]"
-              )}
-            >
+            <div className="space-y-3">
               {filtered.map((u) => {
                 const role = u.role || "Umpire";
                 const rc = roleColor(role);
                 const bookedDates = u.bookedDates || u.booked_dates || [];
                 const isBookedForDate = dateFilter && bookedDates.includes(dateFilter);
                 const isAvailable = u.avail && !isBookedForDate;
+                const formattedPhone = formatPhoneDisplay(u.mobile);
+
                 return (
                   <div
                     key={u.id ?? u.name}
                     className={cn(
-                      "flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3.5 transition-colors",
-                      isLight ? "bg-white hover:bg-slate-50/80" : "bg-[#161616] hover:bg-[#1c1c1c]"
+                      "rounded-2xl p-4 sm:p-4.5 transition-all duration-200 border group",
+                      isLight
+                        ? "bg-white border-slate-200 hover:border-slate-300 hover:shadow-md"
+                        : "bg-[#131613] border-[#222922] hover:border-[#2f3a2f] hover:shadow-lg hover:shadow-emerald-950/20"
                     )}
                   >
-                    <div className="flex items-center gap-3 w-full sm:w-auto flex-1 min-w-0">
-                      <div
-                        className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center text-white text-xs sm:text-sm font-bold shrink-0 shadow"
-                        style={{ background: u.grad }}
-                      >
-                        {u.name?.split(" ").map((x) => x[0]).join("")}
-                      </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      {/* Left: Avatar + Details */}
+                      <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                        {/* Gradient Avatar */}
+                        <div
+                          className="w-12 h-12 rounded-2xl flex items-center justify-center text-white text-sm font-black shrink-0 shadow-md transition-transform group-hover:scale-105"
+                          style={{
+                            background: u.grad || "linear-gradient(135deg, #10b981 0%, #047857 100%)",
+                            boxShadow: "0 4px 14px -2px rgba(0, 0, 0, 0.3)"
+                          }}
+                        >
+                          {u.name?.split(" ").map((x) => x[0]).slice(0, 2).join("").toUpperCase()}
+                        </div>
 
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={cn("text-sm font-bold truncate", isLight ? "text-slate-900" : "text-white")}>{u.name}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold shrink-0 ${rc.bg} ${rc.text}`}>
-                            {role}
-                          </span>
-                          <span
-                            className={cn(
-                              "px-2 py-0.5 rounded-full text-[11px] font-semibold shrink-0 border",
-                              isAvailable
-                                ? (isLight ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-green-900/60 text-green-300 border-green-700/50")
-                                : (isLight ? "bg-red-50 text-red-700 border-red-200" : "bg-red-900/60 text-red-300 border-red-700/50")
-                            )}
-                          >
-                            {isAvailable ? "Available" : isBookedForDate ? "Booked" : "Busy"}
-                          </span>
-                          {isBookedForDate && (
-                            <span className="text-[11px] font-medium text-red-500">
-                              (Booked on {formatDateDisplay(dateFilter)})
+                        {/* Name, Role, Availability */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <span className={cn("text-base font-bold truncate", isLight ? "text-slate-900" : "text-white")}>
+                              {u.name}
                             </span>
-                          )}
-                        </div>
-                        <div className={cn("sm:hidden text-xs mt-1 flex items-center gap-3", isLight ? "text-slate-500" : "text-gray-400")}>
-                          <span>📞 {u.mobile}</span>
-                          <span>🏏 {u.exp}</span>
+                            <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold flex items-center gap-1 shrink-0 ${rc.bg} ${rc.text}`}>
+                              {role === "Umpire" && <Shield className="w-3 h-3" />}
+                              {role === "Scorer" && <FileText className="w-3 h-3" />}
+                              {role === "Umpire + Scorer" && <Award className="w-3 h-3" />}
+                              <span>{role}</span>
+                            </span>
+                            <span
+                              className={cn(
+                                "px-2.5 py-0.5 rounded-full text-[11px] font-semibold shrink-0 inline-flex items-center gap-1.5",
+                                isAvailable
+                                  ? (isLight ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25")
+                                  : isBookedForDate
+                                  ? (isLight ? "bg-red-50 text-red-700 border border-red-200" : "bg-red-500/10 text-red-400 border border-red-500/25")
+                                  : (isLight ? "bg-slate-100 text-slate-500 border border-slate-200" : "bg-neutral-800/80 text-neutral-400 border border-neutral-700/50")
+                              )}
+                            >
+                              {isAvailable ? (
+                                <>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  <span>Available</span>
+                                </>
+                              ) : isBookedForDate ? (
+                                <>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                                  <span>Booked ({formatDateDisplay(dateFilter)})</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-neutral-500" />
+                                  <span>Busy</span>
+                                </>
+                              )}
+                            </span>
+                          </div>
+
+                          {/* Quick Info Tags (Phone & Experience) */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span
+                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs font-mono font-medium"
+                              style={{
+                                backgroundColor: isLight ? "#f8fafc" : "#1a1f1a",
+                                border: `1px solid ${isLight ? "#e2e8f0" : "#283228"}`,
+                                color: isLight ? "#475569" : "#a6b5a6"
+                              }}
+                            >
+                              <Phone className="w-3 h-3 text-emerald-500" />
+                              <span>{formattedPhone}</span>
+                            </span>
+
+                            <span
+                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs font-medium"
+                              style={{
+                                backgroundColor: isLight ? "#f8fafc" : "#1a1f1a",
+                                border: `1px solid ${isLight ? "#e2e8f0" : "#283228"}`,
+                                color: isLight ? "#475569" : "#a6b5a6"
+                              }}
+                            >
+                              <Award className="w-3 h-3 text-amber-500" />
+                              <span>{u.exp || `${u.experience || 0} yrs`} experience</span>
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className={cn("hidden sm:block text-xs font-mono w-28 shrink-0", isLight ? "text-slate-600" : "text-gray-400")}>
-                      📞 {u.mobile}
-                    </div>
+                      {/* Right: Fee + Action Buttons */}
+                      <div className="flex items-center justify-between sm:justify-end gap-3 pt-2.5 sm:pt-0 border-t sm:border-0 border-slate-100 dark:border-[#222922] shrink-0">
+                        {/* Fee per match */}
+                        <div className="text-left sm:text-right pr-1 sm:pr-2">
+                          <div className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: isLight ? "#64748b" : "#8a968a" }}>
+                            Match Fee
+                          </div>
+                          <div className="text-lg font-black" style={{ color: isLight ? "#16a34a" : "#4ade80" }}>
+                            {u.price}
+                          </div>
+                        </div>
 
-                    <div className={cn("hidden sm:block text-xs w-20 shrink-0 font-medium", isLight ? "text-slate-600" : "text-gray-400")}>
-                      🏏 {u.exp}
-                    </div>
-
-                    <div className={cn(
-                      "flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto pt-2 sm:pt-0 sm:border-0",
-                      isLight ? "border-t border-slate-100" : "border-t border-[#222]"
-                    )}>
-                      <div className={cn("font-bold text-sm sm:w-20 text-left sm:text-right shrink-0", isLight ? "text-emerald-700" : "text-green-400")}>
-                        {u.price}
-                      </div>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Owner edit/delete buttons */}
                         {isOwner(u) && (
-                          <>
+                          <div className="flex items-center gap-1.5">
                             <button
                               type="button"
                               onClick={() => setEditingUmpire(u)}
-                              title="Edit Umpire"
+                              title="Edit Registration"
                               className={cn(
-                                "p-2 rounded-xl text-xs font-bold transition-colors",
+                                "p-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs",
                                 isLight
-                                  ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 shadow-sm"
-                                  : "text-gray-300 hover:text-white bg-[#252525] hover:bg-[#333]"
+                                  ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
+                                  : "text-gray-300 hover:text-white bg-[#1e241e] hover:bg-[#283228] border border-[#2a342a]"
                               )}
                             >
                               <Pencil className="w-3.5 h-3.5" />
@@ -571,29 +818,35 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                                   alert(err.message || "Could not delete umpire.");
                                 }
                               }}
-                              title="Delete Umpire"
+                              title="Delete Official"
                               className={cn(
-                                "p-2 rounded-xl text-xs font-bold transition-colors",
+                                "p-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs",
                                 isLight
-                                  ? "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 shadow-sm"
-                                  : "text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20"
+                                  ? "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100"
+                                  : "text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/25 hover:bg-red-500/20"
                               )}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
-                          </>
+                          </div>
                         )}
+
+                        {/* Book Official Button */}
                         <button
                           disabled={!isAvailable}
                           onClick={() => isAvailable && onBook(u, dateFilter)}
                           className={cn(
-                            "px-4 py-1.5 rounded-xl text-xs font-bold transition-all",
+                            "px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm",
                             isLight
-                              ? (isAvailable ? "bg-[#16a34a] text-white hover:bg-[#15803d] shadow-sm" : "bg-slate-100 text-slate-400 cursor-not-allowed")
-                              : (isAvailable ? "bg-green-500 text-black hover:bg-green-400" : "bg-[#252525] text-gray-600 cursor-not-allowed")
+                              ? (isAvailable
+                                  ? "bg-[#16a34a] text-white hover:bg-[#15803d]"
+                                  : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200 shadow-none")
+                              : (isAvailable
+                                  ? "bg-green-500 text-black hover:bg-green-400"
+                                  : "bg-[#1a1f1a] text-neutral-500 cursor-not-allowed border border-[#263026] shadow-none")
                           )}
                         >
-                          {isAvailable ? "Book" : "Busy"}
+                          {isAvailable ? "Book Official" : "Unavailable"}
                         </button>
                       </div>
                     </div>
@@ -630,52 +883,7 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
           </div>
         </div>
       )}
-
-      <div className="pt-2">
-        <h3 className={cn("text-lg font-bold mb-3", isLight ? "text-slate-900" : "text-white")}>
-          📋 Cricket Updates & Rules
-        </h3>
-        <div
-          className={cn(
-            "rounded-2xl overflow-hidden border divide-y transition-all",
-            isLight
-              ? "bg-white border-slate-200 divide-slate-100 shadow-sm"
-              : "border-[#2a2a2a] divide-[#2a2a2a]"
-          )}
-        >
-          {[
-            {
-              title: "New DRS review limit for T20 leagues",
-              desc: "Teams now get 2 unsuccessful reviews per innings instead of 1, effective this season.",
-              date: "Jul 2026"
-            },
-            {
-              title: "Front-foot no-ball tech mandatory",
-              desc: "Local tournaments must use the automated no-ball detection line where available.",
-              date: "Jun 2026"
-            },
-            {
-              title: "Concussion substitute rule updated",
-              desc: "A like-for-like concussion substitute can now be used without match referee pre-approval.",
-              date: "Jun 2026"
-            }
-          ].map((r, i) => (
-            <div
-              key={i}
-              className={cn("px-4 py-3.5 transition-colors", isLight ? "bg-white hover:bg-slate-50/80" : "bg-[#161616]")}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className={cn("text-sm font-bold", isLight ? "text-slate-900" : "text-white")}>{r.title}</span>
-                <span className={cn("text-[11px] font-semibold shrink-0", isLight ? "text-slate-500" : "text-gray-500")}>{r.date}</span>
-              </div>
-              <p className={cn("text-xs mt-1", isLight ? "text-slate-600" : "text-gray-400")}>{r.desc}</p>
-            </div>
-          ))}
-        </div>
-        <p className={cn("text-[11px] mt-2", isLight ? "text-slate-500" : "text-gray-600")}>
-          Sample updates — real rule feed coming soon.
-        </p>
-      </div>
     </div>
   );
 }
+

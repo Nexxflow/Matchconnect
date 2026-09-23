@@ -867,7 +867,7 @@ export default function App() {
         theme={theme}
       />
     ),
-    "Live Score": <LiveScoreTab user={auth.user} theme={theme} />,
+    "Live Score": <LiveScoreTab user={auth.user} token={auth.token} theme={theme} />,
     "Tournaments": (
       <TournamentsTab
         tournaments={tournaments}

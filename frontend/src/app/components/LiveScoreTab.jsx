@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { API_BASE as SHARED_API_BASE } from "../api";
+import { API_BASE as SHARED_API_BASE, getStoredToken } from "../api";
 
 /* ============================================================================
    BACKEND CONTRACT (matches matchController.js / liveScoreRoutes.js)
@@ -22,7 +22,47 @@ import { API_BASE as SHARED_API_BASE } from "../api";
 
 const API_BASE = SHARED_API_BASE;
 
+let globalLiveScoreToken = null;
+export function setLiveScoreToken(token) {
+  globalLiveScoreToken = token;
+}
+
+export function getMyCreatedMatchIds() {
+  try {
+    return JSON.parse(localStorage.getItem("mc_my_matches") || "[]").map(String);
+  } catch {
+    return [];
+  }
+}
+
+export function saveCreatedMatchId(matchId) {
+  if (!matchId) return;
+  try {
+    const ids = getMyCreatedMatchIds();
+    if (!ids.includes(String(matchId))) {
+      ids.push(String(matchId));
+      localStorage.setItem("mc_my_matches", JSON.stringify(ids));
+    }
+  } catch {}
+}
+
+export function isMatchCreator(match, user) {
+  if (!match) return false;
+  const currentUserId = user?.id ? String(user.id) : null;
+  // 1. Matches where created_by in DB matches user's ID
+  if (currentUserId && match.created_by && String(match.created_by) === currentUserId) {
+    return true;
+  }
+  // 2. Matches stored in local storage for this browser/user session
+  const localCreated = getMyCreatedMatchIds();
+  if (localCreated.includes(String(match.id))) {
+    return true;
+  }
+  return false;
+}
+
 async function api(path, options) {
+  const token = options?.token || globalLiveScoreToken || getStoredToken();
   const cleanPath = path.startsWith("/api/")
     ? path.slice(4)
     : path.startsWith("api/")
@@ -31,9 +71,15 @@ async function api(path, options) {
     ? path
     : `/${path}`;
 
+  const headers = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...options?.headers,
+  };
+
   const res = await fetch(`${API_BASE}${cleanPath}`, {
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers,
   });
 
   const contentType = res.headers.get("content-type") || "";
@@ -141,7 +187,7 @@ function computeExtrasBreakdown(innings) {
   return null;
 }
 
-// Google & Cricbuzz Professional Theme Tokens — colorized
+// Google & Cricbuzz Professional Theme Tokens
 const FONT_DISPLAY = "'Inter', 'Outfit', ui-sans-serif, system-ui, sans-serif";
 const FONT_MONO = "'JetBrains Mono', 'Roboto Mono', ui-monospace, SFMono-Regular, monospace";
 
@@ -152,7 +198,7 @@ const isLightMode = () =>
 
 const COLOR = {
   get bg() {
-    return isLightMode() ? "#f6f9f7" : "#0a0f18";
+    return isLightMode() ? "#f8faf8" : "#0b0f17";
   },
   get surface() {
     return isLightMode() ? "#ffffff" : "#131a26";
@@ -162,8 +208,8 @@ const COLOR = {
   },
   get heroGradient() {
     return isLightMode()
-      ? "linear-gradient(135deg, #ecfdf5 0%, #eff6ff 45%, #f5f3ff 75%, #fef3c7 100%)"
-      : "linear-gradient(135deg, #052e16 0%, #0f172a 40%, #1e1b4b 70%, #0f172a 100%)";
+      ? "linear-gradient(135deg, #f0fdf4 0%, #f8fafc 50%, #f0fdf4 100%)"
+      : "linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)";
   },
   get border() {
     return isLightMode() ? "#e2e8f0" : "#232f45";
@@ -181,47 +227,24 @@ const COLOR = {
     return isLightMode() ? "#64748b" : "#64748b";
   },
   get accent() {
-    return "#10b981";
-  },
-  get accentGradient() {
-    return "linear-gradient(135deg,#22c55e 0%,#10b981 60%,#06b6d4 100%)";
+    return "#10b981"; // Cricbuzz Green
   },
   get accentGlow() {
-    return isLightMode() ? "rgba(16, 185, 129, 0.15)" : "rgba(16, 185, 129, 0.22)";
+    return isLightMode() ? "rgba(16, 185, 129, 0.15)" : "rgba(16, 185, 129, 0.2)";
   },
   get blue() {
-    return isLightMode() ? "#0284c7" : "#38bdf8";
-  },
-  get blueGradient() {
-    return "linear-gradient(135deg,#3b82f6 0%,#8b5cf6 100%)";
+    return isLightMode() ? "#0284c7" : "#38bdf8"; // Google Blue
   },
   get purple() {
-    return isLightMode() ? "#9333ea" : "#a855f7";
-  },
-  get purpleGradient() {
-    return "linear-gradient(135deg,#a855f7 0%,#ec4899 100%)";
+    return isLightMode() ? "#9333ea" : "#a855f7"; // 6 Boundary Purple
   },
   get red() {
-    return isLightMode() ? "#dc2626" : "#ef4444";
-  },
-  get redGradient() {
-    return "linear-gradient(135deg,#ef4444 0%,#dc2626 100%)";
+    return isLightMode() ? "#dc2626" : "#ef4444"; // Wicket Red
   },
   get amber() {
-    return isLightMode() ? "#d97706" : "#f59e0b";
-  },
-  get amberGradient() {
-    return "linear-gradient(135deg,#f59e0b 0%,#ef4444 100%)";
+    return isLightMode() ? "#d97706" : "#f59e0b"; // Extra/Warning Amber
   },
 };
-
-// Card themes (visual only — cycling palette for lists)
-const CARD_THEMES = [
-  { grad: "linear-gradient(135deg,#22c55e 0%,#14b8a6 100%)", soft: "rgba(34,197,94,0.18)", ring: "rgba(34,197,94,0.45)", glow: "rgba(34,197,94,0.35)" },
-  { grad: "linear-gradient(135deg,#3b82f6 0%,#8b5cf6 100%)", soft: "rgba(59,130,246,0.18)", ring: "rgba(59,130,246,0.45)", glow: "rgba(59,130,246,0.35)" },
-  { grad: "linear-gradient(135deg,#f97316 0%,#ec4899 100%)", soft: "rgba(249,115,22,0.18)", ring: "rgba(249,115,22,0.45)", glow: "rgba(249,115,22,0.35)" },
-  { grad: "linear-gradient(135deg,#a855f7 0%,#06b6d4 100%)", soft: "rgba(168,85,247,0.18)", ring: "rgba(168,85,247,0.45)", glow: "rgba(168,85,247,0.35)" }
-];
 
 const BALL_COLORS = {
   get wicket() { return { bg: "#ef4444", fg: "#ffffff", label: "W" }; },
@@ -261,7 +284,11 @@ const cardStyle = {
 
 const BTN_TRANSITION = "transition-all duration-150 ease-out active:scale-[0.97]";
 
-export default function ScoringApp({ user, theme = "dark" }) {
+export default function ScoringApp({ user, token, theme = "dark" }) {
+  useEffect(() => {
+    if (token) setLiveScoreToken(token);
+  }, [token]);
+
   const [view, setView] = useState("home");
   const [activeMatchId, setActiveMatchId] = useState(null);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
@@ -292,13 +319,6 @@ export default function ScoringApp({ user, theme = "dark" }) {
           to { opacity: 1; transform: translateY(0); }
         }
         .cb-slide-down { animation: cb-slide-down 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-
-        @keyframes cb-gradient-shift {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
-        .cb-gradient-anim { background-size: 200% 200%; animation: cb-gradient-shift 6s ease infinite; }
       `}</style>
 
       {view !== "home" && (
@@ -336,6 +356,10 @@ export default function ScoringApp({ user, theme = "dark" }) {
           key={homeRefreshKey}
           onScoreNew={() => setView("new")}
           onResume={(id, m) => {
+            if (!isMatchCreator(m, user)) {
+              alert("Only the creator of this scoreboard can resume it.");
+              return;
+            }
             setActiveMatchId(id);
             if (m.status === "not_started") {
               setView(m.needs_squads ? "squads" : "toss");
@@ -343,7 +367,11 @@ export default function ScoringApp({ user, theme = "dark" }) {
               setView("score");
             }
           }}
-          onViewScoreboard={(id) => {
+          onViewScoreboard={(id, m) => {
+            if (m && !isMatchCreator(m, user)) {
+              alert("Only the creator of this scoreboard can view it.");
+              return;
+            }
             setActiveMatchId(id);
             setView("scoreboard");
           }}
@@ -380,60 +408,229 @@ export default function ScoringApp({ user, theme = "dark" }) {
       )}
 
       {view === "score" && activeMatchId && (
-        <MatchLiveConsole user={user} matchId={activeMatchId} onChangeStage={(stage) => setView(stage)} onMatchComplete={() => setView("scoreboard")} />
+        <MatchLiveConsole user={user} matchId={activeMatchId} onBack={goHome} onChangeStage={(stage) => setView(stage)} onMatchComplete={() => setView("scoreboard")} />
       )}
 
-      {view === "scoreboard" && activeMatchId && <FinalScoreboard matchId={activeMatchId} />}
+      {view === "scoreboard" && activeMatchId && <FinalScoreboard user={user} matchId={activeMatchId} onBack={goHome} />}
     </div>
   );
 }
 
 function SetupProgress({ step }) {
   const steps = ["Match Setup", "Playing XI", "Toss", "Opening Players"];
-  const stepGrads = [
-    "linear-gradient(135deg,#22c55e 0%,#10b981 100%)",
-    "linear-gradient(135deg,#3b82f6 0%,#8b5cf6 100%)",
-    "linear-gradient(135deg,#f59e0b 0%,#ec4899 100%)",
-    "linear-gradient(135deg,#a855f7 0%,#06b6d4 100%)"
-  ];
   return (
-    <div className="flex items-center gap-2 mb-4 p-3 rounded-xl relative overflow-hidden" style={{ background: COLOR.surface, border: `1px solid ${COLOR.border}` }}>
-      <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#f59e0b,#a855f7)" }} />
+    <div className="flex items-center gap-2 mb-4 p-3 rounded-xl bg-slate-900/80 border border-slate-800">
       {steps.map((label, i) => {
         const n = i + 1;
         const active = n === step;
         const done = n < step;
-        const grad = stepGrads[i];
         return (
           <div key={label} className="flex items-center gap-2 flex-1">
             <div className="flex items-center gap-2 flex-1">
               <span
                 className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-colors"
                 style={{
-                  background: done || active ? grad : COLOR.surfaceRaised,
-                  color: done || active ? "#ffffff" : COLOR.inkFaint,
-                  border: active ? `1.5px solid #ffffff` : done ? "none" : `1px solid ${COLOR.border}`,
+                  backgroundColor: done ? COLOR.accent : active ? COLOR.accentGlow : COLOR.surfaceRaised,
+                  color: done ? "#000" : active ? COLOR.accent : COLOR.inkFaint,
+                  border: active ? `1.5px solid ${COLOR.accent}` : `1px solid ${COLOR.border}`,
                   fontFamily: FONT_MONO,
-                  boxShadow: done || active ? "0 3px 10px -3px rgba(0,0,0,0.5)" : "none",
                 }}
               >
                 {done ? "✓" : n}
               </span>
               <span
                 className="text-[11px] font-bold uppercase tracking-wider hidden sm:inline"
-                style={{
-                  color: active ? (isLightMode() ? "#0f172a" : "#ffffff") : COLOR.inkFaint,
-                }}
+                style={{ color: active ? COLOR.ink : COLOR.inkFaint }}
               >
                 {label}
               </span>
             </div>
             {n < steps.length && (
-              <div className="h-0.5 flex-1 rounded-full" style={{ background: done ? stepGrads[i] : COLOR.border }} />
+              <div className="h-0.5 flex-1 rounded-full" style={{ backgroundColor: done ? COLOR.accent : COLOR.border }} />
             )}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function CompletedMatchCard({ match: m, onViewScoreboard, onDelete }) {
+  const [potmData, setPotmData] = useState({
+    name: m.potm_name,
+    stats: m.potm_stats,
+    team: m.potm_team,
+    result: m.result,
+  });
+
+  useEffect(() => {
+    // If potm or descriptive result is missing, auto-fetch scoreboard to compute & save it
+    if ((!m.potm_name || !m.result || m.result === "Match completed") && m.status === "completed") {
+      api(`/api/matches/${m.id}/scoreboard`)
+        .then((res) => {
+          if (res?.potm_name || res?.result) {
+            setPotmData({
+              name: res.potm_name || res.match?.potm_name,
+              stats: res.potm_stats || res.match?.potm_stats,
+              team: res.potm_team || res.match?.potm_team,
+              result: res.result || res.match?.result,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [m.id, m.potm_name, m.result, m.status]);
+
+  // Compute innings scores & fallback outcome
+  const innList = Array.isArray(m.innings_list) ? m.innings_list : [];
+  const inn1 = innList.find((i) => i.inning_number === 1);
+  const inn2 = innList.find((i) => i.inning_number === 2);
+
+  let t1Score = null;
+  let t2Score = null;
+  if (inn1) {
+    const isT1 = String(inn1.batting_team_id) === String(m.team1_id);
+    const { display } = formatOvers(inn1.overs_completed || 0);
+    const scoreStr = `${inn1.total_runs}/${inn1.wickets} (${display} ov)`;
+    if (isT1) t1Score = scoreStr; else t2Score = scoreStr;
+  }
+  if (inn2) {
+    const isT1 = String(inn2.batting_team_id) === String(m.team1_id);
+    const { display } = formatOvers(inn2.overs_completed || 0);
+    const scoreStr = `${inn2.total_runs}/${inn2.wickets} (${display} ov)`;
+    if (isT1) t1Score = scoreStr; else t2Score = scoreStr;
+  }
+
+  // Determine realistic result string
+  let displayResult = potmData.result || m.result;
+  if (!displayResult || displayResult === "Match completed" || displayResult === "Match finished" || displayResult.toLowerCase().includes("chasing the target")) {
+    if (inn1 && inn2) {
+      const r1 = Number(inn1.total_runs || 0);
+      const r2 = Number(inn2.total_runs || 0);
+      const w2 = Number(inn2.wickets || 0);
+      const t1Name = String(inn1.batting_team_id) === String(m.team1_id) ? m.team1_name : m.team2_name;
+      const t2Name = String(inn2.batting_team_id) === String(m.team1_id) ? m.team1_name : m.team2_name;
+
+      if (r2 > r1) {
+        const wkts = Math.max(1, 10 - w2);
+        displayResult = `${t2Name} won by ${wkts} wicket${wkts === 1 ? "" : "s"}`;
+      } else if (r1 > r2) {
+        const diff = r1 - r2;
+        displayResult = `${t1Name} won by ${diff} run${diff === 1 ? "" : "s"}`;
+      } else {
+        displayResult = `Match tied (${r1} runs each)`;
+      }
+    } else {
+      displayResult = "Match completed";
+    }
+  }
+
+  const potmName = potmData.name || m.potm_name;
+  const potmStats = potmData.stats || m.potm_stats;
+  const potmTeam = potmData.team || m.potm_team;
+
+  return (
+    <div
+      onClick={() => onViewScoreboard(m.id, m)}
+      className={`w-full text-left p-4 sm:p-5 rounded-2xl space-y-3.5 transition-all hover:border-emerald-500/40 hover:bg-slate-800/40 cursor-pointer ${BTN_TRANSITION} border border-slate-800/80`}
+      style={cardStyle}
+    >
+      {/* Top Header: Venue / Format & Completed Badge */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 text-[10px] font-black uppercase tracking-wider">
+            COMPLETED
+          </span>
+          <span className="text-xs text-slate-400 font-mono">{m.venue || `${m.overs_limit || 20} Overs Match`}</span>
+        </div>
+        <span className="text-xs font-mono text-slate-400">{m.overs_limit} Overs</span>
+      </div>
+
+      {/* Teams and Scores Display */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+        {/* Team 1 */}
+        <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/60">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 font-extrabold flex items-center justify-center text-xs">
+              {teamInitials(m.team1_name)}
+            </div>
+            <span className="font-bold text-sm text-slate-100">{m.team1_name}</span>
+          </div>
+          {t1Score ? (
+            <span className="font-mono font-bold text-sm text-slate-200">{t1Score}</span>
+          ) : (
+            <span className="font-mono text-xs text-slate-500">-</span>
+          )}
+        </div>
+
+        {/* Team 2 */}
+        <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/60">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-sky-500/20 text-sky-400 font-extrabold flex items-center justify-center text-xs">
+              {teamInitials(m.team2_name)}
+            </div>
+            <span className="font-bold text-sm text-slate-100">{m.team2_name}</span>
+          </div>
+          {t2Score ? (
+            <span className="font-mono font-bold text-sm text-slate-200">{t2Score}</span>
+          ) : (
+            <span className="font-mono text-xs text-slate-500">-</span>
+          )}
+        </div>
+      </div>
+
+      {/* Realistic Result Banner */}
+      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/25">
+        <span className="text-base">🏆</span>
+        <span className="text-xs sm:text-sm font-extrabold text-emerald-400 tracking-wide">
+          {displayResult}
+        </span>
+      </div>
+
+      {/* Man of the Match / Player of the Match Showcase */}
+      {potmName && (
+        <div className="p-3 rounded-xl bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-slate-900 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-base shrink-0 border border-amber-500/30">
+              🏅
+            </div>
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-wider text-amber-400">
+                Man of the Match
+              </div>
+              <div className="text-xs sm:text-sm font-extrabold text-amber-200 flex items-center gap-2">
+                <span>{potmName}</span>
+                {potmTeam && (
+                  <span className="text-[10px] font-normal text-slate-400 px-1.5 py-0.5 rounded bg-slate-800/80">
+                    {potmTeam}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          {potmStats && (
+            <div className="text-[11px] font-mono font-bold text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded-md border border-amber-500/20 shrink-0">
+              {potmStats}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Footer Actions */}
+      <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between gap-2">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(m);
+          }}
+          className={`px-2.5 py-1.5 rounded-lg text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 ${BTN_TRANSITION}`}
+        >
+          🗑️ Delete
+        </button>
+        <span className="text-xs text-sky-400 font-bold hover:underline flex items-center gap-1">
+          Full Scorecard ➔
+        </span>
+      </div>
     </div>
   );
 }
@@ -465,48 +662,25 @@ function MatchHome({ user, onScoreNew, onResume, onViewScoreboard }) {
     };
   }, []);
 
-  const inProgress = matches?.filter((m) => m.status !== "completed") || [];
-  const completed = matches?.filter((m) => m.status === "completed") || [];
+  const myMatches = matches?.filter((m) => isMatchCreator(m, user)) || [];
+  const inProgress = myMatches.filter((m) => m.status !== "completed");
+  const completed = myMatches.filter((m) => m.status === "completed");
 
   return (
     <div className="space-y-6">
       {/* Cricbuzz Header Banner */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl relative overflow-hidden" style={cardStyle}>
-        <div className="absolute top-0 left-0 right-0 h-1" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#f97316,#ec4899)" }} />
-        <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle,#22c55e 0%,transparent 70%)", opacity: 0.15 }} />
-        <div className="relative z-10">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl" style={cardStyle}>
+        <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 cb-live-pulse" />
-            <span
-              className="text-xs font-extrabold uppercase tracking-widest"
-              style={{
-                background: "linear-gradient(135deg,#22c55e 0%,#3b82f6 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text"
-              }}
-            >
-              MatchConnect Live Engine
-            </span>
+            <span className="text-xs font-extrabold uppercase tracking-widest text-emerald-400">MatchConnect Live Engine</span>
           </div>
-          <h2
-            className="text-lg sm:text-xl font-black"
-            style={{
-              background: isLightMode()
-                ? "linear-gradient(135deg,#0f172a 0%,#15803d 50%,#3b82f6 100%)"
-                : "linear-gradient(135deg,#ffffff 0%,#4ade80 50%,#60a5fa 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text"
-            }}
-          >
-            Google & Cricbuzz Scoreboard
-          </h2>
+          <h2 className="text-lg sm:text-xl font-extrabold text-white">Google & Cricbuzz Scoreboard</h2>
         </div>
         <button
           onClick={onScoreNew}
-          className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider shadow-lg text-center relative z-10 ${BTN_TRANSITION} hover:opacity-95 hover:scale-[1.02]`}
-          style={{ background: COLOR.accentGradient, color: "#ffffff", boxShadow: "0 6px 20px -6px rgba(34,197,94,0.7)" }}
+          className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider shadow-lg text-center ${BTN_TRANSITION}`}
+          style={{ backgroundColor: COLOR.accent, color: "#000" }}
         >
           + New Match
         </button>
@@ -525,147 +699,92 @@ function MatchHome({ user, onScoreNew, onResume, onViewScoreboard }) {
         </div>
       )}
 
-      {matches !== null && matches.length === 0 && !error && (
-        <div className="text-center p-8 rounded-2xl relative overflow-hidden" style={{ border: `2px dashed ${COLOR.border}` }}>
+      {matches !== null && myMatches.length === 0 && !error && (
+        <div className="text-center p-8 rounded-2xl border border-dashed border-slate-700">
           <div className="text-4xl mb-2">🏏</div>
-          <div
-            className="text-sm font-black mb-1"
-            style={{
-              background: "linear-gradient(135deg,#22c55e 0%,#0d9488 60%,#3b82f6 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text"
-            }}
-          >
-            No Active Matches
-          </div>
-          <p className="text-xs text-slate-400 mb-4">Start scoring a match to see live updates.</p>
+          <div className="text-sm font-bold text-slate-200 mb-1">No Scoreboards Created Yet</div>
+          <p className="text-xs text-slate-400 mb-4 max-w-sm mx-auto">
+            Only the creator of a match scoreboard can view and resume scoring. Create a match scoreboard to start scoring.
+          </p>
           <button
             onClick={onScoreNew}
-            className={`px-4 py-2 rounded-xl text-xs font-bold ${BTN_TRANSITION} hover:opacity-95 hover:scale-[1.03]`}
-            style={{ background: COLOR.accentGradient, color: "#ffffff", boxShadow: "0 6px 20px -6px rgba(34,197,94,0.7)" }}
+            className={`px-4 py-2 rounded-xl text-xs font-bold ${BTN_TRANSITION}`}
+            style={{ backgroundColor: COLOR.accent, color: "#000" }}
           >
             Create Match
           </button>
         </div>
       )}
 
-      {/* Live & In Progress Section */}
+      {/* Live & In Progress Section (Only Creator Can See and Resume) */}
       {inProgress.length > 0 && (
         <div className="space-y-3">
-          <div
-            className="text-xs font-extrabold uppercase tracking-widest px-1 flex items-center gap-2"
-            style={{
-              background: "linear-gradient(135deg,#22c55e 0%,#3b82f6 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text"
-            }}
-          >
-            <span className="w-1 h-3 rounded-full" style={{ background: "linear-gradient(180deg,#22c55e,#3b82f6)" }} />
-            Live & Ongoing
-          </div>
-          {inProgress.map((m, idx) => {
+          <div className="text-xs font-extrabold uppercase tracking-widest text-slate-400 px-1">Live & Ongoing</div>
+          {inProgress.map((m) => {
             const { display: oversDisplay } = formatOvers(m.current_innings_summary?.overs_completed ?? 0);
-            const isCreator = !m.created_by || (user?.id && String(m.created_by) === String(user.id));
-            const ct = CARD_THEMES[idx % CARD_THEMES.length];
             return (
               <div
                 key={m.id}
-                className="p-4 rounded-2xl space-y-3 relative overflow-hidden transition-all hover:scale-[1.005]"
-                style={{
-                  ...cardStyle,
-                  border: `1px solid ${ct.ring}`,
-                  boxShadow: `0 8px 26px -16px ${ct.glow}`
-                }}
+                className="p-4 rounded-2xl space-y-3 relative overflow-hidden transition-all hover:border-emerald-500/40"
+                style={cardStyle}
               >
-                <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ background: ct.grad }} />
-                <div className="pl-2 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {m.status !== "not_started" ? (
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider flex items-center gap-1 text-white shadow-sm" style={{ background: COLOR.redGradient }}>
-                          <span className="w-1.5 h-1.5 rounded-full bg-white cb-live-pulse" /> LIVE
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold text-white shadow-sm" style={{ background: COLOR.blueGradient }}>
-                          UPCOMING
-                        </span>
-                      )}
-                      <span className="text-xs font-mono" style={{ color: COLOR.inkDim }}>{m.venue || "T20 Match"}</span>
-                    </div>
-                    <span className="text-xs font-mono" style={{ color: COLOR.inkDim }}>{m.overs_limit} Overs</span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 items-center">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-8 h-8 rounded-full font-extrabold flex items-center justify-center text-xs text-white shadow-md"
-                        style={{ background: ct.grad, boxShadow: `0 4px 12px -4px ${ct.glow}` }}
-                      >
-                        {teamInitials(m.team1_name)}
-                      </div>
-                      <span className="font-bold text-sm" style={{ color: COLOR.ink }}>{m.team1_name}</span>
-                    </div>
-                    <div className="text-right">
-                      <span
-                        className="text-lg font-black font-mono"
-                        style={{
-                          background: ct.grad,
-                          WebkitBackgroundClip: "text",
-                          WebkitTextFillColor: "transparent",
-                          backgroundClip: "text"
-                        }}
-                      >
-                        {m.status === "not_started" ? "-" : `${m.current_innings_summary?.total_runs ?? 0}/${m.current_innings_summary?.wickets ?? 0}`}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {m.status !== "not_started" ? (
+                      <span className="px-2 py-0.5 rounded-md bg-red-500/20 text-red-400 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 cb-live-pulse" /> LIVE
                       </span>
-                      {m.status !== "not_started" && (
-                        <span className="text-xs block font-mono" style={{ color: COLOR.inkDim }}>({oversDisplay} ov)</span>
-                      )}
-                    </div>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-bold">UPCOMING</span>
+                    )}
+                    <span className="text-xs text-slate-400 font-mono">{m.venue || "T20 Match"}</span>
                   </div>
+                  <span className="text-xs font-mono text-slate-400">{m.overs_limit} Overs</span>
+                </div>
 
-                  <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5" style={{ borderTop: `1px solid ${COLOR.border}` }}>
-                    <span className="text-xs truncate max-w-full sm:max-w-[200px]" style={{ color: COLOR.inkDim }}>
-                      vs {m.team2_name}
-                    </span>
-                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                      {isCreator && (
-                        <button
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            if (!window.confirm(`Are you sure you want to delete "${m.team1_name} vs ${m.team2_name}"? This action cannot be undone.`)) return;
-                            try {
-                              await api(`/api/matches/${m.id}`, { method: "DELETE" });
-                              setMatches((prev) => prev.filter((item) => item.id !== m.id));
-                            } catch (err) {
-                              alert(err.message || "Failed to delete match");
-                            }
-                          }}
-                          className={`px-2.5 py-1.5 rounded-lg text-xs font-bold text-red-400 ${BTN_TRANSITION} hover:scale-105`}
-                          style={{ background: "linear-gradient(135deg,rgba(239,68,68,0.15) 0%,rgba(220,38,38,0.15) 100%)", border: "1px solid rgba(239,68,68,0.35)" }}
-                        >
-                          🗑️ Delete
-                        </button>
-                      )}
-                      {isCreator ? (
-                        <button
-                          onClick={() => onResume(m.id, m)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold text-white ${BTN_TRANSITION} hover:scale-105`}
-                          style={{ background: COLOR.accentGradient, boxShadow: "0 4px 14px -6px rgba(34,197,94,0.7)" }}
-                        >
-                          {m.status === "not_started" ? "Setup XI & Toss" : "Resume Scoring ✍️"}
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => onResume(m.id, m)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold text-white ${BTN_TRANSITION} hover:scale-105`}
-                          style={{ background: COLOR.blueGradient, boxShadow: "0 4px 14px -6px rgba(59,130,246,0.7)" }}
-                        >
-                          View Live Score 👁️
-                        </button>
-                      )}
+                <div className="grid grid-cols-2 gap-2 items-center">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 font-extrabold flex items-center justify-center text-xs">
+                      {teamInitials(m.team1_name)}
                     </div>
+                    <span className="font-bold text-sm text-slate-100">{m.team1_name}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-lg font-black font-mono text-slate-100">
+                      {m.status === "not_started" ? "-" : `${m.current_innings_summary?.total_runs ?? 0}/${m.current_innings_summary?.wickets ?? 0}`}
+                    </span>
+                    {m.status !== "not_started" && (
+                      <span className="text-xs text-slate-400 block font-mono">({oversDisplay} ov)</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                  <span className="text-xs text-slate-400 truncate max-w-full sm:max-w-[200px]">
+                    vs {m.team2_name}
+                  </span>
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!window.confirm(`Are you sure you want to delete "${m.team1_name} vs ${m.team2_name}"? This action cannot be undone.`)) return;
+                        try {
+                          await api(`/api/matches/${m.id}`, { method: "DELETE" });
+                          setMatches((prev) => prev.filter((item) => item.id !== m.id));
+                        } catch (err) {
+                          alert(err.message || "Failed to delete match");
+                        }
+                      }}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 ${BTN_TRANSITION}`}
+                    >
+                      🗑️ Delete
+                    </button>
+                    <button
+                      onClick={() => onResume(m.id, m)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 ${BTN_TRANSITION}`}
+                    >
+                      {m.status === "not_started" ? "Setup XI & Toss" : "Resume Scoring ✍️"}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -677,82 +796,23 @@ function MatchHome({ user, onScoreNew, onResume, onViewScoreboard }) {
       {/* Completed Section with Result Display & Delete for Creator */}
       {completed.length > 0 && (
         <div className="space-y-3">
-          <div
-            className="text-xs font-extrabold uppercase tracking-widest px-1 flex items-center gap-2"
-            style={{
-              background: "linear-gradient(135deg,#f59e0b 0%,#ec4899 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text"
-            }}
-          >
-            <span className="w-1 h-3 rounded-full" style={{ background: "linear-gradient(180deg,#f59e0b,#ec4899)" }} />
-            Completed Matches
-          </div>
-          {completed.map((m, idx) => {
-            const isCreator = !m.created_by || (user?.id && String(m.created_by) === String(user.id));
-            const ct = CARD_THEMES[(idx + 1) % CARD_THEMES.length];
-            return (
-              <div
-                key={m.id}
-                onClick={() => onViewScoreboard(m.id)}
-                className={`w-full text-left p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 transition-all cursor-pointer relative overflow-hidden hover:scale-[1.005] ${BTN_TRANSITION}`}
-                style={{
-                  ...cardStyle,
-                  border: `1px solid ${ct.ring}`,
-                  boxShadow: `0 6px 22px -16px ${ct.glow}`
-                }}
-              >
-                <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ background: ct.grad }} />
-                <div className="pl-2">
-                  <div className="font-bold text-sm mb-1" style={{ color: COLOR.ink }}>{m.team1_name} vs {m.team2_name}</div>
-                  <div
-                    className="text-xs font-bold flex items-center gap-1.5"
-                    style={{
-                      background: ct.grad,
-                      WebkitBackgroundClip: "text",
-                      WebkitTextFillColor: "transparent",
-                      backgroundClip: "text"
-                    }}
-                  >
-                    <span>🏆</span>
-                    <span>{m.result || "Match completed"}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
-                  {isCreator && (
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        if (!window.confirm(`Are you sure you want to delete completed match "${m.team1_name} vs ${m.team2_name}"?`)) return;
-                        try {
-                          await api(`/api/matches/${m.id}`, { method: "DELETE" });
-                          setMatches((prev) => prev.filter((item) => item.id !== m.id));
-                        } catch (err) {
-                          alert(err.message || "Failed to delete match");
-                        }
-                      }}
-                      className={`px-2.5 py-1.5 rounded-lg text-xs font-bold text-red-400 ${BTN_TRANSITION} hover:scale-105`}
-                      style={{ background: "linear-gradient(135deg,rgba(239,68,68,0.15) 0%,rgba(220,38,38,0.15) 100%)", border: "1px solid rgba(239,68,68,0.35)" }}
-                    >
-                      🗑️ Delete
-                    </button>
-                  )}
-                  <span
-                    className="text-xs font-bold underline shrink-0"
-                    style={{
-                      background: COLOR.blueGradient,
-                      WebkitBackgroundClip: "text",
-                      WebkitTextFillColor: "transparent",
-                      backgroundClip: "text"
-                    }}
-                  >
-                    Full Scorecard →
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+          <div className="text-xs font-extrabold uppercase tracking-widest text-slate-400 px-1">Completed Matches</div>
+          {completed.map((m) => (
+            <CompletedMatchCard
+              key={m.id}
+              match={m}
+              onViewScoreboard={onViewScoreboard}
+              onDelete={async (matchToDelete) => {
+                if (!window.confirm(`Are you sure you want to delete completed match "${matchToDelete.team1_name} vs ${matchToDelete.team2_name}"?`)) return;
+                try {
+                  await api(`/api/matches/${matchToDelete.id}`, { method: "DELETE" });
+                  setMatches((prev) => prev.filter((item) => item.id !== matchToDelete.id));
+                } catch (err) {
+                  alert(err.message || "Failed to delete match");
+                }
+              }}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -814,8 +874,10 @@ function NewMatchForm({ user, matchId, onCreated, onUpdated, onCancel }) {
             team2_name: team2Name.trim(),
             venue: venue.trim() || undefined,
             overs_limit: Number(oversLimit),
+            created_by: user?.id || undefined,
           }),
         });
+        saveCreatedMatchId(res.match_id);
         onCreated(res.match_id);
       }
     } catch (err) {
@@ -826,89 +888,58 @@ function NewMatchForm({ user, matchId, onCreated, onUpdated, onCancel }) {
   }
 
   return (
-    <div className="space-y-4 p-5 rounded-2xl relative overflow-hidden" style={cardStyle}>
-      <div className="absolute top-0 left-0 right-0 h-1" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#f97316)" }} />
+    <div className="space-y-4 p-5 rounded-2xl" style={cardStyle}>
       <SetupProgress step={1} />
-      <h3
-        className="text-lg font-black"
-        style={{
-          background: isLightMode()
-            ? "linear-gradient(135deg,#15803d 0%,#0d9488 50%,#3b82f6 100%)"
-            : "linear-gradient(135deg,#4ade80 0%,#22d3ee 50%,#60a5fa 100%)",
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-          backgroundClip: "text"
-        }}
-      >
+      <h3 className="text-lg font-extrabold text-white">
         {matchId ? "Edit Match Details & Overs" : "Create New Cricket Match"}
       </h3>
 
-      {error && <div className="text-xs p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">{error}</div>}
+      {error && <div className="text-xs p-3 rounded-lg bg-red-500/10 text-red-400">{error}</div>}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-bold block mb-1" style={{ color: COLOR.accent }}>Team 1 (Batting first / Home)</label>
+            <label className="text-xs font-bold text-slate-400 block mb-1">Team 1 (Batting first / Home)</label>
             <input
               type="text"
               value={team1Name}
               onChange={(e) => setTeam1Name(e.target.value)}
               placeholder="e.g. Royal Challengers"
-              className="w-full px-3 py-2 rounded-xl text-sm outline-none transition-all"
-              style={{
-                background: isLightMode() ? "linear-gradient(135deg,#f8fafc 0%,#f0fdf4 100%)" : "linear-gradient(135deg,#111 0%,#101a12 100%)",
-                border: `1px solid ${isLightMode() ? "#a7f3d0" : "rgba(34,197,94,0.3)"}`,
-                color: COLOR.ink
-              }}
+              className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-sm text-white outline-none focus:border-emerald-500"
             />
           </div>
           <div>
-            <label className="text-xs font-bold block mb-1" style={{ color: COLOR.blue }}>Team 2 (Opponent)</label>
+            <label className="text-xs font-bold text-slate-400 block mb-1">Team 2 (Opponent)</label>
             <input
               type="text"
               value={team2Name}
               onChange={(e) => setTeam2Name(e.target.value)}
               placeholder="e.g. Super Kings"
-              className="w-full px-3 py-2 rounded-xl text-sm outline-none transition-all"
-              style={{
-                background: isLightMode() ? "linear-gradient(135deg,#f8fafc 0%,#eff6ff 100%)" : "linear-gradient(135deg,#111 0%,#0f1420 100%)",
-                border: `1px solid ${isLightMode() ? "#bfdbfe" : "rgba(59,130,246,0.3)"}`,
-                color: COLOR.ink
-              }}
+              className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-sm text-white outline-none focus:border-emerald-500"
             />
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-bold block mb-1" style={{ color: COLOR.purple }}>Venue / Ground</label>
+            <label className="text-xs font-bold text-slate-400 block mb-1">Venue / Ground</label>
             <input
               type="text"
               value={venue}
               onChange={(e) => setVenue(e.target.value)}
               placeholder="e.g. Eden Gardens"
-              className="w-full px-3 py-2 rounded-xl text-sm outline-none transition-all"
-              style={{
-                background: isLightMode() ? "linear-gradient(135deg,#f8fafc 0%,#f5f3ff 100%)" : "linear-gradient(135deg,#111 0%,#140f1a 100%)",
-                border: `1px solid ${isLightMode() ? "#ddd6fe" : "rgba(168,85,247,0.3)"}`,
-                color: COLOR.ink
-              }}
+              className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-sm text-white outline-none focus:border-emerald-500"
             />
           </div>
           <div>
-            <label className="text-xs font-bold block mb-1" style={{ color: COLOR.amber }}>Overs Per Innings</label>
+            <label className="text-xs font-bold text-slate-400 block mb-1">Overs Per Innings</label>
             <input
               type="number"
               min="1"
               max="50"
               value={oversLimit}
               onChange={(e) => setOversLimit(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl text-sm font-mono outline-none transition-all"
-              style={{
-                background: isLightMode() ? "linear-gradient(135deg,#f8fafc 0%,#fffbeb 100%)" : "linear-gradient(135deg,#111 0%,#1a1408 100%)",
-                border: `1px solid ${isLightMode() ? "#fde68a" : "rgba(245,158,11,0.3)"}`,
-                color: COLOR.ink
-              }}
+              className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-sm text-white font-mono outline-none focus:border-emerald-500"
             />
           </div>
         </div>
@@ -917,16 +948,14 @@ function NewMatchForm({ user, matchId, onCreated, onUpdated, onCancel }) {
           <button
             type="submit"
             disabled={!canSubmit}
-            className={`flex-1 py-2.5 rounded-xl font-bold text-sm text-white disabled:opacity-40 ${BTN_TRANSITION} hover:opacity-95 hover:scale-[1.01]`}
-            style={{ background: COLOR.accentGradient, boxShadow: "0 6px 20px -6px rgba(34,197,94,0.7)" }}
+            className={`flex-1 py-2.5 rounded-xl font-bold text-sm bg-emerald-500 text-black disabled:opacity-40 ${BTN_TRANSITION}`}
           >
             {submitting ? "Saving..." : matchId ? "Save Match Updates ✓" : "Next: Playing XI →"}
           </button>
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2.5 rounded-xl font-bold text-xs"
-            style={{ background: COLOR.surfaceRaised, color: COLOR.inkDim }}
+            className="px-4 py-2.5 rounded-xl font-bold text-xs bg-slate-800 text-slate-300"
           >
             Cancel
           </button>
@@ -1011,63 +1040,42 @@ function SquadForm({ matchId, onDone, onBack, onCancel }) {
   const team2Title = existingSquads?.team2?.name || "Team 2";
 
   return (
-    <div className="space-y-4 p-5 rounded-2xl relative overflow-hidden" style={cardStyle}>
-      <div className="absolute top-0 left-0 right-0 h-1" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#f97316)" }} />
+    <div className="space-y-4 p-5 rounded-2xl" style={cardStyle}>
       <SetupProgress step={2} />
-      <h3
-        className="text-lg font-black flex items-center justify-between"
-        style={{
-          background: isLightMode()
-            ? "linear-gradient(135deg,#15803d 0%,#0d9488 50%,#3b82f6 100%)"
-            : "linear-gradient(135deg,#4ade80 0%,#22d3ee 50%,#60a5fa 100%)",
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-          backgroundClip: "text"
-        }}
-      >
+      <h3 className="text-lg font-extrabold text-white flex items-center justify-between">
         <span>Playing XI Squads</span>
       </h3>
 
-      <p className="text-xs" style={{ color: COLOR.inkDim }}>Enter or edit player names (one per line) for each team.</p>
+      <p className="text-xs text-slate-400">Enter or edit player names (one per line) for each team.</p>
 
       {successMsg && (
-        <div className="text-xs p-3 rounded-xl font-extrabold text-white shadow-md" style={{ background: COLOR.accentGradient, boxShadow: "0 6px 20px -6px rgba(34,197,94,0.7)" }}>
+        <div className="text-xs p-3 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-extrabold">
           {successMsg}
         </div>
       )}
 
-      {error && <div className="text-xs p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">{error}</div>}
+      {error && <div className="text-xs p-3 rounded-lg bg-red-500/10 text-red-400">{error}</div>}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-bold block mb-1" style={{ color: COLOR.accent }}>{team1Title} Roster</label>
+            <label className="text-xs font-bold text-emerald-400 block mb-1">{team1Title} Roster</label>
             <textarea
               rows="6"
               value={t1Players}
               onChange={(e) => setT1Players(e.target.value)}
               placeholder="Virat Kohli&#10;Rohit Sharma&#10;KL Rahul"
-              className="w-full p-3 rounded-xl text-xs outline-none font-mono transition-all"
-              style={{
-                background: isLightMode() ? "linear-gradient(135deg,#f8fafc 0%,#f0fdf4 100%)" : "linear-gradient(135deg,#111 0%,#101a12 100%)",
-                border: `1px solid ${isLightMode() ? "#a7f3d0" : "rgba(34,197,94,0.3)"}`,
-                color: COLOR.ink
-              }}
+              className="w-full p-3 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white outline-none focus:border-emerald-500 font-mono"
             />
           </div>
           <div>
-            <label className="text-xs font-bold block mb-1" style={{ color: COLOR.blue }}>{team2Title} Roster</label>
+            <label className="text-xs font-bold text-sky-400 block mb-1">{team2Title} Roster</label>
             <textarea
               rows="6"
               value={t2Players}
               onChange={(e) => setT2Players(e.target.value)}
               placeholder="Steve Smith&#10;David Warner&#10;Pat Cummins"
-              className="w-full p-3 rounded-xl text-xs outline-none font-mono transition-all"
-              style={{
-                background: isLightMode() ? "linear-gradient(135deg,#f8fafc 0%,#eff6ff 100%)" : "linear-gradient(135deg,#111 0%,#0f1420 100%)",
-                border: `1px solid ${isLightMode() ? "#bfdbfe" : "rgba(59,130,246,0.3)"}`,
-                color: COLOR.ink
-              }}
+              className="w-full p-3 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white outline-none focus:border-sky-500 font-mono"
             />
           </div>
         </div>
@@ -1077,8 +1085,7 @@ function SquadForm({ matchId, onDone, onBack, onCancel }) {
             <button
               type="button"
               onClick={onBack}
-              className="px-3.5 py-2.5 rounded-xl font-bold text-xs"
-              style={{ background: COLOR.surfaceRaised, color: COLOR.inkDim }}
+              className="px-3.5 py-2.5 rounded-xl font-bold text-xs bg-slate-800 text-slate-300 hover:text-white"
             >
               ← Back to Details
             </button>
@@ -1086,8 +1093,7 @@ function SquadForm({ matchId, onDone, onBack, onCancel }) {
           <button
             type="submit"
             disabled={submitting}
-            className={`flex-1 py-2.5 rounded-xl font-bold text-sm text-white ${BTN_TRANSITION} hover:opacity-95 hover:scale-[1.01]`}
-            style={{ background: COLOR.accentGradient, boxShadow: "0 6px 20px -6px rgba(34,197,94,0.7)" }}
+            className={`flex-1 py-2.5 rounded-xl font-bold text-sm bg-emerald-500 text-black ${BTN_TRANSITION}`}
           >
             {submitting ? "Saving Squads..." : "Save Squads & Next: Toss →"}
           </button>
@@ -1135,38 +1141,24 @@ function TossForm({ matchId, onDone, onBack, onCancel }) {
   const team2Name = squads?.team2?.name || "Team 2";
 
   return (
-    <div className="space-y-4 p-5 rounded-2xl relative overflow-hidden" style={cardStyle}>
-      <div className="absolute top-0 left-0 right-0 h-1" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#f97316)" }} />
+    <div className="space-y-4 p-5 rounded-2xl" style={cardStyle}>
       <SetupProgress step={3} />
-      <h3
-        className="text-lg font-black"
-        style={{
-          background: isLightMode()
-            ? "linear-gradient(135deg,#15803d 0%,#0d9488 50%,#3b82f6 100%)"
-            : "linear-gradient(135deg,#4ade80 0%,#22d3ee 50%,#60a5fa 100%)",
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-          backgroundClip: "text"
-        }}
-      >
-        Toss Decision
-      </h3>
+      <h3 className="text-lg font-extrabold text-white">Toss Decision</h3>
 
-      {error && <div className="text-xs p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">{error}</div>}
+      {error && <div className="text-xs p-3 rounded-lg bg-red-500/10 text-red-400">{error}</div>}
 
       <div className="space-y-4">
         <div>
-          <label className="text-xs font-bold block mb-2" style={{ color: COLOR.inkDim }}>Who won the toss?</label>
+          <label className="text-xs font-bold text-slate-400 block mb-2">Who won the toss?</label>
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
               onClick={() => setTossWinner("team1")}
-              className={`p-3 rounded-xl text-xs font-bold ${BTN_TRANSITION} hover:scale-[1.02]`}
+              className={`p-3 rounded-xl text-xs font-bold border ${BTN_TRANSITION}`}
               style={{
-                background: tossWinner === "team1" ? COLOR.accentGradient : COLOR.surfaceRaised,
-                color: tossWinner === "team1" ? "#ffffff" : COLOR.ink,
-                border: tossWinner === "team1" ? "1px solid transparent" : `1px solid ${COLOR.border}`,
-                boxShadow: tossWinner === "team1" ? "0 6px 18px -6px rgba(34,197,94,0.7)" : "none",
+                backgroundColor: tossWinner === "team1" ? COLOR.accentGlow : COLOR.surfaceRaised,
+                color: tossWinner === "team1" ? COLOR.accent : COLOR.ink,
+                borderColor: tossWinner === "team1" ? COLOR.accent : COLOR.border,
               }}
             >
               {team1Name}
@@ -1174,12 +1166,11 @@ function TossForm({ matchId, onDone, onBack, onCancel }) {
             <button
               type="button"
               onClick={() => setTossWinner("team2")}
-              className={`p-3 rounded-xl text-xs font-bold ${BTN_TRANSITION} hover:scale-[1.02]`}
+              className={`p-3 rounded-xl text-xs font-bold border ${BTN_TRANSITION}`}
               style={{
-                background: tossWinner === "team2" ? COLOR.accentGradient : COLOR.surfaceRaised,
-                color: tossWinner === "team2" ? "#ffffff" : COLOR.ink,
-                border: tossWinner === "team2" ? "1px solid transparent" : `1px solid ${COLOR.border}`,
-                boxShadow: tossWinner === "team2" ? "0 6px 18px -6px rgba(34,197,94,0.7)" : "none",
+                backgroundColor: tossWinner === "team2" ? COLOR.accentGlow : COLOR.surfaceRaised,
+                color: tossWinner === "team2" ? COLOR.accent : COLOR.ink,
+                borderColor: tossWinner === "team2" ? COLOR.accent : COLOR.border,
               }}
             >
               {team2Name}
@@ -1188,17 +1179,16 @@ function TossForm({ matchId, onDone, onBack, onCancel }) {
         </div>
 
         <div>
-          <label className="text-xs font-bold block mb-2" style={{ color: COLOR.inkDim }}>Elected to?</label>
+          <label className="text-xs font-bold text-slate-400 block mb-2">Elected to?</label>
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
               onClick={() => setDecision("bat")}
-              className={`p-3 rounded-xl text-xs font-bold ${BTN_TRANSITION} hover:scale-[1.02]`}
+              className={`p-3 rounded-xl text-xs font-bold border ${BTN_TRANSITION}`}
               style={{
-                background: decision === "bat" ? COLOR.blueGradient : COLOR.surfaceRaised,
-                color: decision === "bat" ? "#ffffff" : COLOR.ink,
-                border: decision === "bat" ? "1px solid transparent" : `1px solid ${COLOR.border}`,
-                boxShadow: decision === "bat" ? "0 6px 18px -6px rgba(59,130,246,0.7)" : "none",
+                backgroundColor: decision === "bat" ? "rgba(56, 189, 248, 0.15)" : COLOR.surfaceRaised,
+                color: decision === "bat" ? COLOR.blue : COLOR.ink,
+                borderColor: decision === "bat" ? COLOR.blue : COLOR.border,
               }}
             >
               Bat First 🏏
@@ -1206,12 +1196,11 @@ function TossForm({ matchId, onDone, onBack, onCancel }) {
             <button
               type="button"
               onClick={() => setDecision("bowl")}
-              className={`p-3 rounded-xl text-xs font-bold ${BTN_TRANSITION} hover:scale-[1.02]`}
+              className={`p-3 rounded-xl text-xs font-bold border ${BTN_TRANSITION}`}
               style={{
-                background: decision === "bowl" ? COLOR.blueGradient : COLOR.surfaceRaised,
-                color: decision === "bowl" ? "#ffffff" : COLOR.ink,
-                border: decision === "bowl" ? "1px solid transparent" : `1px solid ${COLOR.border}`,
-                boxShadow: decision === "bowl" ? "0 6px 18px -6px rgba(59,130,246,0.7)" : "none",
+                backgroundColor: decision === "bowl" ? "rgba(56, 189, 248, 0.15)" : COLOR.surfaceRaised,
+                color: decision === "bowl" ? COLOR.blue : COLOR.ink,
+                borderColor: decision === "bowl" ? COLOR.blue : COLOR.border,
               }}
             >
               Bowl First ⚾
@@ -1224,8 +1213,7 @@ function TossForm({ matchId, onDone, onBack, onCancel }) {
             <button
               type="button"
               onClick={onBack}
-              className="px-3.5 py-3 rounded-xl font-bold text-xs"
-              style={{ background: COLOR.surfaceRaised, color: COLOR.inkDim }}
+              className="px-3.5 py-3 rounded-xl font-bold text-xs bg-slate-800 text-slate-300 hover:text-white"
             >
               ← Edit Squads
             </button>
@@ -1233,8 +1221,7 @@ function TossForm({ matchId, onDone, onBack, onCancel }) {
           <button
             onClick={handleSubmit}
             disabled={submitting}
-            className={`flex-1 py-3 rounded-xl font-extrabold text-sm text-white ${BTN_TRANSITION} hover:opacity-95 hover:scale-[1.01]`}
-            style={{ background: COLOR.accentGradient, boxShadow: "0 8px 24px -6px rgba(34,197,94,0.7)" }}
+            className={`flex-1 py-3 rounded-xl font-extrabold text-sm bg-emerald-500 text-black shadow-lg ${BTN_TRANSITION}`}
           >
             {submitting ? "Saving Toss..." : "Select Opening Lineup ➔"}
           </button>
@@ -1247,7 +1234,7 @@ function TossForm({ matchId, onDone, onBack, onCancel }) {
 /* ============================================================================
    GOOGLE & CRICBUZZ MATCH LIVE CONSOLE
    ============================================================================ */
-function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
+function MatchLiveConsole({ user, matchId, onBack, onChangeStage, onMatchComplete }) {
   const [squads, setSquads] = useState(null);
   const [live, setLive] = useState(null);
   const [prompts, setPrompts] = useState(null);
@@ -1322,7 +1309,7 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
   }, [matchId, loadScorecard]);
 
   // Determine if the current user is the match creator/scorer
-  const isCreator = !live?.match?.created_by || (user?.id && String(live?.match?.created_by) === String(user.id));
+  const isCreator = isMatchCreator(live?.match, user);
 
   // Real-time asynchronous polling: ONLY for viewers (creators receive instant state via action responses)
   useEffect(() => {
@@ -1432,7 +1419,7 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
     const isOverBoundary = !currentBowler && Number(live.current_innings?.overs_completed || 0) > 0;
     if (!bowler_id || isOverBoundary) {
       setShowBowlerPicker(true);
-      setToast({ text: "Please click 'Start Next Over' to select a bowler", color: COLOR.blue });
+      setToast({ text: "Please click 'Start Next Over' to select a bowler", color: COLOR.sky });
       return;
     }
 
@@ -1654,7 +1641,8 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
     setBusy(true);
     try {
       await api(`/api/matches/${matchId}/complete`, { method: "POST", body: JSON.stringify({ result }) });
-      onMatchComplete();
+      const freshLive = await api(`/api/matches/${matchId}/live`);
+      setLive(freshLive);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1682,70 +1670,174 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
     return addedPlayer?.id || null;
   }
 
-  if (error) return <div className="text-xs p-4 bg-red-500/10 text-red-400 rounded-xl">Error: {error}</div>;
+  if (error && !showBowlerPicker) {
+    const isBowlerConsecutiveError =
+      error.toLowerCase().includes("cannot bowl") ||
+      error.toLowerCase().includes("consecutive") ||
+      error.toLowerCase().includes("different bowler") ||
+      error.toLowerCase().includes("bowler");
+
+    return (
+      <div className="space-y-4">
+        <div className="text-xs p-4 sm:p-5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl shrink-0">⚠️</span>
+            <div className="space-y-0.5">
+              <div className="font-extrabold text-sm text-red-300">
+                {isBowlerConsecutiveError ? "Bowler Selection Warning" : "Error Notice"}
+              </div>
+              <div className="text-xs text-red-400 font-semibold">
+                Error: {error.replace(/^Error:\s*/i, "")}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0 pt-1 sm:pt-0">
+            <button
+              type="button"
+              onClick={async () => {
+                setError(null);
+                if (!live || !squads) {
+                  try {
+                    const [sq, lv] = await Promise.all([
+                      api(`/api/matches/${matchId}/squads`),
+                      api(`/api/matches/${matchId}/live`),
+                    ]);
+                    setSquads(sq);
+                    setLive(lv);
+                  } catch {}
+                }
+                setShowBowlerPicker(true);
+              }}
+              className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-md flex items-center gap-1.5 ${BTN_TRANSITION}`}
+            >
+              <span>Choose Bowler ➔</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              className={`px-3.5 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 ${BTN_TRANSITION}`}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+
+        {(!live || !squads) && (
+          <div className="text-center py-4">
+            <button
+              onClick={() => {
+                setError(null);
+                if (onBack) onBack();
+              }}
+              className={`px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 text-slate-300 ${BTN_TRANSITION}`}
+            >
+              ← Back to Matches
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
   if (!squads || !live) return <div className="text-xs text-slate-400 p-6">Loading Match Console...</div>;
+
+  if (!isCreator) {
+    return (
+      <div className="p-8 text-center space-y-4 rounded-2xl border border-red-500/30 bg-red-500/10 max-w-md mx-auto my-8">
+        <div className="text-4xl">🔒</div>
+        <h3 className="text-base font-extrabold text-red-400">Scoreboard Access Restricted</h3>
+        <p className="text-xs text-slate-300 max-w-sm mx-auto leading-relaxed">
+          Only the creator of this scoreboard can resume and view this live scoreboard. Other users cannot access it.
+        </p>
+        {onBack && (
+          <button
+            onClick={onBack}
+            className={`px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 text-white ${BTN_TRANSITION}`}
+          >
+            ← Back to Matches
+          </button>
+        )}
+      </div>
+    );
+  }
 
   const { match, current_innings, batting, bowling, recent_balls } = live;
 
   if (!live.current_innings) {
     if (live.match?.status === "completed") {
       return (
-        <div className="p-6 rounded-2xl text-center space-y-3 relative overflow-hidden" style={cardStyle}>
-          <div className="absolute top-0 left-0 right-0 h-1" style={{ background: "linear-gradient(90deg,#f59e0b,#ec4899,#a855f7)" }} />
-          <div className="text-3xl">🏆</div>
-          <div
-            className="text-base font-black"
-            style={{
-              background: "linear-gradient(135deg,#f59e0b 0%,#ec4899 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text"
-            }}
-          >
-            Match Completed
+        <div className="p-6 rounded-2xl text-center space-y-4" style={cardStyle}>
+          <div className="text-4xl animate-bounce">🏆</div>
+          <div className="text-lg font-black text-white">Match Completed</div>
+          <div className="inline-block px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-extrabold text-sm sm:text-base">
+            {live.match.result || "Match finished"}
           </div>
-          <p className="text-xs font-semibold" style={{ color: COLOR.accent }}>{live.match.result || "Match finished"}</p>
-          <button
-            onClick={() => setActiveTab("scorecard")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold text-white ${BTN_TRANSITION} hover:opacity-95 hover:scale-[1.03]`}
-            style={{ background: COLOR.accentGradient, boxShadow: "0 6px 20px -6px rgba(34,197,94,0.7)" }}
-          >
-            View Full Scorecard ➔
-          </button>
+
+          {live.match.potm_name && (
+            <div className="max-w-md mx-auto p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-slate-900 border border-amber-500/30 text-left space-y-2 shadow-lg shadow-amber-500/5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-xl shrink-0 border border-amber-500/30">
+                  🏅
+                </div>
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-wider text-amber-400">
+                    Man of the Match
+                  </div>
+                  <div className="text-sm font-extrabold text-amber-200">
+                    {live.match.potm_name}
+                    {live.match.potm_team && (
+                      <span className="text-xs text-slate-400 font-normal ml-2">
+                        ({live.match.potm_team})
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {live.match.potm_stats && (
+                <div className="text-xs font-mono font-bold text-amber-300 bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20">
+                  {live.match.potm_stats}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="pt-2">
+            <button
+              onClick={() => {
+                if (onMatchComplete) {
+                  onMatchComplete();
+                } else {
+                  setActiveTab("scorecard");
+                }
+              }}
+              className={`px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-500 text-black shadow-lg shadow-emerald-500/20 hover:brightness-110 ${BTN_TRANSITION}`}
+            >
+              View Full Scoreboard ➔
+            </button>
+          </div>
         </div>
       );
     }
     if (live.first_innings) {
       return (
-        <div className="p-6 rounded-2xl space-y-4 relative overflow-hidden" style={cardStyle}>
-          <div className="absolute top-0 left-0 right-0 h-1" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#f59e0b)" }} />
-          <div className="text-center space-y-2 pb-4" style={{ borderBottom: `1px solid ${COLOR.border}` }}>
+        <div className="p-6 rounded-2xl space-y-4" style={cardStyle}>
+          <div className="text-center space-y-2 border-b border-slate-800 pb-4">
             <span className="text-4xl">🏏</span>
-            <h3
-              className="text-lg font-black"
-              style={{
-                background: "linear-gradient(135deg,#22c55e 0%,#3b82f6 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text"
-              }}
-            >
-              Innings 1 Completed — Innings Break
-            </h3>
-            <p className="text-xs" style={{ color: COLOR.inkDim }}>
-              <strong style={{ color: COLOR.accent }}>{live.first_innings.batting_team}</strong> scored{" "}
-              <strong className="text-sm" style={{ color: COLOR.ink }}>{live.first_innings.total_runs}/{live.first_innings.wickets}</strong> in{" "}
-              <span className="font-mono">{live.first_innings.overs_completed}</span> overs
+            <h3 className="text-lg font-black text-white">Innings 1 Completed — Innings Break</h3>
+            <p className="text-xs text-slate-300">
+              <strong className="text-emerald-400">{live.first_innings.batting_team}</strong> scored{" "}
+              <strong className="text-white text-sm">{live.first_innings.total_runs}/{live.first_innings.wickets}</strong> in{" "}
+              <span className="font-mono text-slate-300">{live.first_innings.overs_completed}</span> overs
             </p>
-            <div className="inline-block px-4 py-1.5 rounded-full text-xs font-black text-white shadow-md" style={{ background: COLOR.amberGradient, boxShadow: "0 6px 18px -6px rgba(245,158,11,0.7)" }}>
+            <div className="inline-block px-4 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-black">
               Target for {live.match.batting_team}: {live.first_innings.target} Runs ({live.match.overs_limit} ov)
             </div>
           </div>
 
           {isCreator ? (
             <div className="space-y-3">
-              <p className="text-xs text-center" style={{ color: COLOR.inkDim }}>
-                Select opening batters for <strong style={{ color: COLOR.accent }}>{live.match.batting_team}</strong> and opening bowler for <strong style={{ color: COLOR.blue }}>{live.match.bowling_team}</strong> to begin the 2nd innings chase.
+              <p className="text-xs text-slate-400 text-center">
+                Select opening batters for <strong className="text-emerald-400">{live.match.batting_team}</strong> and opening bowler for <strong className="text-sky-400">{live.match.bowling_team}</strong> to begin the 2nd innings chase.
               </p>
               <OpeningSelectors
                 squads={squads}
@@ -1757,7 +1849,7 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
               />
             </div>
           ) : (
-            <div className="text-center py-4 text-xs" style={{ color: COLOR.inkDim }}>
+            <div className="text-center py-4 text-xs text-slate-400">
               Waiting for the match scorer to start the 2nd innings...
             </div>
           )}
@@ -1769,8 +1861,8 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
       return (
         <div className="p-6 rounded-2xl text-center space-y-2" style={cardStyle}>
           <div className="text-2xl">⏳</div>
-          <div className="text-sm font-bold" style={{ color: COLOR.ink }}>Match Setup Pending</div>
-          <p className="text-xs" style={{ color: COLOR.inkDim }}>The match creator has not started the first innings yet.</p>
+          <div className="text-sm font-bold text-slate-200">Match Setup Pending</div>
+          <p className="text-xs text-slate-400">The match creator has not started the first innings yet.</p>
         </div>
       );
     }
@@ -1791,8 +1883,8 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
       return (
         <div className="p-6 rounded-2xl text-center space-y-2" style={cardStyle}>
           <div className="text-2xl">🏏</div>
-          <div className="text-sm font-bold" style={{ color: COLOR.ink }}>Wicket Fallen</div>
-          <p className="text-xs" style={{ color: COLOR.inkDim }}>Waiting for the match scorer to select the next batter...</p>
+          <div className="text-sm font-bold text-slate-200">Wicket Fallen</div>
+          <p className="text-xs text-slate-400">Waiting for the match scorer to select the next batter...</p>
         </div>
       );
     }
@@ -1818,23 +1910,22 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
     return (
       <div className="space-y-3">
         {/* Context banner showing the exact dismissed player, remaining partner, and bowler */}
-        <div className="p-4 rounded-xl flex items-center justify-between relative overflow-hidden" style={{ background: isLightMode() ? "#ffffff" : "#131a26", border: "1px solid rgba(239,68,68,0.4)", boxShadow: "0 6px 22px -12px rgba(239,68,68,0.6)" }}>
-          <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ background: COLOR.redGradient }} />
-          <div className="pl-2">
-            <div className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5" style={{ color: COLOR.red }}>
+        <div className="p-4 rounded-xl bg-slate-900 border border-red-500/30 flex items-center justify-between">
+          <div>
+            <div className="text-xs font-black uppercase tracking-wider text-red-400 flex items-center gap-1.5">
               <span>🔴 Wicket Fallen</span>
-              <span className="font-bold" style={{ color: COLOR.ink }}>— {dismissedName} ({isStrikerOut ? "Striker" : "Non-Striker"}) is Out</span>
+              <span className="text-slate-300 font-bold">— {dismissedName} ({isStrikerOut ? "Striker" : "Non-Striker"}) is Out</span>
             </div>
-            <div className="text-xs mt-1 flex items-center gap-2" style={{ color: COLOR.inkDim }}>
-              <span>Partner at Crease: <strong style={{ color: COLOR.accent }}>{remainingBatter?.name || "Partner"}</strong></span>
+            <div className="text-xs text-slate-300 mt-1 flex items-center gap-2">
+              <span>Partner at Crease: <strong className="text-emerald-400">{remainingBatter?.name || "Partner"}</strong></span>
               {currentBowler && (
-                <span className="font-mono text-[11px] pl-2" style={{ borderLeft: `1px solid ${COLOR.border}` }}>
-                  Bowler: <strong style={{ color: COLOR.blue }}>{currentBowler.name}</strong>
+                <span className="text-slate-400 font-mono text-[11px] border-l border-slate-700 pl-2">
+                  Bowler: <strong className="text-sky-400">{currentBowler.name}</strong>
                 </span>
               )}
             </div>
           </div>
-          <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg text-white shadow-sm" style={{ background: COLOR.amberGradient }}>
+          <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/30">
             Replacing {positionLabel}
           </span>
         </div>
@@ -1868,8 +1959,8 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
       return (
         <div className="p-6 rounded-2xl text-center space-y-2" style={cardStyle}>
           <div className="text-2xl">⚾</div>
-          <div className="text-sm font-bold" style={{ color: COLOR.ink }}>End of Over</div>
-          <p className="text-xs" style={{ color: COLOR.inkDim }}>Waiting for the match scorer to select the next bowler...</p>
+          <div className="text-sm font-bold text-slate-200">End of Over</div>
+          <p className="text-xs text-slate-400">Waiting for the match scorer to select the next bowler...</p>
         </div>
       );
     }
@@ -1882,13 +1973,28 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
 
     return (
       <div className="space-y-3">
-        <div className="p-3.5 rounded-xl flex items-center justify-between text-xs relative overflow-hidden" style={{ background: isLightMode() ? "#ffffff" : "#131a26", border: "1px solid rgba(59,130,246,0.4)", boxShadow: "0 6px 22px -12px rgba(59,130,246,0.6)" }}>
-          <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ background: COLOR.blueGradient }} />
-          <div className="flex items-center gap-2 pl-2">
+        {error && (
+          <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold flex items-center justify-between gap-3 shadow-md">
+            <div className="flex items-center gap-2">
+              <span className="text-base shrink-0">⚠️</span>
+              <span>{error}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white"
+            >
+              ✕ Dismiss
+            </button>
+          </div>
+        )}
+
+        <div className="p-3.5 rounded-xl bg-slate-900 border border-sky-500/30 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
             <span className="text-base">⚾</span>
-            <div style={{ color: COLOR.inkDim }}>
+            <div className="text-slate-300">
               {lastBowler ? (
-                <span><strong style={{ color: COLOR.ink }}>{lastBowler.name}</strong> completed the previous over</span>
+                <span><strong className="text-white">{lastBowler.name}</strong> completed the previous over</span>
               ) : (
                 <span>Select bowler for the next over</span>
               )}
@@ -1896,15 +2002,17 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
           </div>
           <div className="flex items-center gap-2">
             {lastBowler && (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white shadow-sm" style={{ background: COLOR.amberGradient }}>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
                 Cannot bowl consecutive overs
               </span>
             )}
             <button
               type="button"
-              onClick={() => setShowBowlerPicker(false)}
-              className="text-xs px-2.5 py-1 rounded-lg transition"
-              style={{ background: COLOR.surfaceRaised, color: COLOR.inkDim, border: `1px solid ${COLOR.border}` }}
+              onClick={() => {
+                setError(null);
+                setShowBowlerPicker(false);
+              }}
+              className="text-xs px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
             >
               ✕ Back to Scorecard
             </button>
@@ -1918,7 +2026,9 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
             try {
               await runAction(`/api/matches/${matchId}/select-bowler`, { bowler_id: id });
               setShowBowlerPicker(false);
-            } catch {}
+            } catch (err) {
+              setShowBowlerPicker(true);
+            }
           }}
           onAddNew={async (name) => {
             const newId = await addPlayer(bowlingKey, name);
@@ -1926,7 +2036,9 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
               try {
                 await runAction(`/api/matches/${matchId}/select-bowler`, { bowler_id: newId });
                 setShowBowlerPicker(false);
-              } catch {}
+              } catch (err) {
+                setShowBowlerPicker(true);
+              }
             }
             return newId;
           }}
@@ -1946,92 +2058,59 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
       {/* Google & Cricbuzz Hero Match Header */}
       <div
         className="rounded-2xl p-5 relative overflow-hidden space-y-4"
-        style={{ background: COLOR.heroGradient, border: `1px solid ${COLOR.border}`, boxShadow: "0 12px 34px -16px rgba(0,0,0,0.6)" }}
+        style={{ background: COLOR.heroGradient, border: `1px solid ${COLOR.border}` }}
       >
-        <div className="absolute top-0 left-0 right-0 h-1" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#f97316,#ec4899)" }} />
-        <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle,rgba(34,197,94,0.35) 0%,transparent 70%)" }} />
-        <div className="absolute -left-10 -bottom-10 w-40 h-40 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle,rgba(168,85,247,0.3) 0%,transparent 70%)" }} />
-
         {toast && (
           <div
-            className="absolute top-3 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider z-20 shadow-lg cb-slide-down text-white"
-            style={{ background: toast.color, boxShadow: `0 6px 20px -6px ${toast.color}` }}
+            className="absolute top-2 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full text-xs font-black uppercase tracking-wider z-20 shadow-lg cb-slide-down"
+            style={{ backgroundColor: toast.color, color: "#000" }}
           >
             {toast.text}
           </div>
         )}
 
-        <div className="flex items-center justify-between text-xs relative z-10" style={{ color: COLOR.inkDim }}>
+        <div className="flex items-center justify-between text-xs text-slate-400">
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold flex items-center gap-1 text-white shadow-sm" style={{ background: COLOR.redGradient }}>
-              <span className="w-1.5 h-1.5 rounded-full bg-white cb-live-pulse" /> LIVE
+            <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-400 font-extrabold text-[10px] flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 cb-live-pulse" /> LIVE
             </span>
-            <span className="font-semibold" style={{ color: COLOR.ink }}>{match.venue || "Stadium"}</span>
+            <span className="font-semibold text-slate-300">{match.venue || "Stadium"}</span>
           </div>
           <div className="flex items-center gap-2">
             {isSyncing ? (
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 font-mono text-white shadow-sm" style={{ background: COLOR.amberGradient }}>
-                <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" /> Syncing...
+              <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold flex items-center gap-1 font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" /> Syncing...
               </span>
             ) : (
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 font-mono text-white shadow-sm" style={{ background: COLOR.accentGradient }}>
+              <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-bold flex items-center gap-1 font-mono">
                 ⚡ Real-time
               </span>
             )}
-            <span className="font-mono" style={{ color: COLOR.inkDim }}>{match.overs_limit} Overs Match</span>
+            <span className="font-mono text-slate-400">{match.overs_limit} Overs Match</span>
           </div>
         </div>
 
         {/* Score & Teams */}
-        <div className="flex items-center justify-between relative z-10">
+        <div className="flex items-center justify-between">
           <div>
-            <div
-              className="text-xs font-bold uppercase tracking-wider mb-1"
-              style={{
-                background: COLOR.accentGradient,
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text"
-              }}
-            >
+            <div className="text-xs text-emerald-400 font-bold uppercase tracking-wider mb-1">
               {match.batting_team} Batting
             </div>
             <div className="flex items-baseline gap-3">
-              <span
-                className="text-4xl font-black font-mono tracking-tight"
-                style={{
-                  background: isLightMode()
-                    ? "linear-gradient(135deg,#0f172a 0%,#15803d 50%,#3b82f6 100%)"
-                    : "linear-gradient(135deg,#ffffff 0%,#4ade80 50%,#60a5fa 100%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text"
-                }}
-              >
-                {current_innings.total_runs}<span className="text-2xl" style={{ color: COLOR.inkDim, WebkitTextFillColor: COLOR.inkDim }}>/{current_innings.wickets}</span>
+              <span className="text-4xl font-black font-mono tracking-tight text-white">
+                {current_innings.total_runs}<span className="text-2xl text-slate-400">/{current_innings.wickets}</span>
               </span>
-              <span className="text-sm font-bold font-mono" style={{ color: COLOR.inkDim }}>
+              <span className="text-sm font-bold text-slate-400 font-mono">
                 ({inningsOvers.display} / {match.overs_limit} ov)
               </span>
             </div>
           </div>
 
           <div className="text-right space-y-1">
-            <div className="text-xs font-mono" style={{ color: COLOR.inkDim }}>
-              CRR:{" "}
-              <span
-                className="font-bold"
-                style={{
-                  background: COLOR.accentGradient,
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text"
-                }}
-              >
-                {crr}
-              </span>
+            <div className="text-xs font-mono text-slate-300">
+              CRR: <span className="font-bold text-emerald-400">{crr}</span>
             </div>
-            <div className="text-[11px] truncate max-w-[140px]" style={{ color: COLOR.inkDim }}>
+            <div className="text-[11px] text-slate-400 truncate max-w-[140px]">
               vs {match.bowling_team}
             </div>
           </div>
@@ -2039,34 +2118,22 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
 
         {/* 2nd Innings Target & RRR Chase Banner */}
         {live.chase && (
-          <div className="p-3.5 rounded-xl space-y-1.5 relative overflow-hidden" style={{ background: isLightMode() ? "#fffbeb" : "rgba(15,23,42,0.7)", border: "1px solid rgba(245,158,11,0.5)", boxShadow: "0 6px 22px -12px rgba(245,158,11,0.7)" }}>
-            <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: COLOR.amberGradient }} />
+          <div className="p-3.5 rounded-xl bg-slate-900/90 border border-amber-500/40 space-y-1.5 shadow-inner">
             <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-1.5 font-bold" style={{ color: COLOR.amber }}>
-                <span className="text-sm">🎯</span> Target: <span className="font-mono text-sm font-black" style={{ color: COLOR.ink }}>{live.chase.target}</span>
+              <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                <span className="text-sm">🎯</span> Target: <span className="font-mono text-white text-sm font-black">{live.chase.target}</span>
               </div>
-              <div className="font-mono text-xs" style={{ color: COLOR.inkDim }}>
-                RRR:{" "}
-                <span
-                  className="font-bold"
-                  style={{
-                    background: COLOR.amberGradient,
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                    backgroundClip: "text"
-                  }}
-                >
-                  {live.chase.required_run_rate}
-                </span>
+              <div className="font-mono text-xs text-slate-300">
+                RRR: <span className="font-bold text-amber-400">{live.chase.required_run_rate}</span>
               </div>
             </div>
-            <div className="text-xs font-semibold flex items-center justify-between" style={{ color: COLOR.ink }}>
+            <div className="text-xs font-semibold text-slate-200 flex items-center justify-between">
               <span>
                 {live.chase.runs_needed > 0
                   ? `${match.batting_team} need ${live.chase.runs_needed} runs from ${live.chase.balls_remaining} balls`
                   : `🏆 ${match.batting_team} achieved the target!`}
               </span>
-              <span className="text-[10px] font-mono" style={{ color: COLOR.inkDim }}>
+              <span className="text-[10px] text-slate-400 font-mono">
                 CRR: {crr}
               </span>
             </div>
@@ -2074,47 +2141,30 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
         )}
 
         {/* Mode Indicator Banner & Quick Setup Editors */}
-        <div className="text-[11px] font-semibold pt-1 flex items-center justify-between relative z-10" style={{ color: COLOR.inkDim, borderTop: `1px solid ${COLOR.border}` }}>
+        <div className="text-[11px] font-semibold text-slate-400 pt-1 flex items-center justify-between border-t border-slate-700/40">
           {isCreator ? (
             <div className="flex items-center justify-between w-full gap-2">
-              <span
-                className="font-bold flex items-center gap-1"
-                style={{
-                  background: COLOR.accentGradient,
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text"
-                }}
-              >
+              <span className="text-emerald-400 font-bold flex items-center gap-1">
                 ✍️ Scorer Console
               </span>
                 {onChangeStage && (
                   <button
                     onClick={() => onChangeStage("edit")}
-                    className={`px-2 py-1 rounded-lg text-[10px] font-bold ${BTN_TRANSITION}`}
-                    style={{ background: COLOR.surfaceRaised, color: COLOR.ink, border: `1px solid ${COLOR.border}` }}
+                    className={`px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-800 text-slate-200 border border-slate-700 hover:border-emerald-500 hover:text-emerald-400 ${BTN_TRANSITION}`}
                   >
                     ⚙️ Edit Overs
                   </button>
                 )}
             </div>
           ) : (
-            <span
-              className="font-bold flex items-center gap-1"
-              style={{
-                background: COLOR.blueGradient,
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text"
-              }}
-            >
+            <span className="text-sky-400 font-bold flex items-center gap-1">
               👁️ Viewer Mode — Auto Live Updates
             </span>
           )}
         </div>
 
         {/* Cricbuzz Sub-Navigation Tabs */}
-        <div className="flex items-center gap-1 pt-3 overflow-x-auto relative z-10" style={{ borderTop: `1px solid ${COLOR.border}` }}>
+        <div className="flex items-center gap-1 border-t border-slate-700/60 pt-3 overflow-x-auto">
           {[
             { id: "live", label: isCreator ? "Overview & Scorer" : "Live Overview" },
             { id: "scorecard", label: "Full Scorecard" },
@@ -2124,12 +2174,11 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap ${BTN_TRANSITION} hover:scale-[1.03]`}
-              style={
-                activeTab === tab.id
-                  ? { background: COLOR.accentGradient, color: "#ffffff", boxShadow: "0 4px 14px -4px rgba(34,197,94,0.7)" }
-                  : { background: "transparent", color: COLOR.inkDim }
-              }
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap ${BTN_TRANSITION}`}
+              style={{
+                backgroundColor: activeTab === tab.id ? COLOR.accent : "transparent",
+                color: activeTab === tab.id ? "#000" : COLOR.inkDim,
+              }}
             >
               {tab.label}
             </button>
@@ -2141,21 +2190,10 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
       {activeTab === "live" && (
         <div className="space-y-4">
           {/* This Over Strip (Google Style) */}
-          <div className="p-4 rounded-2xl space-y-2 relative overflow-hidden" style={cardStyle}>
-            <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7)" }} />
-            <div className="flex items-center justify-between text-xs">
-              <span
-                className="font-extrabold uppercase tracking-wider"
-                style={{
-                  background: "linear-gradient(135deg,#22c55e 0%,#3b82f6 100%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text"
-                }}
-              >
-                This Over Timeline
-              </span>
-              {currentBowler && <span className="font-mono" style={{ color: COLOR.accent }}>Bowler: {currentBowler.name}</span>}
+          <div className="p-4 rounded-2xl space-y-2" style={cardStyle}>
+            <div className="flex items-center justify-between text-xs text-slate-400">
+              <span className="font-extrabold uppercase tracking-wider">This Over Timeline</span>
+              {currentBowler && <span className="font-mono text-emerald-400">Bowler: {currentBowler.name}</span>}
             </div>
 
             <div className="flex items-center gap-2 overflow-x-auto py-1">
@@ -2165,15 +2203,15 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
                 return (
                   <div
                     key={raw.id ?? i}
-                    className="w-9 h-9 rounded-full flex items-center justify-center font-extrabold text-xs shrink-0 font-mono shadow-md"
-                    style={{ backgroundColor: colorDef.bg, color: colorDef.fg, boxShadow: `0 4px 12px -4px ${colorDef.bg}` }}
+                    className="w-9 h-9 rounded-full flex items-center justify-center font-extrabold text-xs shrink-0 font-mono shadow"
+                    style={{ backgroundColor: colorDef.bg, color: colorDef.fg }}
                   >
                     {b.val}
                   </div>
                 );
               })}
               {recent_balls.length === 0 && (
-                <span className="text-xs italic" style={{ color: COLOR.inkFaint }}>No balls bowled yet in this over.</span>
+                <span className="text-xs text-slate-500 italic">No balls bowled yet in this over.</span>
               )}
             </div>
           </div>
@@ -2188,19 +2226,15 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
               return (
                 <div
                   key={b.player_id}
-                  className="p-3.5 rounded-2xl transition-all relative overflow-hidden"
+                  className="p-3.5 rounded-2xl border transition-all"
                   style={{
-                    background: b.is_on_strike
-                      ? (isLightMode() ? "linear-gradient(135deg,#ecfdf5 0%,#f0fdf4 100%)" : "linear-gradient(135deg,#0f1a12 0%,#101a12 100%)")
-                      : COLOR.surface,
-                    border: b.is_on_strike ? `1px solid ${COLOR.accent}` : `1px solid ${COLOR.border}`,
-                    boxShadow: b.is_on_strike ? "0 6px 22px -12px rgba(34,197,94,0.7)" : "none"
+                    backgroundColor: b.is_on_strike ? COLOR.surfaceRaised : COLOR.surface,
+                    borderColor: b.is_on_strike ? COLOR.accent : COLOR.border,
                   }}
                 >
-                  {b.is_on_strike && <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: COLOR.accentGradient }} />}
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold truncate flex items-center gap-1.5" style={{ color: COLOR.ink }}>
-                      {b.is_on_strike && <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 cb-live-pulse" />}
+                    <span className="text-xs font-bold text-white truncate flex items-center gap-1.5">
+                      {b.is_on_strike && <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />}
                       <span className="truncate">{b.name}</span>
                       {isCreator && (
                         <button
@@ -2210,28 +2244,22 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
                             setNewNameInput(b.name);
                           }}
                           title="Rename batsman"
-                          className="p-0.5 rounded text-[11px] transition-colors shrink-0"
-                          style={{ color: COLOR.inkDim }}
+                          className="text-slate-400 hover:text-emerald-400 p-0.5 rounded text-[11px] transition-colors shrink-0"
                         >
                           ✎
                         </button>
                       )}
                     </span>
                     {b.is_on_strike ? (
-                      <span
-                        className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded text-white shadow-sm"
-                        style={{ background: COLOR.accentGradient }}
-                      >
-                        STRIKE
-                      </span>
+                      <span className="text-[9px] font-black text-emerald-400 uppercase">STRIKE</span>
                     ) : (
-                      <span className="text-[9px] font-bold uppercase" style={{ color: COLOR.inkDim }}>NON-STRIKER</span>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">NON-STRIKER</span>
                     )}
                   </div>
-                  <div className="text-base font-black font-mono" style={{ color: COLOR.ink }}>
-                    {b.runs} <span className="text-xs font-normal" style={{ color: COLOR.inkDim }}>({b.balls_faced}b)</span>
+                  <div className="text-base font-black font-mono text-slate-100">
+                    {b.runs} <span className="text-xs text-slate-400 font-normal">({b.balls_faced}b)</span>
                   </div>
-                  <div className="text-[10px] font-mono mt-1" style={{ color: COLOR.inkDim }}>SR: {sr}</div>
+                  <div className="text-[10px] text-slate-400 font-mono mt-1">SR: {sr}</div>
                 </div>
               );
             })}
@@ -2240,20 +2268,10 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
               const bOvers = correctBuggyBowlerOvers(b.overs_bowled);
               const er = bOvers.trueDecimal > 0 ? (b.runs_conceded / bOvers.trueDecimal).toFixed(2) : "0.00";
               return (
-                <div key={b.player_id} className="p-3.5 rounded-2xl col-span-2 relative overflow-hidden" style={{ background: isLightMode() ? "linear-gradient(135deg,#eff6ff 0%,#f5f3ff 100%)" : "linear-gradient(135deg,#0f1420 0%,#140f1a 100%)", border: `1px solid ${COLOR.blue}`, boxShadow: "0 6px 22px -12px rgba(59,130,246,0.7)" }}>
-                  <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: COLOR.blueGradient }} />
-                  <div className="text-xs font-bold mb-1 flex items-center justify-between">
+                <div key={b.player_id} className="p-3.5 rounded-2xl border border-sky-500/40 bg-slate-900 col-span-2">
+                  <div className="text-xs font-bold text-sky-400 mb-1 flex items-center justify-between">
                     <div className="flex items-center gap-1.5 truncate">
-                      <span
-                        style={{
-                          background: COLOR.blueGradient,
-                          WebkitBackgroundClip: "text",
-                          WebkitTextFillColor: "transparent",
-                          backgroundClip: "text"
-                        }}
-                      >
-                        Current Bowler: {b.name}
-                      </span>
+                      <span>Current Bowler: {b.name}</span>
                       {isCreator && (
                         <button
                           type="button"
@@ -2262,39 +2280,27 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
                             setNewNameInput(b.name);
                           }}
                           title="Rename bowler"
-                          className="p-0.5 rounded text-[11px] transition-colors"
-                          style={{ color: COLOR.inkDim }}
+                          className="text-slate-400 hover:text-sky-400 p-0.5 rounded text-[11px] transition-colors"
                         >
                           ✎
                         </button>
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center justify-between text-xs font-mono" style={{ color: COLOR.inkDim }}>
+                  <div className="flex items-center justify-between text-xs font-mono text-slate-300">
                     <span>{bOvers.display} Overs</span>
                     <span>{b.wickets} Wkts</span>
                     <span>{b.runs_conceded} Runs</span>
-                    <span
-                      className="font-bold"
-                      style={{
-                        background: COLOR.blueGradient,
-                        WebkitBackgroundClip: "text",
-                        WebkitTextFillColor: "transparent",
-                        backgroundClip: "text"
-                      }}
-                    >
-                      ER {er}
-                    </span>
+                    <span className="text-sky-400 font-bold">ER {er}</span>
                   </div>
                 </div>
               );
             })}
 
             {!currentBowler && live.last_bowler_name && (
-              <div className="p-3 rounded-2xl col-span-2 flex items-center justify-between text-xs relative overflow-hidden" style={{ background: COLOR.surfaceRaised, border: `1px solid ${COLOR.border}` }}>
-                <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: COLOR.amberGradient }} />
-                <span className="pl-2" style={{ color: COLOR.inkDim }}>Previous Bowler: <strong style={{ color: COLOR.ink }}>{live.last_bowler_name}</strong></span>
-                <span className="text-[11px] px-2 py-0.5 rounded text-white shadow-sm font-mono" style={{ background: COLOR.amberGradient }}>
+              <div className="p-3 rounded-2xl border border-slate-700 bg-slate-900/60 col-span-2 flex items-center justify-between text-xs text-slate-300">
+                <span className="text-slate-400">Previous Bowler: <strong className="text-white">{live.last_bowler_name}</strong></span>
+                <span className="text-amber-400/80 font-mono text-[11px] px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
                   Cannot bowl consecutive overs
                 </span>
               </div>
@@ -2302,48 +2308,34 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
           </div>
 
           {!isCreator && isOverEnded && !currentBowler && (
-            <div className="p-3.5 rounded-2xl text-center text-xs relative overflow-hidden" style={{ background: COLOR.surface, border: `1px solid rgba(59,130,246,0.4)` }}>
-              <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: COLOR.blueGradient }} />
-              <span style={{ color: COLOR.inkDim }}>⚾ Over {formatOvers(current_innings.overs_completed).display} Completed. Waiting for next over to begin...</span>
+            <div className="p-3.5 rounded-2xl bg-slate-900 border border-sky-500/30 text-center text-xs text-slate-300">
+              ⚾ Over {formatOvers(current_innings.overs_completed).display} Completed. Waiting for next over to begin...
             </div>
           )}
 
           {/* INTERIOR SCORER CONTROL PANEL (ONLY VISIBLE TO MATCH CREATOR) */}
           {isCreator && (
-            <div className="p-4 rounded-2xl space-y-3 relative overflow-hidden" style={{ ...cardStyle, border: `1px solid ${COLOR.accent}`, boxShadow: "0 8px 26px -14px rgba(34,197,94,0.7)" }}>
-              <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: COLOR.accentGradient }} />
+            <div className="p-4 rounded-2xl space-y-3" style={{ ...cardStyle, borderColor: COLOR.accent }}>
               <div className="flex items-center justify-between">
-                <span
-                  className="text-xs font-extrabold uppercase tracking-widest"
-                  style={{
-                    background: COLOR.accentGradient,
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                    backgroundClip: "text"
-                  }}
-                >
-                  Scorer Controls
-                </span>
+                <span className="text-xs font-extrabold uppercase tracking-widest text-emerald-400">Scorer Controls</span>
                 <button
                   onClick={handleUndo}
                   disabled={isSyncing && scoringQueueRef.current.length > 0}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold ${BTN_TRANSITION}`}
-                  style={{ background: COLOR.surfaceRaised, color: COLOR.inkDim, border: `1px solid ${COLOR.border}` }}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 ${BTN_TRANSITION}`}
                 >
                   ↩ Undo Ball
                 </button>
               </div>
 
               {isOverEnded && !currentBowler ? (
-                <div className="p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 relative overflow-hidden" style={{ background: isLightMode() ? "linear-gradient(135deg,#eff6ff 0%,#ecfeff 100%)" : "linear-gradient(135deg,#0f1420 0%,#0a1a1a 100%)", border: `1px solid ${COLOR.blue}`, boxShadow: "0 8px 26px -14px rgba(59,130,246,0.7)" }}>
-                  <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: COLOR.blueGradient }} />
-                  <div className="flex items-center gap-2.5 text-xs">
+                <div className="p-4 rounded-xl bg-gradient-to-r from-sky-950/70 to-slate-900 border border-sky-500/40 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
+                  <div className="flex items-center gap-2.5 text-xs text-slate-200">
                     <span className="text-2xl">⚾</span>
                     <div>
-                      <div className="font-bold text-sm" style={{ color: COLOR.ink }}>
+                      <div className="font-bold text-white text-sm">
                         Over {formatOvers(current_innings.overs_completed).display} Completed
                       </div>
-                      <div className="text-[11px] mt-0.5" style={{ color: COLOR.inkDim }}>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
                         {live.last_bowler_name
                           ? `${live.last_bowler_name} bowled the last over.`
                           : "Review previous deliveries or proceed to the next over."}
@@ -2353,8 +2345,7 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
                   <button
                     type="button"
                     onClick={() => setShowBowlerPicker(true)}
-                    className="w-full sm:w-auto px-5 py-3 rounded-xl font-black text-xs uppercase tracking-wider text-white shadow-lg flex items-center justify-center gap-2 transition active:scale-95"
-                    style={{ background: COLOR.blueGradient, boxShadow: "0 8px 24px -6px rgba(59,130,246,0.8)" }}
+                    className="w-full sm:w-auto px-5 py-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 transition active:scale-95"
                   >
                     <span>Start Next Over (Choose Bowler) ➔</span>
                   </button>
@@ -2363,27 +2354,19 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
                 <>
                   {/* Run Buttons — 0ms Instant Click with Background Sync */}
                   <div className="grid grid-cols-6 gap-2">
-                    {[0, 1, 2, 3, 4, 6].map((r) => {
-                      const runGrad = r === 6
-                        ? COLOR.purpleGradient
-                        : r === 4
-                        ? COLOR.accentGradient
-                        : null;
-                      return (
-                        <button
-                          key={r}
-                          onClick={() => recordBall({ runs: r })}
-                          className={`py-3 rounded-xl font-black text-sm font-mono shadow-md ${BTN_TRANSITION} hover:scale-[1.05]`}
-                          style={{
-                            background: runGrad || COLOR.surfaceRaised,
-                            color: runGrad ? "#ffffff" : COLOR.ink,
-                            boxShadow: runGrad ? `0 6px 18px -6px ${r === 6 ? "rgba(168,85,247,0.7)" : "rgba(34,197,94,0.7)"}` : "none"
-                          }}
-                        >
-                          {r}
-                        </button>
-                      );
-                    })}
+                    {[0, 1, 2, 3, 4, 6].map((r) => (
+                      <button
+                        key={r}
+                        onClick={() => recordBall({ runs: r })}
+                        className={`py-3 rounded-xl font-black text-sm font-mono shadow ${BTN_TRANSITION}`}
+                        style={{
+                          backgroundColor: r === 6 ? COLOR.purple : r === 4 ? COLOR.accent : COLOR.surfaceRaised,
+                          color: r === 6 || r === 4 ? "#ffffff" : COLOR.ink,
+                        }}
+                      >
+                        {r}
+                      </button>
+                    ))}
                   </div>
 
                   {/* Extras Buttons */}
@@ -2392,12 +2375,7 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
                       <button
                         key={t}
                         onClick={() => setExtraPicker(t)}
-                        className={`py-2 rounded-xl text-xs font-bold ${BTN_TRANSITION} hover:scale-[1.03]`}
-                        style={{
-                          background: isLightMode() ? "linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%)" : "linear-gradient(135deg,rgba(245,158,11,0.15) 0%,rgba(239,68,68,0.12) 100%)",
-                          color: COLOR.amber,
-                          border: `1px solid ${isLightMode() ? "#fde68a" : "rgba(245,158,11,0.4)"}`
-                        }}
+                        className={`py-2 rounded-xl text-xs font-bold border border-amber-500/40 text-amber-400 bg-amber-500/10 ${BTN_TRANSITION}`}
                       >
                         {t === "noball" ? "No Ball" : t === "legbye" ? "Leg Bye" : t.toUpperCase()}
                       </button>
@@ -2407,8 +2385,7 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
                   {/* Wicket Button */}
                   <button
                     onClick={() => setWicketPanelOpen(true)}
-                    className={`w-full py-3 rounded-xl font-extrabold text-sm text-white shadow-lg ${BTN_TRANSITION} hover:scale-[1.01]`}
-                    style={{ background: COLOR.redGradient, boxShadow: "0 8px 24px -6px rgba(239,68,68,0.8)" }}
+                    className={`w-full py-3 rounded-xl font-extrabold text-sm bg-red-500 text-white shadow-lg ${BTN_TRANSITION}`}
                   >
                     OUT / WICKET 🔴
                   </button>
@@ -2445,21 +2422,12 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
 
       {/* TAB 3: BALL-BY-BALL COMMENTARY */}
       {activeTab === "commentary" && (
-        <div className="p-4 rounded-2xl space-y-3 relative overflow-hidden" style={cardStyle}>
-          <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg,#3b82f6,#a855f7,#ec4899)" }} />
+        <div className="p-4 rounded-2xl space-y-3" style={cardStyle}>
           <div className="flex items-center justify-between">
-            <h4
-              className="text-xs font-extrabold uppercase tracking-wider"
-              style={{
-                background: "linear-gradient(135deg,#3b82f6 0%,#a855f7 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text"
-              }}
-            >
+            <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
               Ball-by-Ball Delivery Log ({match.batting_team})
             </h4>
-            <span className="text-[10px] font-mono" style={{ color: COLOR.inkFaint }}>Latest to Earliest</span>
+            <span className="text-[10px] text-slate-500 font-mono">Latest to Earliest</span>
           </div>
           <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
             {(live.commentary_balls && live.commentary_balls.length > 0 ? live.commentary_balls : recent_balls.slice().reverse()).map((b, idx) => {
@@ -2487,46 +2455,33 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
               return (
                 <div
                   key={b.id || idx}
-                  className="p-3 rounded-xl flex items-start gap-3 text-xs transition-colors relative overflow-hidden"
-                  style={{ background: isLightMode() ? "linear-gradient(135deg,#f8fafc 0%,#ffffff 100%)" : "linear-gradient(135deg,#131a26 0%,#1a2333 100%)", border: `1px solid ${COLOR.border}` }}
+                  className="p-3 rounded-xl bg-slate-900/90 border border-slate-800/80 flex items-start gap-3 text-xs hover:border-slate-700 transition-colors"
                 >
-                  <div className="absolute left-0 top-0 bottom-0 w-0.5" style={{ background: badge.bg }} />
-                  <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5 pl-1">
+                  <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5">
                     <span
                       className="w-8 h-8 rounded-full font-bold flex items-center justify-center font-mono text-xs shadow-md"
-                      style={{ backgroundColor: badge.bg, color: badge.fg, boxShadow: `0 4px 12px -4px ${badge.bg}` }}
+                      style={{ backgroundColor: badge.bg, color: badge.fg }}
                     >
                       {ballClass.val}
                     </span>
-                    <span className="text-[10px] font-mono font-bold" style={{ color: COLOR.inkDim }}>
+                    <span className="text-[10px] font-mono font-bold text-slate-400">
                       {overDeliveryText.replace(" over", " ov")}
                     </span>
                   </div>
 
                   <div className="flex-1 min-w-0 space-y-0.5">
                     <div className="flex items-center justify-between">
-                      <span
-                        className="font-bold"
-                        style={{
-                          color: b.is_wicket
-                            ? COLOR.red
-                            : b.runs === 4
-                            ? COLOR.accent
-                            : b.runs === 6
-                            ? COLOR.purple
-                            : COLOR.ink
-                        }}
-                      >
+                      <span className={`font-bold ${b.is_wicket ? "text-red-400" : b.runs === 4 ? "text-emerald-400" : b.runs === 6 ? "text-purple-400" : "text-white"}`}>
                         {overDeliveryText} {eventDesc}
                       </span>
                       {b.extra_type && (
-                        <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded text-white shadow-sm" style={{ background: COLOR.amberGradient }}>
+                        <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
                           {b.extra_type}
                         </span>
                       )}
                     </div>
                     {matchup && (
-                      <p className="text-[11px] truncate" style={{ color: COLOR.inkDim }}>
+                      <p className="text-[11px] text-slate-400 truncate">
                         {matchup}
                       </p>
                     )}
@@ -2535,7 +2490,7 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
               );
             })}
             {(!live.commentary_balls || live.commentary_balls.length === 0) && recent_balls.length === 0 && (
-              <div className="text-xs py-8 text-center" style={{ color: COLOR.inkFaint }}>No deliveries bowled yet in this innings.</div>
+              <div className="text-xs text-slate-500 py-8 text-center">No deliveries bowled yet in this innings.</div>
             )}
           </div>
         </div>
@@ -2559,8 +2514,7 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
                 }
               }}
               disabled={busy}
-              className={`py-3 px-2 rounded-xl font-extrabold text-xs uppercase tracking-wider text-white shadow-md ${BTN_TRANSITION} hover:scale-[1.02]`}
-              style={{ background: COLOR.amberGradient, boxShadow: "0 6px 20px -6px rgba(245,158,11,0.7)" }}
+              className={`py-3 px-2 rounded-xl font-extrabold text-xs uppercase tracking-wider bg-amber-600/30 text-amber-300 border border-amber-500/40 hover:bg-amber-600/50 ${BTN_TRANSITION}`}
             >
               End 1st Innings ➔
             </button>
@@ -2568,8 +2522,7 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
           <button
             onClick={completeMatch}
             disabled={busy}
-            className={`${current_innings?.inning_number === 1 ? "" : "col-span-2"} py-3 rounded-xl font-extrabold text-xs uppercase tracking-wider text-white shadow-md ${BTN_TRANSITION} hover:scale-[1.02]`}
-            style={{ background: COLOR.purpleGradient, boxShadow: "0 6px 20px -6px rgba(168,85,247,0.7)" }}
+            className={`${current_innings?.inning_number === 1 ? "" : "col-span-2"} py-3 rounded-xl font-extrabold text-xs uppercase tracking-wider bg-slate-800 text-slate-300 hover:bg-slate-700 ${BTN_TRANSITION}`}
           >
             Finish & Complete Match
           </button>
@@ -2579,22 +2532,20 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
       {/* Edit Player Name Modal */}
       {editingPlayer && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl animate-fadeIn relative overflow-hidden" style={{ background: COLOR.surface, border: `1px solid ${COLOR.accent}` }}>
-            <div className="absolute top-0 left-0 right-0 h-1" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7)" }} />
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl animate-fadeIn">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-extrabold flex items-center gap-2" style={{ color: COLOR.ink }}>
+              <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
                 <span>✏️</span> Edit Player Name
               </h3>
               <button
                 type="button"
                 onClick={() => setEditingPlayer(null)}
-                className="text-sm font-bold"
-                style={{ color: COLOR.inkDim }}
+                className="text-slate-400 hover:text-white text-sm font-bold"
               >
                 ✕
               </button>
             </div>
-            <p className="text-xs" style={{ color: COLOR.inkDim }}>
+            <p className="text-xs text-slate-400">
               Update player name in the live scoreboard, scorecard, and database:
             </p>
             <input
@@ -2603,12 +2554,7 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
               onChange={(e) => setNewNameInput(e.target.value)}
               placeholder="Enter player name"
               autoFocus
-              className="w-full px-3.5 py-2.5 rounded-xl text-sm font-bold focus:outline-none transition-all"
-              style={{
-                background: isLightMode() ? "linear-gradient(135deg,#f8fafc 0%,#f0fdf4 100%)" : "linear-gradient(135deg,#111 0%,#101a12 100%)",
-                border: `1px solid ${isLightMode() ? "#a7f3d0" : "rgba(34,197,94,0.4)"}`,
-                color: COLOR.ink
-              }}
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-600 text-sm font-bold text-white focus:outline-none focus:border-emerald-500"
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleSavePlayerName();
               }}
@@ -2617,8 +2563,7 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
               <button
                 type="button"
                 onClick={() => setEditingPlayer(null)}
-                className="flex-1 py-2.5 rounded-xl text-xs font-bold"
-                style={{ background: COLOR.surfaceRaised, color: COLOR.inkDim }}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700"
               >
                 Cancel
               </button>
@@ -2626,8 +2571,7 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
                 type="button"
                 disabled={!newNameInput.trim() || isUpdatingName}
                 onClick={handleSavePlayerName}
-                className="flex-1 py-2.5 rounded-xl text-xs font-black uppercase text-white disabled:opacity-50"
-                style={{ background: COLOR.accentGradient, boxShadow: "0 6px 18px -6px rgba(34,197,94,0.7)" }}
+                className="flex-1 py-2.5 rounded-xl text-xs font-black uppercase bg-emerald-500 text-black hover:bg-emerald-400 disabled:opacity-50"
               >
                 {isUpdatingName ? "Saving..." : "Save Name"}
               </button>
@@ -2640,7 +2584,7 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
 }
 
 function ScorecardView({ scorecard, live, squads }) {
-  if (!scorecard && !live) return <div className="text-xs p-4" style={{ color: COLOR.inkDim }}>Loading scorecard...</div>;
+  if (!scorecard && !live) return <div className="text-xs text-slate-400 p-4">Loading scorecard...</div>;
   const currentInningsSc = scorecard?.innings?.find((i) => i.innings_number === live?.current_innings?.inning_number) || scorecard?.innings?.[0];
   const batters = live?.batting?.length ? live.batting : (currentInningsSc?.batting || []);
   const bowlers = live?.bowling?.length ? live.bowling : (currentInningsSc?.bowling || []);
@@ -2648,35 +2592,13 @@ function ScorecardView({ scorecard, live, squads }) {
 
   return (
     <div className="space-y-4">
-      <div className="p-4 rounded-2xl relative overflow-hidden" style={cardStyle}>
-        <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: COLOR.accentGradient }} />
-        <div
-          className="text-xs font-bold mb-2 uppercase"
-          style={{
-            background: COLOR.accentGradient,
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text"
-          }}
-        >
-          Batting Scorecard
-        </div>
+      <div className="p-4 rounded-2xl" style={cardStyle}>
+        <div className="text-xs font-bold text-emerald-400 mb-2 uppercase">Batting Scorecard</div>
         <BattingTable batters={batters} />
       </div>
 
-      <div className="p-4 rounded-2xl relative overflow-hidden" style={cardStyle}>
-        <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: COLOR.blueGradient }} />
-        <div
-          className="text-xs font-bold mb-2 uppercase"
-          style={{
-            background: COLOR.blueGradient,
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text"
-          }}
-        >
-          Bowling Figures
-        </div>
+      <div className="p-4 rounded-2xl" style={cardStyle}>
+        <div className="text-xs font-bold text-sky-400 mb-2 uppercase">Bowling Figures</div>
         <BowlingTable bowlers={bowlers} />
       </div>
 
@@ -2689,47 +2611,24 @@ function ScorecardView({ scorecard, live, squads }) {
 function FallOfWicketsCard({ fow }) {
   if (!fow || fow.length === 0) {
     return (
-      <div className="p-4 rounded-2xl space-y-2 relative overflow-hidden" style={cardStyle}>
-        <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: COLOR.redGradient }} />
-        <div
-          className="text-xs font-extrabold uppercase tracking-wider"
-          style={{
-            background: COLOR.redGradient,
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text"
-          }}
-        >
-          Fall of Wickets
-        </div>
-        <div className="text-xs font-mono italic" style={{ color: COLOR.inkFaint }}>No wickets have fallen yet.</div>
+      <div className="p-4 rounded-2xl space-y-2" style={cardStyle}>
+        <div className="text-xs font-extrabold text-red-400 uppercase tracking-wider">Fall of Wickets</div>
+        <div className="text-xs text-slate-500 font-mono italic">No wickets have fallen yet.</div>
       </div>
     );
   }
 
   return (
-    <div className="p-4 rounded-2xl space-y-2 relative overflow-hidden" style={cardStyle}>
-      <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: COLOR.redGradient }} />
-      <div
-        className="text-xs font-extrabold uppercase tracking-wider"
-        style={{
-          background: COLOR.redGradient,
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-          backgroundClip: "text"
-        }}
-      >
-        Fall of Wickets
-      </div>
+    <div className="p-4 rounded-2xl space-y-2" style={cardStyle}>
+      <div className="text-xs font-extrabold text-red-400 uppercase tracking-wider">Fall of Wickets</div>
       <div className="flex flex-wrap gap-2 pt-1 font-mono text-xs">
         {fow.map((w, idx) => (
           <div
             key={w.wicket_num || idx}
-            className="px-3 py-1.5 rounded-xl flex items-center gap-2 relative overflow-hidden"
-            style={{ background: COLOR.surfaceRaised, border: `1px solid ${COLOR.border}` }}
+            className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center gap-2"
           >
-            <span className="font-extrabold" style={{ color: COLOR.red }}>{w.wicket_num}-{w.score}</span>
-            <span className="font-sans text-xs" style={{ color: COLOR.ink }}>({w.player_name}, {w.overs_display} ov)</span>
+            <span className="font-extrabold text-red-400">{w.wicket_num}-{w.score}</span>
+            <span className="text-slate-300 font-sans text-xs">({w.player_name}, {w.overs_display} ov)</span>
           </div>
         ))}
       </div>
@@ -2740,44 +2639,22 @@ function FallOfWicketsCard({ fow }) {
 function SquadsView({ squads, match }) {
   return (
     <div className="grid grid-cols-2 gap-3">
-      <div className="p-4 rounded-2xl space-y-2 relative overflow-hidden" style={cardStyle}>
-        <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: COLOR.accentGradient }} />
-        <h4
-          className="text-xs font-extrabold uppercase"
-          style={{
-            background: COLOR.accentGradient,
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text"
-          }}
-        >
-          {match?.team1_name || "Team 1"} XI
-        </h4>
+      <div className="p-4 rounded-2xl space-y-2" style={cardStyle}>
+        <h4 className="text-xs font-extrabold text-emerald-400 uppercase">{match?.team1_name || "Team 1"} XI</h4>
         <div className="space-y-1">
           {squads?.team1?.players?.map((p, idx) => (
-            <div key={p.id || idx} className="text-xs font-medium py-1" style={{ color: COLOR.ink, borderBottom: `1px solid ${COLOR.border}` }}>
+            <div key={p.id || idx} className="text-xs text-slate-300 font-medium py-1 border-b border-slate-800/60">
               {idx + 1}. {p.name}
             </div>
           ))}
         </div>
       </div>
 
-      <div className="p-4 rounded-2xl space-y-2 relative overflow-hidden" style={cardStyle}>
-        <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: COLOR.blueGradient }} />
-        <h4
-          className="text-xs font-extrabold uppercase"
-          style={{
-            background: COLOR.blueGradient,
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text"
-          }}
-        >
-          {match?.team2_name || "Team 2"} XI
-        </h4>
+      <div className="p-4 rounded-2xl space-y-2" style={cardStyle}>
+        <h4 className="text-xs font-extrabold text-sky-400 uppercase">{match?.team2_name || "Team 2"} XI</h4>
         <div className="space-y-1">
           {squads?.team2?.players?.map((p, idx) => (
-            <div key={p.id || idx} className="text-xs font-medium py-1" style={{ color: COLOR.ink, borderBottom: `1px solid ${COLOR.border}` }}>
+            <div key={p.id || idx} className="text-xs text-slate-300 font-medium py-1 border-b border-slate-800/60">
               {idx + 1}. {p.name}
             </div>
           ))}
@@ -2793,19 +2670,8 @@ function ExtraRunsPicker({ extraType, onCancel, onConfirm }) {
   const baseRun = hasBaseRun ? 1 : 0;
 
   return (
-    <div className="p-4 rounded-xl space-y-3 relative overflow-hidden" style={{ background: isLightMode() ? "linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%)" : "linear-gradient(135deg,#1a1408 0%,#0f1a12 100%)", border: `1px solid ${COLOR.amber}`, boxShadow: "0 8px 26px -14px rgba(245,158,11,0.7)" }}>
-      <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: COLOR.amberGradient }} />
-      <div
-        className="text-xs font-bold"
-        style={{
-          background: COLOR.amberGradient,
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-          backgroundClip: "text"
-        }}
-      >
-        Additional Runs for {lbl}?
-      </div>
+    <div className="p-4 rounded-xl bg-slate-900 border border-amber-500/30 space-y-3">
+      <div className="text-xs font-bold text-amber-400">Additional Runs for {lbl}?</div>
       <div className="grid grid-cols-6 gap-2">
         {[0, 1, 2, 3, 4, 5].map((add) => {
           const total = baseRun + add;
@@ -2813,15 +2679,14 @@ function ExtraRunsPicker({ extraType, onCancel, onConfirm }) {
             <button
               key={add}
               onClick={() => onConfirm(total)}
-              className={`py-2 rounded-lg text-xs font-mono font-bold text-white ${BTN_TRANSITION} hover:scale-105`}
-              style={{ background: COLOR.amberGradient, boxShadow: "0 4px 12px -4px rgba(245,158,11,0.7)" }}
+              className={`py-2 rounded-lg text-xs font-mono font-bold bg-slate-800 text-white hover:bg-emerald-500 hover:text-black ${BTN_TRANSITION}`}
             >
               +{add}
             </button>
           );
         })}
       </div>
-      <button onClick={onCancel} className="text-xs underline" style={{ color: COLOR.inkDim }}>Cancel</button>
+      <button onClick={onCancel} className="text-xs text-slate-400 underline">Cancel</button>
     </div>
   );
 }
@@ -2839,25 +2704,15 @@ function WicketPanel({ batting, fieldingSquad, onCancel, onConfirm }) {
   const fielders = fieldingSquad?.players || [];
 
   return (
-    <div className="p-4 rounded-xl space-y-4 shadow-xl relative overflow-hidden" style={{ background: isLightMode() ? "linear-gradient(135deg,#fef2f2 0%,#ffffff 100%)" : "linear-gradient(135deg,#1a0f0f 0%,#0f1a12 100%)", border: `1px solid ${COLOR.red}`, boxShadow: "0 8px 26px -14px rgba(239,68,68,0.7)" }}>
-      <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: COLOR.redGradient }} />
-      <div className="text-xs font-black uppercase tracking-wider flex items-center justify-between">
-        <span
-          style={{
-            background: COLOR.redGradient,
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text"
-          }}
-        >
-          🔴 Record Wicket / Dismissal
-        </span>
-        <span className="text-[10px] font-mono font-normal" style={{ color: COLOR.inkDim }}>Select Wicket Type</span>
+    <div className="p-4 rounded-xl bg-slate-900 border border-red-500/40 space-y-4 shadow-xl">
+      <div className="text-xs font-black uppercase tracking-wider text-red-400 flex items-center justify-between">
+        <span>🔴 Record Wicket / Dismissal</span>
+        <span className="text-[10px] text-slate-400 font-mono font-normal">Select Wicket Type</span>
       </div>
 
       {/* 1. Dismissal Type */}
       <div>
-        <label className="text-[11px] font-bold block mb-1.5" style={{ color: COLOR.inkDim }}>How was the batter dismissed?</label>
+        <label className="text-[11px] font-bold text-slate-300 block mb-1.5">How was the batter dismissed?</label>
         <div className="grid grid-cols-3 gap-2">
           {WICKET_TYPES.map((t) => {
             const isPicked = wicketType === t;
@@ -2866,12 +2721,11 @@ function WicketPanel({ batting, fieldingSquad, onCancel, onConfirm }) {
                 key={t}
                 type="button"
                 onClick={() => setWicketType(t)}
-                className={`py-2 px-1 rounded-lg text-xs font-bold capitalize transition-all ${BTN_TRANSITION} hover:scale-[1.03]`}
+                className={`py-2 px-1 rounded-lg text-xs font-bold capitalize transition-all ${BTN_TRANSITION}`}
                 style={{
-                  background: isPicked ? COLOR.redGradient : COLOR.surfaceRaised,
-                  color: isPicked ? "#ffffff" : COLOR.ink,
-                  border: isPicked ? "1px solid transparent" : `1px solid ${COLOR.border}`,
-                  boxShadow: isPicked ? "0 4px 14px -4px rgba(239,68,68,0.7)" : "none",
+                  backgroundColor: isPicked ? COLOR.red : COLOR.surfaceRaised,
+                  color: isPicked ? "#fff" : COLOR.ink,
+                  border: isPicked ? "none" : `1px solid ${COLOR.border}`,
                 }}
               >
                 {t.replace("_", " ")}
@@ -2883,7 +2737,7 @@ function WicketPanel({ batting, fieldingSquad, onCancel, onConfirm }) {
 
       {/* 2. Dismissed Player */}
       <div>
-        <label className="text-[11px] font-bold block mb-1.5" style={{ color: COLOR.inkDim }}>Who is out?</label>
+        <label className="text-[11px] font-bold text-slate-300 block mb-1.5">Who is out?</label>
         <div className="flex gap-2 flex-wrap">
           {activeBatters.map((b) => {
             const isPicked = dismissedId === b.player_id;
@@ -2892,12 +2746,11 @@ function WicketPanel({ batting, fieldingSquad, onCancel, onConfirm }) {
                 key={b.player_id}
                 type="button"
                 onClick={() => setDismissedId(b.player_id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${BTN_TRANSITION} hover:scale-[1.03]`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${BTN_TRANSITION}`}
                 style={{
-                  background: isPicked ? COLOR.redGradient : COLOR.surfaceRaised,
-                  color: isPicked ? "#ffffff" : COLOR.ink,
-                  border: isPicked ? "1px solid transparent" : `1px solid ${COLOR.border}`,
-                  boxShadow: isPicked ? "0 4px 14px -4px rgba(239,68,68,0.7)" : "none",
+                  backgroundColor: isPicked ? COLOR.red : COLOR.surfaceRaised,
+                  color: isPicked ? "#fff" : COLOR.ink,
+                  border: isPicked ? "none" : `1px solid ${COLOR.border}`,
                 }}
               >
                 {b.name} {b.is_on_strike ? "(Striker)" : "(Non-Striker)"} {isPicked ? "✓" : ""}
@@ -2909,16 +2762,8 @@ function WicketPanel({ batting, fieldingSquad, onCancel, onConfirm }) {
 
       {/* 3. Fielder Picker (Caught, Run Out, Stumped) */}
       {needsFielder && (
-        <div className="pt-2" style={{ borderTop: `1px solid ${COLOR.border}` }}>
-          <label
-            className="text-[11px] font-bold block mb-1.5"
-            style={{
-              background: COLOR.amberGradient,
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text"
-            }}
-          >
+        <div className="pt-2 border-t border-slate-800">
+          <label className="text-[11px] font-bold text-amber-400 block mb-1.5">
             Select Fielder ({wicketType.replace("_", " ")}) *:
           </label>
           {fielders.length > 0 ? (
@@ -2930,12 +2775,11 @@ function WicketPanel({ batting, fieldingSquad, onCancel, onConfirm }) {
                     key={f.id}
                     type="button"
                     onClick={() => setFielderId(f.id)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${BTN_TRANSITION} hover:scale-[1.03]`}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${BTN_TRANSITION}`}
                     style={{
-                      background: isPicked ? COLOR.amberGradient : COLOR.surfaceRaised,
-                      color: isPicked ? "#ffffff" : COLOR.ink,
-                      border: isPicked ? "1px solid transparent" : `1px solid ${COLOR.border}`,
-                      boxShadow: isPicked ? "0 4px 12px -4px rgba(245,158,11,0.7)" : "none",
+                      backgroundColor: isPicked ? COLOR.amber : COLOR.surfaceRaised,
+                      color: isPicked ? "#000" : COLOR.ink,
+                      border: isPicked ? "none" : `1px solid ${COLOR.border}`,
                     }}
                   >
                     {f.name} {isPicked ? "✓" : ""}
@@ -2944,25 +2788,23 @@ function WicketPanel({ batting, fieldingSquad, onCancel, onConfirm }) {
               })}
             </div>
           ) : (
-            <p className="text-[11px] italic" style={{ color: COLOR.inkFaint }}>No fielding squad roster available.</p>
+            <p className="text-[11px] text-slate-500 italic">No fielding squad roster available.</p>
           )}
         </div>
       )}
 
       {/* Action Buttons */}
-      <div className="flex gap-3 pt-2" style={{ borderTop: `1px solid ${COLOR.border}` }}>
+      <div className="flex gap-3 pt-2 border-t border-slate-800">
         <button
           disabled={!canConfirm}
           onClick={() => onConfirm({ wicket_type: wicketType, dismissed_player_id: dismissedId, fielder_id: fielderId })}
-          className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-white disabled:opacity-40 shadow-lg ${BTN_TRANSITION} hover:scale-[1.02]`}
-          style={{ background: COLOR.redGradient, boxShadow: "0 6px 20px -6px rgba(239,68,68,0.7)" }}
+          className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider bg-red-500 text-white disabled:opacity-40 shadow-lg ${BTN_TRANSITION}`}
         >
           Confirm Wicket
         </button>
         <button
           onClick={onCancel}
-          className="px-4 py-2.5 rounded-xl text-xs font-bold"
-          style={{ background: COLOR.surfaceRaised, color: COLOR.inkDim }}
+          className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-800 text-slate-400 hover:text-white"
         >
           Cancel
         </button>
@@ -3043,38 +2885,26 @@ function OpeningSelectors({ squads, match, onStart, onAddPlayer, busy, inningsNu
   }
 
   return (
-    <div className="p-5 rounded-2xl space-y-5 animate-fadeIn relative overflow-hidden" style={cardStyle}>
-      <div className="absolute top-0 left-0 right-0 h-1" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#f97316)" }} />
+    <div className="p-5 rounded-2xl space-y-5 animate-fadeIn" style={cardStyle}>
       {inningsNumber === 1 && <SetupProgress step={4} />}
 
-      <div className="pb-3 flex items-center justify-between" style={{ borderBottom: `1px solid ${COLOR.border}` }}>
+      <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
         <div>
-          <h3
-            className="text-base font-black flex items-center gap-2"
-            style={{
-              background: isLightMode()
-                ? "linear-gradient(135deg,#15803d 0%,#0d9488 50%,#3b82f6 100%)"
-                : "linear-gradient(135deg,#4ade80 0%,#22d3ee 50%,#60a5fa 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text"
-            }}
-          >
+          <h3 className="text-base font-extrabold text-white flex items-center gap-2">
             <span>🏏</span> {inningsNumber === 2 ? "2nd Innings Setup (Chase)" : "Opening Lineup Setup"}
           </h3>
-          <p className="text-xs mt-0.5" style={{ color: COLOR.inkDim }}>
-            Select opening batters for <span style={{ color: COLOR.accent, fontWeight: 600 }}>{rawBattingTeam?.name}</span> and bowler for <span style={{ color: COLOR.blue, fontWeight: 600 }}>{rawBowlingTeam?.name}</span>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Select opening batters for <span className="text-emerald-400 font-semibold">{rawBattingTeam?.name}</span> and bowler for <span className="text-sky-400 font-semibold">{rawBowlingTeam?.name}</span>
           </p>
         </div>
-        <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold text-white shadow-sm" style={{ background: inningsNumber === 2 ? COLOR.amberGradient : COLOR.accentGradient }}>
+        <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-bold text-emerald-400">
           <span>{inningsNumber === 2 ? "🎯 Chase Mode" : "⚡ Live Ready"}</span>
         </div>
       </div>
 
       {error && (
-        <div className="text-xs p-3.5 rounded-xl font-semibold flex items-center gap-2 relative overflow-hidden" style={{ background: isLightMode() ? "linear-gradient(135deg,#fef2f2 0%,#fee2e2 100%)" : "linear-gradient(135deg,rgba(239,68,68,0.15) 0%,rgba(220,38,38,0.15) 100%)", border: `1px solid ${COLOR.red}`, color: COLOR.red }}>
-          <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: COLOR.redGradient }} />
-          <span className="pl-2">⚠️</span>
+        <div className="text-xs p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 font-semibold flex items-center gap-2">
+          <span>⚠️</span>
           <span>{error}</span>
         </div>
       )}
@@ -3152,8 +2982,7 @@ function OpeningSelectors({ squads, match, onStart, onAddPlayer, busy, inningsNu
       <button
         disabled={!canStart || starting || busy}
         onClick={handleSubmit}
-        className={`w-full py-3.5 rounded-xl font-black text-sm text-white shadow-lg disabled:opacity-40 disabled:shadow-none flex items-center justify-center gap-2 ${BTN_TRANSITION} hover:scale-[1.01]`}
-        style={{ background: COLOR.accentGradient, boxShadow: "0 8px 24px -6px rgba(34,197,94,0.7)" }}
+        className={`w-full py-3.5 rounded-xl font-black text-sm bg-gradient-to-r from-emerald-500 to-teal-400 text-black shadow-lg shadow-emerald-500/20 disabled:opacity-40 disabled:shadow-none flex items-center justify-center gap-2 ${BTN_TRANSITION}`}
       >
         {starting ? (
           <>
@@ -3188,35 +3017,26 @@ function OpeningPlayerCard({
 
   return (
     <div
-      className="p-4 rounded-xl space-y-3 transition-all relative overflow-hidden"
+      className="p-4 rounded-xl space-y-3 transition-all border"
       style={{
-        background: isLightMode()
-          ? (badgeColor === "sky"
-              ? "linear-gradient(135deg,#eff6ff 0%,#ffffff 100%)"
-              : "linear-gradient(135deg,#ecfdf5 0%,#ffffff 100%)")
-          : (badgeColor === "sky"
-              ? "linear-gradient(135deg,#0f1420 0%,#131a26 100%)"
-              : "linear-gradient(135deg,#0f1a12 0%,#131a26 100%)"),
-        border: `1px solid ${isSelectedFromSquad || name.trim() ? (badgeColor === "sky" ? COLOR.blue : COLOR.accent) : COLOR.border}`,
-        boxShadow: isSelectedFromSquad || name.trim()
-          ? `0 6px 22px -12px ${badgeColor === "sky" ? "rgba(59,130,246,0.7)" : "rgba(34,197,94,0.7)"}`
-          : "none"
+        backgroundColor: COLOR.surfaceRaised,
+        borderColor: isSelectedFromSquad || name.trim() ? (badgeColor === "sky" ? COLOR.blue : COLOR.accent) : COLOR.border,
       }}
     >
-      <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: badgeColor === "sky" ? COLOR.blueGradient : COLOR.accentGradient }} />
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-lg">{icon}</span>
           <div>
-            <div className="text-xs font-extrabold flex items-center gap-1.5" style={{ color: COLOR.ink }}>
+            <div className="text-xs font-extrabold text-white flex items-center gap-1.5">
               <span>{title}</span>
             </div>
-            <div className="text-[10px] font-medium" style={{ color: COLOR.inkDim }}>{subtitle}</div>
+            <div className="text-[10px] font-medium text-slate-400">{subtitle}</div>
           </div>
         </div>
         <span
-          className="text-[9px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider text-white shadow-sm"
-          style={{ background: badgeColor === "sky" ? COLOR.blueGradient : COLOR.accentGradient }}
+          className={`text-[9px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider ${
+            badgeColor === "sky" ? "bg-sky-500/15 text-sky-400 border border-sky-500/30" : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+          }`}
         >
           {badge}
         </span>
@@ -3224,7 +3044,7 @@ function OpeningPlayerCard({
 
       {/* Select from squad chip grid */}
       <div>
-        <label className="text-[11px] font-bold block mb-1.5" style={{ color: COLOR.inkDim }}>
+        <label className="text-[11px] font-bold text-slate-300 block mb-1.5">
           Select from Playing XI:
         </label>
         {players && players.length > 0 ? (
@@ -3238,18 +3058,19 @@ function OpeningPlayerCard({
                   type="button"
                   disabled={isDisabled}
                   onClick={() => onSelect(p.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${BTN_TRANSITION} ${isDisabled ? "opacity-30 cursor-not-allowed" : "hover:scale-[1.03]"}`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${BTN_TRANSITION} ${
+                    isDisabled ? "opacity-30 cursor-not-allowed bg-slate-800 text-slate-500" : ""
+                  }`}
                   style={{
-                    background: isPicked
+                    backgroundColor: isPicked
                       ? badgeColor === "sky"
-                        ? COLOR.blueGradient
-                        : COLOR.accentGradient
-                      : isDisabled
-                      ? (isLightMode() ? "#e2e8f0" : "#1e2536")
-                      : COLOR.surfaceRaised,
-                    color: isPicked ? "#ffffff" : isDisabled ? COLOR.inkFaint : COLOR.ink,
-                    border: isPicked ? "1px solid transparent" : `1px solid ${COLOR.border}`,
-                    boxShadow: isPicked ? `0 4px 12px -4px ${badgeColor === "sky" ? "rgba(59,130,246,0.7)" : "rgba(34,197,94,0.7)"}` : "none",
+                        ? COLOR.blue
+                        : COLOR.accent
+                      : "rgba(15, 23, 42, 0.6)",
+                    color: isPicked ? "#000" : COLOR.ink,
+                    border: isPicked
+                      ? "none"
+                      : `1px solid ${COLOR.border}`,
                   }}
                 >
                   {p.name} {isPicked ? "✓" : ""}
@@ -3258,7 +3079,7 @@ function OpeningPlayerCard({
             })}
           </div>
         ) : (
-          <p className="text-[11px] italic" style={{ color: COLOR.inkFaint }}>No players found in playing XI. Enter player name below.</p>
+          <p className="text-[11px] text-slate-500 italic">No players found in playing XI. Enter player name below.</p>
         )}
       </div>
 
@@ -3270,19 +3091,11 @@ function OpeningPlayerCard({
             value={name}
             onChange={(e) => onNameChange(e.target.value)}
             placeholder="or type player name manually..."
-            className="w-full px-3 py-2 rounded-xl text-xs outline-none transition-all"
-            style={{
-              background: isLightMode() ? "#f8fafc" : "#0f1420",
-              border: `1px solid ${name.trim() ? (badgeColor === "sky" ? COLOR.blue : COLOR.accent) : COLOR.border}`,
-              color: COLOR.ink,
-              boxShadow: name.trim() ? `0 4px 14px -8px ${badgeColor === "sky" ? "rgba(59,130,246,0.7)" : "rgba(34,197,94,0.7)"}` : "none",
-            }}
+            className="w-full px-3 py-2 rounded-xl bg-slate-900/90 border text-xs text-white outline-none focus:border-sky-400 placeholder:text-slate-500"
+            style={{ borderColor: name.trim() ? (badgeColor === "sky" ? COLOR.blue : COLOR.accent) : COLOR.border }}
           />
           {name.trim() && (
-            <span
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-white px-1.5 py-0.5 rounded shadow-sm"
-              style={{ background: badgeColor === "sky" ? COLOR.blueGradient : COLOR.accentGradient }}
-            >
+            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
               Custom Name
             </span>
           )}
@@ -3323,95 +3136,53 @@ function PlayerPicker({ title, players, onPick, onAddNew, busy }) {
   }
 
   return (
-    <div className="p-5 rounded-2xl space-y-4 relative overflow-hidden" style={cardStyle}>
-      <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg,#3b82f6,#a855f7,#ec4899)" }} />
-      <h3 className="text-base font-extrabold flex items-center justify-between" style={{ color: COLOR.ink }}>
-        <span
-          style={{
-            background: "linear-gradient(135deg,#3b82f6 0%,#a855f7 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text"
-          }}
-        >
-          {title}
-        </span>
-        <span className="text-xs font-mono font-normal" style={{ color: COLOR.inkDim }}>({players.length} squad members)</span>
+    <div className="p-5 rounded-2xl space-y-4" style={cardStyle}>
+      <h3 className="text-base font-extrabold text-white flex items-center justify-between">
+        <span>{title}</span>
+        <span className="text-xs font-mono font-normal text-slate-400">({players.length} squad members)</span>
       </h3>
 
       {pickerError && (
-        <div className="text-xs p-3 rounded-lg font-bold relative overflow-hidden" style={{ background: isLightMode() ? "linear-gradient(135deg,#fef2f2 0%,#fee2e2 100%)" : "linear-gradient(135deg,rgba(239,68,68,0.15) 0%,rgba(220,38,38,0.15) 100%)", border: `1px solid ${COLOR.red}`, color: COLOR.red }}>
-          <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: COLOR.redGradient }} />
-          <span className="pl-2">{pickerError}</span>
+        <div className="text-xs p-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 font-bold">
+          {pickerError}
         </div>
       )}
 
       {/* Select from existing squad */}
       <div>
-        <label
-          className="text-xs font-bold block mb-2"
-          style={{
-            background: COLOR.accentGradient,
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text"
-          }}
-        >
-          Select from Squad Roster:
-        </label>
+        <label className="text-xs font-bold text-emerald-400 block mb-2">Select from Squad Roster:</label>
         <div className="flex gap-2 flex-wrap">
           {players.map((p) => (
             <button
               key={p.id}
               disabled={busy || adding}
               onClick={() => onPick(p.id)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold ${BTN_TRANSITION} hover:scale-[1.03]`}
-              style={{
-                background: isLightMode() ? "linear-gradient(135deg,#f1f5f9 0%,#e2e8f0 100%)" : "linear-gradient(135deg,#1c2536 0%,#252f45 100%)",
-                color: COLOR.ink,
-                border: `1px solid ${COLOR.border}`
-              }}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800 text-slate-200 border border-slate-700 hover:border-emerald-500 hover:text-emerald-400 ${BTN_TRANSITION}`}
             >
               {p.name}
             </button>
           ))}
           {players.length === 0 && (
-            <span className="text-xs italic" style={{ color: COLOR.inkFaint }}>No available players in squad. Add a new player below.</span>
+            <span className="text-xs text-slate-500 italic">No available players in squad. Add a new player below.</span>
           )}
         </div>
       </div>
 
       {/* Add new player mid-match */}
-      <form onSubmit={handleAdd} className="pt-3 space-y-2" style={{ borderTop: `1px solid ${COLOR.border}` }}>
-        <label
-          className="text-xs font-bold block"
-          style={{
-            background: COLOR.blueGradient,
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text"
-          }}
-        >
-          ➕ Add New Player to Squad Mid-Match:
-        </label>
+      <form onSubmit={handleAdd} className="pt-3 border-t border-slate-800 space-y-2">
+        <label className="text-xs font-bold text-sky-400 block">➕ Add New Player to Squad Mid-Match:</label>
         <div className="flex gap-2">
           <input
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Type new player full name..."
-            className="flex-1 px-3 py-2 rounded-xl text-xs outline-none transition-all font-sans"
-            style={{
-              background: isLightMode() ? "linear-gradient(135deg,#f8fafc 0%,#eff6ff 100%)" : "linear-gradient(135deg,#0f1420 0%,#111 100%)",
-              color: COLOR.ink,
-              border: `1px solid ${isLightMode() ? "#bfdbfe" : "rgba(59,130,246,0.3)"}`
-            }}
+            className="flex-1 px-3 py-2 rounded-xl bg-slate-800 text-xs text-white outline-none border border-slate-700 focus:border-sky-500 font-sans"
           />
           <button
             type="submit"
             disabled={!newName.trim() || busy || adding}
-            className={`px-4 py-2 font-bold text-xs rounded-xl text-white disabled:opacity-40 ${BTN_TRANSITION} hover:scale-[1.03]`}
-            style={{ background: COLOR.blueGradient, boxShadow: "0 4px 14px -6px rgba(59,130,246,0.7)" }}
+            className={`px-4 py-2 bg-sky-500 text-black font-bold text-xs rounded-xl disabled:opacity-40 ${BTN_TRANSITION}`}
           >
             {adding ? "Adding..." : "+ Add & Select"}
           </button>
@@ -3422,17 +3193,17 @@ function PlayerPicker({ title, players, onPick, onAddNew, busy }) {
 }
 
 function BattingTable({ batters }) {
-  if (!batters || batters.length === 0) return <div className="text-xs" style={{ color: COLOR.inkFaint }}>No batting data.</div>;
+  if (!batters || batters.length === 0) return <div className="text-xs text-slate-500">No batting data.</div>;
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-xs font-mono">
         <thead>
-          <tr style={{ borderBottom: `1px solid ${COLOR.border}`, color: COLOR.inkDim }}>
+          <tr className="border-b border-slate-800 text-slate-400">
             <th className="py-2 font-sans">Batter</th>
             <th className="py-2 text-right">R</th>
             <th className="py-2 text-right">B</th>
-            <th className="py-2 text-right" style={{ color: COLOR.accent }}>4s</th>
-            <th className="py-2 text-right" style={{ color: COLOR.purple }}>6s</th>
+            <th className="py-2 text-right text-emerald-400">4s</th>
+            <th className="py-2 text-right text-purple-400">6s</th>
             <th className="py-2 text-right">SR</th>
           </tr>
         </thead>
@@ -3449,35 +3220,22 @@ function BattingTable({ batters }) {
             return (
               <tr
                 key={b.player_id || b.name}
-                style={{ borderBottom: `1px solid ${COLOR.border}`, opacity: b.is_out ? 0.8 : 1 }}
+                className={`border-b border-slate-800/40 ${b.is_out ? "text-slate-400 opacity-80" : "text-slate-200"}`}
               >
                 <td className="py-2 font-sans">
-                  <div className="font-semibold flex items-center gap-1" style={{ color: b.is_out ? COLOR.inkDim : COLOR.ink, textDecoration: b.is_out ? "line-through" : "none", textDecorationColor: "rgba(239,68,68,0.7)" }}>
+                  <div className={`font-semibold flex items-center gap-1 ${b.is_out ? "text-slate-300 line-through decoration-red-500/70" : "text-white"}`}>
                     {b.name}
-                    {b.is_on_strike && !b.is_out && <span style={{ color: COLOR.accent, fontWeight: 800 }}>*</span>}
+                    {b.is_on_strike && !b.is_out && <span className="text-emerald-400 font-extrabold">*</span>}
                   </div>
-                  <div
-                    className="text-[10px] capitalize font-medium"
-                    style={{
-                      color: b.is_out ? COLOR.red : COLOR.inkDim,
-                      fontWeight: b.is_out ? 600 : 500
-                    }}
-                  >
+                  <div className={`text-[10px] capitalize font-medium ${b.is_out ? "text-red-400 font-semibold" : "text-slate-400"}`}>
                     {dismissalText}
                   </div>
                 </td>
-                <td
-                  className="py-2 text-right font-bold text-sm"
-                  style={{
-                    color: b.is_out ? COLOR.inkDim : COLOR.accent
-                  }}
-                >
-                  {b.runs}
-                </td>
-                <td className="py-2 text-right" style={{ color: COLOR.inkDim }}>{b.balls_faced}</td>
-                <td className="py-2 text-right font-bold" style={{ color: COLOR.accent }}>{b.fours ?? 0}</td>
-                <td className="py-2 text-right font-bold" style={{ color: COLOR.purple }}>{b.sixes ?? 0}</td>
-                <td className="py-2 text-right" style={{ color: COLOR.inkDim }}>{sr}</td>
+                <td className={`py-2 text-right font-bold text-sm ${b.is_out ? "text-slate-300" : "text-emerald-400"}`}>{b.runs}</td>
+                <td className="py-2 text-right text-slate-300">{b.balls_faced}</td>
+                <td className="py-2 text-right text-emerald-400 font-bold">{b.fours ?? 0}</td>
+                <td className="py-2 text-right text-purple-400 font-bold">{b.sixes ?? 0}</td>
+                <td className="py-2 text-right text-slate-400">{sr}</td>
               </tr>
             );
           })}
@@ -3488,12 +3246,12 @@ function BattingTable({ batters }) {
 }
 
 function BowlingTable({ bowlers }) {
-  if (!bowlers || bowlers.length === 0) return <div className="text-xs" style={{ color: COLOR.inkFaint }}>No bowling data.</div>;
+  if (!bowlers || bowlers.length === 0) return <div className="text-xs text-slate-500">No bowling data.</div>;
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-xs font-mono">
         <thead>
-          <tr style={{ borderBottom: `1px solid ${COLOR.border}`, color: COLOR.inkDim }}>
+          <tr className="border-b border-slate-800 text-slate-400">
             <th className="py-2">Bowler</th>
             <th className="py-2 text-right">O</th>
             <th className="py-2 text-right">R</th>
@@ -3506,12 +3264,12 @@ function BowlingTable({ bowlers }) {
             const bOvers = correctBuggyBowlerOvers(b.overs_bowled);
             const er = bOvers.trueDecimal > 0 ? (b.runs_conceded / bOvers.trueDecimal).toFixed(2) : "0.00";
             return (
-              <tr key={b.player_id || b.name} style={{ borderBottom: `1px solid ${COLOR.border}` }}>
-                <td className="py-2 font-sans font-semibold" style={{ color: COLOR.blue }}>{b.name}</td>
-                <td className="py-2 text-right" style={{ color: COLOR.ink }}>{bOvers.display}</td>
-                <td className="py-2 text-right" style={{ color: COLOR.inkDim }}>{b.runs_conceded}</td>
-                <td className="py-2 text-right font-bold" style={{ color: COLOR.red }}>{b.wickets}</td>
-                <td className="py-2 text-right" style={{ color: COLOR.inkDim }}>{er}</td>
+              <tr key={b.player_id || b.name} className="border-b border-slate-800/40 text-slate-200">
+                <td className="py-2 font-sans font-semibold text-sky-400">{b.name}</td>
+                <td className="py-2 text-right text-slate-300">{bOvers.display}</td>
+                <td className="py-2 text-right text-slate-400">{b.runs_conceded}</td>
+                <td className="py-2 text-right font-bold text-red-400">{b.wickets}</td>
+                <td className="py-2 text-right text-slate-400">{er}</td>
               </tr>
             );
           })}
@@ -3521,7 +3279,7 @@ function BowlingTable({ bowlers }) {
   );
 }
 
-function FinalScoreboard({ matchId }) {
+function FinalScoreboard({ user, matchId, onBack }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
@@ -3532,59 +3290,79 @@ function FinalScoreboard({ matchId }) {
   }, [matchId]);
 
   if (error) return <div className="text-xs p-4 bg-red-500/10 text-red-400 rounded-xl">Error: {error}</div>;
-  if (!data) return <div className="text-xs p-6" style={{ color: COLOR.inkDim }}>Loading Final Scorecard...</div>;
+  if (!data) return <div className="text-xs text-slate-400 p-6">Loading Final Scorecard...</div>;
+
+  const isCreator = isMatchCreator(data.match, user);
+  if (!isCreator) {
+    return (
+      <div className="p-8 text-center space-y-4 rounded-2xl border border-red-500/30 bg-red-500/10 max-w-md mx-auto my-8">
+        <div className="text-4xl">🔒</div>
+        <h3 className="text-base font-extrabold text-red-400">Scoreboard Access Restricted</h3>
+        <p className="text-xs text-slate-300 max-w-sm mx-auto leading-relaxed">
+          Only the creator of this scoreboard can view this scoreboard. Other users cannot access it.
+        </p>
+        {onBack && (
+          <button
+            onClick={onBack}
+            className={`px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 text-white ${BTN_TRANSITION}`}
+          >
+            ← Back to Matches
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
-      <div className="p-5 rounded-2xl text-center relative overflow-hidden" style={cardStyle}>
-        <div className="absolute top-0 left-0 right-0 h-1" style={{ background: "linear-gradient(90deg,#f59e0b,#ec4899,#a855f7)" }} />
-        <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle,rgba(245,158,11,0.35) 0%,transparent 70%)" }} />
-        <div className="absolute -left-10 -bottom-10 w-40 h-40 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle,rgba(168,85,247,0.3) 0%,transparent 70%)" }} />
-        <div className="text-xs font-bold uppercase tracking-wider mb-1 relative z-10" style={{ color: COLOR.inkDim }}>
+      <div className="p-5 rounded-2xl text-center space-y-2" style={cardStyle}>
+        <div className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">
           {data.match.team1_name} vs {data.match.team2_name}
         </div>
-        <div
-          className="text-lg font-black flex items-center justify-center gap-2 relative z-10"
-          style={{
-            background: "linear-gradient(135deg,#f59e0b 0%,#ec4899 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text"
-          }}
-        >
+        <div className="text-lg sm:text-xl font-black text-emerald-400 flex items-center justify-center gap-2">
           <span>🏆</span>
-          <span>{data.result}</span>
+          <span>{data.result || data.match?.result || "Match completed"}</span>
         </div>
       </div>
+
+      {(data.potm_name || data.match?.potm_name) && (
+        <div
+          className="p-4 sm:p-5 rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-slate-900 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left shadow-lg shadow-amber-500/5"
+          style={cardStyle}
+        >
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-2xl shrink-0 border border-amber-500/30 shadow-md shadow-amber-500/10">
+              🏅
+            </div>
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-amber-400">
+                Player of the Match (Both Innings)
+              </div>
+              <div className="text-base sm:text-lg font-black text-amber-200">
+                {data.potm_name || data.match?.potm_name}
+              </div>
+              {(data.potm_team || data.match?.potm_team) && (
+                <div className="text-xs text-slate-400 font-medium">
+                  {data.potm_team || data.match?.potm_team}
+                </div>
+              )}
+            </div>
+          </div>
+          {(data.potm_stats || data.match?.potm_stats) && (
+            <div className="px-3.5 py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono text-xs sm:text-sm font-bold tracking-wide">
+              {data.potm_stats || data.match?.potm_stats}
+            </div>
+          )}
+        </div>
+      )}
 
       {data.innings.map((inn) => {
         const { display: inningsOversDisplay } = formatOvers(inn.overs);
         return (
-          <div key={inn.innings_number} className="p-4 rounded-2xl space-y-3 relative overflow-hidden" style={cardStyle}>
-            <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7)" }} />
-            <div className="flex items-center justify-between pb-2" style={{ borderBottom: `1px solid ${COLOR.border}` }}>
-              <span
-                className="text-sm font-black"
-                style={{
-                  background: isLightMode()
-                    ? "linear-gradient(135deg,#15803d 0%,#3b82f6 100%)"
-                    : "linear-gradient(135deg,#4ade80 0%,#60a5fa 100%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text"
-                }}
-              >
-                {inn.batting_team_name} Innings
-              </span>
-              <span
-                className="text-sm font-mono font-black"
-                style={{
-                  background: COLOR.accentGradient,
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text"
-                }}
-              >
+          <div key={inn.innings_number} className="p-4 rounded-2xl space-y-3" style={cardStyle}>
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <span className="text-sm font-bold text-white">{inn.batting_team_name} Innings</span>
+              <span className="text-sm font-mono font-bold text-emerald-400">
                 {inn.total_runs}/{inn.wickets} ({inningsOversDisplay} ov)
               </span>
             </div>

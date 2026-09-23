@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Plus, X, Calendar, Clock, Filter, Search, ChevronDown, MapPin, CheckCircle, Phone, XCircle, AlertCircle, Users, Star } from "lucide-react";
+import { Plus, X, Calendar, Clock, Filter, Search, ChevronDown, MapPin, CheckCircle, Phone, XCircle, AlertCircle, Users, Star, RotateCcw, Sparkles, Zap } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -21,7 +21,52 @@ const challengePinIcon = L.divIcon({
 });
 
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-const WEEKDAY_LABELS = ["S","M","T","W","T","F","S"];
+const FORMAT_THEMES = {
+  T20: {
+    accent: "#10b981",
+    bgActiveDark: "linear-gradient(135deg, rgba(16,185,129,0.18) 0%, rgba(6,78,59,0.12) 100%)",
+    bgActiveLight: "linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)",
+    borderActiveDark: "#10b981",
+    borderActiveLight: "#059669",
+    glowDark: "0 0 20px -3px rgba(16,185,129,0.28)",
+    glowLight: "0 6px 16px -2px rgba(16,185,129,0.22)",
+    pillDark: "rgba(16,185,129,0.18)",
+    pillLight: "#d1fae5",
+  },
+  ODI: {
+    accent: "#0ea5e9",
+    bgActiveDark: "linear-gradient(135deg, rgba(14,165,233,0.18) 0%, rgba(3,105,161,0.12) 100%)",
+    bgActiveLight: "linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)",
+    borderActiveDark: "#0ea5e9",
+    borderActiveLight: "#0284c7",
+    glowDark: "0 0 20px -3px rgba(14,165,233,0.28)",
+    glowLight: "0 6px 16px -2px rgba(14,165,233,0.22)",
+    pillDark: "rgba(14,165,233,0.18)",
+    pillLight: "#e0f2fe",
+  },
+  Turf: {
+    accent: "#f59e0b",
+    bgActiveDark: "linear-gradient(135deg, rgba(245,158,11,0.18) 0%, rgba(180,83,9,0.12) 100%)",
+    bgActiveLight: "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
+    borderActiveDark: "#f59e0b",
+    borderActiveLight: "#d97706",
+    glowDark: "0 0 20px -3px rgba(245,158,11,0.28)",
+    glowLight: "0 6px 16px -2px rgba(245,158,11,0.22)",
+    pillDark: "rgba(245,158,11,0.18)",
+    pillLight: "#fef3c7",
+  },
+  Test: {
+    accent: "#a855f7",
+    bgActiveDark: "linear-gradient(135deg, rgba(168,85,247,0.18) 0%, rgba(126,34,206,0.12) 100%)",
+    bgActiveLight: "linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%)",
+    borderActiveDark: "#a855f7",
+    borderActiveLight: "#9333ea",
+    glowDark: "0 0 20px -3px rgba(168,85,247,0.28)",
+    glowLight: "0 6px 16px -2px rgba(168,85,247,0.22)",
+    pillDark: "rgba(168,85,247,0.18)",
+    pillLight: "#f3e8ff",
+  }
+};
 
 function toISODate(d) {
   const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
@@ -253,36 +298,37 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
     }
   };
 
+  const renderTriggerButton = () => (
+    <button
+      type="button"
+      onClick={() => {
+        const err = checkProfileCompleteness();
+        if (err) return;
+        setOpen(true);
+      }}
+      className={cn(
+        "px-5 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shrink-0 cursor-pointer",
+        isLight
+          ? "bg-[#16a34a] text-white hover:bg-[#15803d] shadow-sm"
+          : "bg-green-500 text-black hover:bg-green-400"
+      )}
+    >
+      <Plus className="w-4 h-4" /> Post a Match Challenge
+    </button>
+  );
+
   if (disabledReason) {
     return (
-      <div
-        className="w-full py-3 rounded-2xl text-sm font-medium flex items-center justify-center gap-2"
-        style={{
-          border: `1px dashed ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
-          color: isLight ? "#64748b" : "#4a5a4a",
-          backgroundColor: isLight ? "#f8fafc" : "#131413"
-        }}
-      >
-        {disabledReason}
-      </div>
-    );
-  }
-
-  if (!open) {
-    return (
       <button
-        onClick={() => {
-          const err = checkProfileCompleteness();
-          if (err) return;
-          setOpen(true);
-        }}
-        className="w-full py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 transition-all hover:opacity-90 cursor-pointer"
-        style={{
-          border: `1px dashed ${isLight ? "#86efac" : "#2a2a2a"}`,
-          backgroundColor: isLight ? "#f0fdf4" : "transparent",
-          color: isLight ? "#16a34a" : "#22c55e",
-          boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.05)" : "none"
-        }}
+        type="button"
+        disabled
+        title={disabledReason}
+        className={cn(
+          "px-5 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shrink-0 cursor-not-allowed opacity-60",
+          isLight
+            ? "bg-[#16a34a] text-white shadow-sm"
+            : "bg-green-500 text-black"
+        )}
       >
         <Plus className="w-4 h-4" /> Post a Match Challenge
       </button>
@@ -290,11 +336,14 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(2px)" }}
-      onClick={() => setOpen(false)}
-    >
+    <>
+      {renderTriggerButton()}
+      {open && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4"
+          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(2px)" }}
+          onClick={() => setOpen(false)}
+        >
       <form
         onSubmit={handleSubmit}
         className={cn(C, "w-full sm:max-w-lg max-h-[90vh] sm:max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl p-4 sm:p-5 space-y-3 pb-[max(1.25rem,env(safe-area-inset-bottom))]")}
@@ -470,19 +519,21 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
         <button
           type="submit"
           disabled={submitting || !normalizedContact}
-          className="w-full py-2.5 rounded-xl font-bold text-sm transition-colors shadow-sm cursor-pointer"
-          style={{
-            backgroundColor: isLight ? "#16a34a" : "#22c55e",
-            color: "#ffffff",
-            boxShadow: isLight ? "0 2px 8px rgba(22,163,74,0.25)" : "none",
-            ...((submitting || !normalizedContact) ? { opacity: 0.6, cursor: "not-allowed" } : {})
-          }}
+          className={cn(
+            "w-full py-2.5 rounded-xl font-bold text-sm transition-colors shadow-sm cursor-pointer",
+            isLight
+              ? "bg-[#16a34a] hover:bg-[#15803d] text-white shadow-sm"
+              : "bg-green-500 text-black hover:bg-green-400"
+          )}
+          style={(submitting || !normalizedContact) ? { opacity: 0.6, cursor: "not-allowed" } : {}}
         >
           {submitting ? "Posting..." : "Post Challenge"}
         </button>
       </form>
     </div>
-  );
+  )}
+</>
+);
 }
 
 function AcceptChallengeModal({ challenge, token, user, hasActiveAcceptedChallenge, onClose, onAccepted, theme }) {
@@ -924,7 +975,7 @@ function DateCalendarPicker({ value, onChange, theme }) {
   );
 }
 
-function TimePicker({ value, onChange, theme }) {
+function TimePicker({ value, onChange, theme, embedded = false }) {
   const isLight = theme === "light" || (typeof document !== "undefined" && document.documentElement.classList.contains("light"));
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -948,7 +999,7 @@ function TimePicker({ value, onChange, theme }) {
 
   useEffect(() => {
     if (open) setDraft(parseValue(value));
-  }, [open]);
+  }, [open, value]);
 
   const format = d => `${d.hour}:${String(d.minute).padStart(2, "0")} ${d.period}`;
 
@@ -957,85 +1008,179 @@ function TimePicker({ value, onChange, theme }) {
     setOpen(false);
   };
 
+  const POPULAR_SLOTS = ["6:00 AM", "7:00 AM", "8:30 AM", "10:00 AM", "2:00 PM", "4:00 PM", "5:30 PM", "7:00 PM"];
+
   return (
-    <div className="relative" ref={wrapRef}>
-      <label className="text-xs mb-1.5 block font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Time</label>
+    <div className="relative w-full" ref={wrapRef}>
+      {!embedded && (
+        <label className="text-xs mb-1.5 block font-semibold flex items-center gap-1.5" style={{ color: isLight ? "#475569" : "#8a968a" }}>
+          <Clock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+          <span>Time Slot</span>
+        </label>
+      )}
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full rounded-xl px-3 py-2 text-xs flex items-center justify-between focus:outline-none transition-colors shadow-sm"
-        style={{
-          backgroundColor: isLight ? "#ffffff" : "#111",
-          border: open ? (isLight ? "1px solid #16a34a" : "1px solid #22c55e") : (isLight ? "1px solid #e2e8f0" : "1px solid #2a2a2a"),
-          color: value ? (isLight ? "#0f172a" : "#fff") : (isLight ? "#94a3b8" : "#c8ccc8")
+        className={cn(
+          "w-full text-xs flex items-center justify-between focus:outline-none transition-all cursor-pointer",
+          embedded ? "p-0 bg-transparent border-0 shadow-none" : "rounded-xl px-3 py-2 shadow-xs"
+        )}
+        style={embedded ? {
+          color: value ? (isLight ? "#0f172a" : "#fff") : (isLight ? "#94a3b8" : "#8a968a"),
+          fontWeight: value ? "600" : "500",
+        } : {
+          backgroundColor: isLight ? "#f8fafc" : "#121512",
+          border: open
+            ? (isLight ? "1.5px solid #16a34a" : "1.5px solid #22c55e")
+            : (isLight ? "1px solid #e2e8f0" : "1px solid #252b25"),
+          color: value ? (isLight ? "#0f172a" : "#fff") : (isLight ? "#94a3b8" : "#8a968a")
         }}
       >
         <span className="flex items-center gap-1.5 truncate">
-          <Clock className="w-3.5 h-3.5 shrink-0" style={{ color: isLight ? "#64748b" : "#6b7a6b" }} />
-          {value || "Any Time"}
+          <Clock className="w-3.5 h-3.5 shrink-0" style={{ color: value ? (isLight ? "#16a34a" : "#4ade80") : (isLight ? "#64748b" : "#6b7a6b") }} />
+          <span className="truncate">{value || "Any Time"}</span>
         </span>
-        {value && <X className="w-3 h-3 shrink-0" style={{ color: isLight ? "#64748b" : "#6b7a6b" }} onClick={e => { e.stopPropagation(); onChange(""); }} />}
+        {value ? (
+          <span
+            role="button"
+            className="p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-neutral-800 transition-colors ml-1"
+            onClick={e => { e.stopPropagation(); onChange(""); }}
+            title="Clear time"
+          >
+            <X className="w-3 h-3 shrink-0" style={{ color: isLight ? "#64748b" : "#9ca3af" }} />
+          </span>
+        ) : (
+          <ChevronDown className="w-3.5 h-3.5 shrink-0 opacity-60 ml-1" />
+        )}
       </button>
 
       {open && (
         <div
-          className="absolute z-20 mt-2 rounded-2xl p-3 w-64 shadow-2xl"
+          className="absolute right-0 sm:left-0 z-30 mt-2 rounded-2xl p-4 w-72 shadow-2xl animate-[fadeIn_.15s_ease-out]"
           style={{
-            backgroundColor: isLight ? "#ffffff" : "#161616",
-            border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-            boxShadow: isLight ? "0 12px 32px rgba(15,23,42,0.12)" : "0 12px 32px rgba(0,0,0,0.5)"
+            backgroundColor: isLight ? "#ffffff" : "#131613",
+            border: `1px solid ${isLight ? "#e2e8f0" : "#242a24"}`,
+            boxShadow: isLight ? "0 16px 36px rgba(15,23,42,0.14)" : "0 16px 40px rgba(0,0,0,0.7)"
           }}
         >
-          <div className="grid grid-cols-3 gap-2 mb-3">
+          <div className="text-[11px] font-bold uppercase tracking-wider mb-2" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
+            Popular Match Slots
+          </div>
+          <div className="grid grid-cols-4 gap-1.5 mb-3.5">
+            {POPULAR_SLOTS.map(slot => (
+              <button
+                key={slot}
+                type="button"
+                onClick={() => { onChange(slot); setOpen(false); }}
+                className={cn(
+                  "py-1.5 px-1 rounded-lg text-[10px] font-bold text-center transition-all cursor-pointer truncate",
+                  value === slot ? "shadow-xs scale-[1.02]" : "hover:border-emerald-500/50"
+                )}
+                style={
+                  value === slot
+                    ? {
+                        backgroundColor: isLight ? "#16a34a" : "#22c55e",
+                        color: "#ffffff"
+                      }
+                    : {
+                        backgroundColor: isLight ? "#f1f5f9" : "#1c221c",
+                        color: isLight ? "#334155" : "#c8ccc8",
+                        border: `1px solid ${isLight ? "#e2e8f0" : "#273027"}`
+                      }
+                }
+              >
+                {slot}
+              </button>
+            ))}
+          </div>
+
+          <div className="text-[11px] font-bold uppercase tracking-wider mb-2 pt-2 border-t" style={{ borderColor: isLight ? "#f1f5f9" : "#1e241e", color: isLight ? "#64748b" : "#6b7a6b" }}>
+            Custom Time
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 mb-3.5">
             <div>
-              <label className="text-[10px] mb-1 block font-semibold" style={{ color: isLight ? "#64748b" : "#4a5a4a" }}>Hour</label>
+              <label className="text-[10px] mb-1 block text-center font-semibold" style={{ color: isLight ? "#64748b" : "#8a968a" }}>Hour</label>
               <select
                 value={draft.hour}
                 onChange={e => setDraft(d => ({ ...d, hour: parseInt(e.target.value, 10) }))}
-                className="w-full rounded-lg px-2 py-1.5 text-xs focus:outline-none transition-colors"
-                style={{ backgroundColor: isLight ? "#f8fafc" : "#111", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`, color: isLight ? "#0f172a" : "#fff" }}
+                className="w-full rounded-xl px-2 py-1.5 text-xs text-center font-bold focus:outline-none transition-colors cursor-pointer"
+                style={{
+                  backgroundColor: isLight ? "#f8fafc" : "#1c221c",
+                  border: `1px solid ${isLight ? "#e2e8f0" : "#273027"}`,
+                  color: isLight ? "#0f172a" : "#fff"
+                }}
               >
                 {Array.from({ length: 12 }, (_, i) => i + 1).map(h => <option key={h} value={h}>{h}</option>)}
               </select>
             </div>
             <div>
-              <label className="text-[10px] mb-1 block font-semibold" style={{ color: isLight ? "#64748b" : "#4a5a4a" }}>Minute</label>
+              <label className="text-[10px] mb-1 block text-center font-semibold" style={{ color: isLight ? "#64748b" : "#8a968a" }}>Min</label>
               <select
                 value={draft.minute}
                 onChange={e => setDraft(d => ({ ...d, minute: parseInt(e.target.value, 10) }))}
-                className="w-full rounded-lg px-2 py-1.5 text-xs focus:outline-none transition-colors"
-                style={{ backgroundColor: isLight ? "#f8fafc" : "#111", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`, color: isLight ? "#0f172a" : "#fff" }}
+                className="w-full rounded-xl px-2 py-1.5 text-xs text-center font-bold focus:outline-none transition-colors cursor-pointer"
+                style={{
+                  backgroundColor: isLight ? "#f8fafc" : "#1c221c",
+                  border: `1px solid ${isLight ? "#e2e8f0" : "#273027"}`,
+                  color: isLight ? "#0f172a" : "#fff"
+                }}
               >
                 {[0, 15, 30, 45].map(m => <option key={m} value={m}>{String(m).padStart(2, "0")}</option>)}
               </select>
             </div>
             <div>
-              <label className="text-[10px] mb-1 block font-semibold" style={{ color: isLight ? "#64748b" : "#4a5a4a" }}>Period</label>
-              <select
-                value={draft.period}
-                onChange={e => setDraft(d => ({ ...d, period: e.target.value }))}
-                className="w-full rounded-lg px-2 py-1.5 text-xs focus:outline-none transition-colors"
-                style={{ backgroundColor: isLight ? "#f8fafc" : "#111", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`, color: isLight ? "#0f172a" : "#fff" }}
+              <label className="text-[10px] mb-1 block text-center font-semibold" style={{ color: isLight ? "#64748b" : "#8a968a" }}>AM / PM</label>
+              <div
+                className="flex rounded-xl p-0.5 overflow-hidden"
+                style={{
+                  backgroundColor: isLight ? "#f1f5f9" : "#1c221c",
+                  border: `1px solid ${isLight ? "#e2e8f0" : "#273027"}`
+                }}
               >
-                <option value="AM">AM</option>
-                <option value="PM">PM</option>
-              </select>
+                {["AM", "PM"].map(p => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setDraft(d => ({ ...d, period: p }))}
+                    className="flex-1 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                    style={
+                      draft.period === p
+                        ? {
+                            backgroundColor: isLight ? "#ffffff" : "#22c55e",
+                            color: isLight ? "#16a34a" : "#0d0f0d",
+                            boxShadow: isLight ? "0 1px 3px rgba(0,0,0,0.1)" : undefined
+                          }
+                        : {
+                            color: isLight ? "#64748b" : "#8a968a"
+                          }
+                    }
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
+
           <div className="flex gap-2">
             <button
               type="button"
               onClick={() => { onChange(""); setOpen(false); }}
-              className="flex-1 rounded-lg py-1.5 text-xs font-semibold transition-colors"
-              style={{ backgroundColor: isLight ? "#f1f5f9" : "#1e211e", color: isLight ? "#64748b" : "#8a938a", border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}` }}
+              className="flex-1 rounded-xl py-2 text-xs font-semibold transition-colors cursor-pointer"
+              style={{
+                backgroundColor: isLight ? "#f1f5f9" : "#1c221c",
+                color: isLight ? "#64748b" : "#8a968a",
+                border: `1px solid ${isLight ? "#e2e8f0" : "#273027"}`
+              }}
             >
               Any Time
             </button>
             <button
               type="button"
               onClick={apply}
-              className="flex-1 rounded-lg py-1.5 text-xs font-bold transition-colors cursor-pointer shadow-sm"
-              style={{ backgroundColor: isLight ? "#16a34a" : "#22c55e", color: "#ffffff" }}
+              className="flex-1 rounded-xl py-2 text-xs font-bold transition-all cursor-pointer shadow-sm text-white"
+              style={{ backgroundColor: isLight ? "#16a34a" : "#22c55e" }}
             >
               Set Time
             </button>
@@ -1320,6 +1465,8 @@ export default function FindMatchTab({
   const [selectedFormat, setSelectedFormat] = useState(0);
   const [dateFilter, setDateFilter] = useState(null);
   const [timeFilter, setTimeFilter] = useState("");
+  const [timePeriodFilter, setTimePeriodFilter] = useState(null); // null | "morning" | "afternoon" | "evening"
+  const [groundFilter, setGroundFilter] = useState("all"); // "all" | "booked" | "needed"
   const [searchQuery, setSearchQuery] = useState("");
   const [acceptTarget, setAcceptTarget] = useState(null);
   const [detailsTarget, setDetailsTarget] = useState(null);
@@ -1454,6 +1601,20 @@ export default function FindMatchTab({
     return a === b;
   };
 
+  const todayISO = toISODate(new Date());
+  const tomorrowISO = toISODate(new Date(Date.now() + 86400000));
+  const weekendISO = (() => {
+    const now = new Date();
+    const day = now.getDay();
+    const offset = day === 6 || day === 0 ? 0 : 6 - day;
+    return toISODate(new Date(now.getTime() + offset * 86400000));
+  })();
+
+  const formatCounts = FORMATS.reduce((acc, f) => {
+    acc[f.key] = normalized.filter(c => c.format === f.key).length;
+    return acc;
+  }, {});
+
   const filtered = normalized
     .filter(c => c.format === format.key)
     .filter(c => !dateFilter || sameDay(c.rawDate, dateFilter))
@@ -1466,6 +1627,27 @@ export default function FindMatchTab({
         c.note.toLowerCase().includes(query)
       );
     });
+
+  const activeFilters = [];
+  if (searchQuery.trim()) {
+    activeFilters.push({ id: "search", label: `"${searchQuery.trim()}"`, clear: () => setSearchQuery("") });
+  }
+  if (dateFilter) {
+    const isToday = dateFilter === todayISO;
+    const isTomorrow = dateFilter === tomorrowISO;
+    const isWeekend = dateFilter === weekendISO;
+    const lbl = isToday ? "Today" : isTomorrow ? "Tomorrow" : isWeekend ? "Weekend" : formatDateDisplay(dateFilter);
+    activeFilters.push({ id: "date", label: `📅 ${lbl}`, clear: () => setDateFilter(null) });
+  }
+  if (timeFilter) {
+    activeFilters.push({ id: "time", label: `⏰ ${timeFilter}`, clear: () => setTimeFilter("") });
+  }
+
+  const clearAllFilters = () => {
+    setSearchQuery("");
+    setDateFilter(null);
+    setTimeFilter("");
+  };
 
   const isSameCalendarDay = (a, b) => {
     if (!a || !b) return false;
@@ -1489,7 +1671,7 @@ export default function FindMatchTab({
       return isSameCalendarDay(c.match_date, targetDate);
     });
 
-  const activeFilterCount = [dateFilter, timeFilter || null].filter(Boolean).length;
+  const activeFilterCount = activeFilters.length;
 
   const myOwnOpenChallenges = challenges.filter(
     c => (c.status === "open" || c.status === "on_hold") && c.creator_id === user?.id
@@ -1498,14 +1680,19 @@ export default function FindMatchTab({
   const isLight = theme === "light";
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-xl font-bold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>Find a Match</h2>
-        <p className="text-sm mt-1" style={{ color: isLight ? "#475569" : "#6b7a6b" }}>Select your preferred format and get matched instantly</p>
-      </div>
+    <div className="space-y-6">
+      {/* Header section with Title on left and Post Challenge button on the right top corner */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3.5 pb-0.5">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
+            Find a Match
+          </h2>
+          <p className="text-xs sm:text-sm mt-1" style={{ color: isLight ? "#475569" : "#8a968a" }}>
+            Select your preferred format and get matched instantly
+          </p>
+        </div>
 
-      {(() => {
-        const challengeFormBlock = (
+        <div className="shrink-0 self-start sm:self-auto">
           <ChallengeForm
             key="challenge-form"
             token={token}
@@ -1516,87 +1703,262 @@ export default function FindMatchTab({
             onAutoOpenHandled={onAutoOpenHandled}
             theme={theme}
           />
-        );
+        </div>
+      </div>
 
+      {(() => {
         const formatCardsBlock = (
-          <div key="format-cards" className="grid grid-cols-2 gap-3">
-            {FORMATS.map((f, i) => (
-              <button key={f.key} onClick={() => setSelectedFormat(i)} className="p-4 rounded-2xl text-left transition-all cursor-pointer" style={{
-                backgroundColor: i === selectedFormat ? (isLight ? "#ecfdf5" : "rgba(34,197,94,0.1)") : (isLight ? "#ffffff" : "#1a1a1a"),
-                border: i === selectedFormat ? `1px solid ${isLight ? "#16a34a" : "#22c55e"}` : `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-                boxShadow: i === selectedFormat ? (isLight ? "0 0 0 1px #16a34a, 0 2px 8px rgba(22,163,74,0.15)" : "0 0 0 1px rgba(34,197,94,0.2)") : (isLight ? "0 1px 3px rgba(0,0,0,0.05)" : "none")
-              }}>
-                <div className="text-3xl mb-2">{f.emoji}</div>
-                <div className="font-semibold text-sm" style={{ color: i === selectedFormat ? (isLight ? "#15803d" : "#22c55e") : (isLight ? "#0f172a" : "#fff") }}>{f.title}</div>
-                <div className="text-xs mt-0.5" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>{f.desc}</div>
-                {i === selectedFormat && (
-                  <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style={{ backgroundColor: isLight ? "#dcfce7" : "rgba(34,197,94,0.15)", color: isLight ? "#15803d" : "#22c55e" }}>
-                    <CheckCircle className="w-3 h-3" /> Selected
+          <div key="format-cards" className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {FORMATS.map((f, i) => {
+              const isSelected = i === selectedFormat;
+              const count = formatCounts[f.key] || 0;
+              const themeConfig = FORMAT_THEMES[f.key] || FORMAT_THEMES.T20;
+
+              return (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => setSelectedFormat(i)}
+                  className={cn(
+                    "relative p-4 rounded-2xl text-left transition-all duration-200 cursor-pointer overflow-hidden group",
+                    isSelected ? "shadow-md scale-[1.01]" : "hover:-translate-y-0.5 hover:shadow-sm opacity-85 hover:opacity-100"
+                  )}
+                  style={{
+                    background: isSelected
+                      ? (isLight ? themeConfig.bgActiveLight : themeConfig.bgActiveDark)
+                      : (isLight ? "#ffffff" : "#131613"),
+                    border: isSelected
+                      ? `1.5px solid ${isLight ? themeConfig.borderActiveLight : themeConfig.borderActiveDark}`
+                      : `1px solid ${isLight ? "#e2e8f0" : "#242a24"}`,
+                    boxShadow: isSelected
+                      ? (isLight ? themeConfig.glowLight : themeConfig.glowDark)
+                      : undefined,
+                  }}
+                >
+                  {/* Subtle decorative glow in corner */}
+                  {isSelected && (
+                    <div
+                      className="absolute -right-4 -bottom-4 w-20 h-20 rounded-full blur-xl pointer-events-none opacity-30"
+                      style={{ backgroundColor: themeConfig.accent }}
+                    />
+                  )}
+
+                  <div className="flex items-start justify-between gap-2 mb-2.5">
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shadow-xs transition-transform group-hover:scale-110"
+                      style={{
+                        backgroundColor: isSelected
+                          ? (isLight ? "#ffffff" : "rgba(255,255,255,0.08)")
+                          : (isLight ? "#f8fafc" : "#1a1f1a"),
+                        border: `1px solid ${isLight ? "#e2e8f0" : "#2a332a"}`
+                      }}
+                    >
+                      {f.emoji}
+                    </div>
+
+                    {count > 0 ? (
+                      <span
+                        className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-tight shadow-xs"
+                        style={
+                          isSelected
+                            ? { backgroundColor: themeConfig.accent, color: "#ffffff" }
+                            : (isLight ? { backgroundColor: "#f1f5f9", color: "#475569" } : { backgroundColor: "#1e241e", color: "#9ca3af" })
+                        }
+                      >
+                        {count} open
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-medium" style={{ color: isLight ? "#94a3b8" : "#4a5a4a" }}>
+                        0 open
+                      </span>
+                    )}
                   </div>
-                )}
-              </button>
-            ))}
+
+                  <div className="font-bold text-sm truncate" style={{ color: isSelected ? (isLight ? "#0f172a" : "#ffffff") : (isLight ? "#334155" : "#e2e8f0") }}>
+                    {f.title}
+                  </div>
+                  <div className="text-[11px] mt-0.5 line-clamp-1" style={{ color: isLight ? "#64748b" : "#8a968a" }}>
+                    {f.desc}
+                  </div>
+
+                  {isSelected && (
+                    <div className="mt-2.5 flex items-center gap-1.5 text-[11px] font-bold" style={{ color: isLight ? themeConfig.borderActiveLight : themeConfig.accent }}>
+                      <span className="w-1.5 h-1.5 rounded-full animate-ping" style={{ backgroundColor: themeConfig.accent }} />
+                      <span>Active Selection</span>
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
         );
 
         const mapBlock = <ChallengesMap key="map" challenges={filtered} />;
 
         const filterBlock = (
-          <div key="filter" className={cn(C, "rounded-2xl p-4")} style={{ backgroundColor: isLight ? "#ffffff" : undefined, border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}` }}>
-            <div className="flex items-center justify-between mb-3">
+          <div key="filter" className="space-y-2">
+            {/* Header: Title and match count badge */}
+            <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
-                <Filter className="w-3.5 h-3.5" style={{ color: isLight ? "#16a34a" : "#4ade80" }} />
-                <span className="text-sm font-semibold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>Filter {format.title} challenges</span>
+                <Filter className="w-3.5 h-3.5 text-emerald-500" />
+                <span className="text-xs font-bold uppercase tracking-wider" style={{ color: isLight ? "#334155" : "#a6b5a6" }}>
+                  Filter {format.title}
+                </span>
+                <span
+                  className="px-2 py-0.5 rounded-full text-[10px] font-bold"
+                  style={{
+                    backgroundColor: isLight ? "#f0fdf4" : "rgba(34,197,94,0.1)",
+                    color: isLight ? "#15803d" : "#22c55e",
+                    border: `1px solid ${isLight ? "#bbf7d0" : "rgba(34,197,94,0.2)"}`
+                  }}
+                >
+                  {filtered.length} match{filtered.length === 1 ? "" : "es"}
+                </span>
               </div>
-              {activeFilterCount > 0 && (
+
+              {activeFilters.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => { setDateFilter(null); setTimeFilter(""); }}
-                  className="text-[11px] font-semibold transition-colors cursor-pointer"
-                  style={{ color: isLight ? "#64748b" : "#6b7a6b" }}
+                  onClick={clearAllFilters}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-500 hover:text-red-400 transition-colors cursor-pointer"
                 >
-                  Clear filters ({activeFilterCount})
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Reset filters</span>
                 </button>
               )}
             </div>
 
-            <div className="relative mb-3">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: isLight ? "#64748b" : "#6b7a6b" }} />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search by team or ground"
-                className="w-full rounded-xl pl-9 pr-8 py-2.5 text-xs focus:outline-none transition-colors"
-                style={{
-                  backgroundColor: isLight ? "#f8fafc" : "#111",
-                  border: isLight ? "1px solid #e2e8f0" : "1px solid #2a2a2a",
-                  color: isLight ? "#0f172a" : "#fff"
-                }}
-              />
-              {searchQuery && (
-                <button type="button" onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer">
-                  <X className="w-3.5 h-3.5" style={{ color: isLight ? "#64748b" : "#6b7a6b" }} />
-                </button>
+            {/* UNIFIED MERGED FILTER BAR: SEARCH + DATE + TIME */}
+            <div
+              className={cn(
+                "rounded-2xl transition-all duration-200 border",
+                "flex flex-col sm:flex-row sm:items-center",
+                isLight
+                  ? "bg-white border-slate-200 shadow-sm focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/10"
+                  : "bg-[#111411] border-[#252c25] shadow-lg focus-within:border-emerald-500/60"
               )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs mb-1.5 block font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Date</label>
-                <CalendarField value={dateFilter} onChange={setDateFilter} theme={theme} placeholder="Any Date" clearable={true} />
+            >
+              {/* 1. Search Section */}
+              <div className="flex-1 flex items-center px-3.5 py-2.5 min-w-0">
+                <Search
+                  className="w-4 h-4 shrink-0 mr-2.5 transition-colors"
+                  style={{ color: searchQuery ? (isLight ? "#16a34a" : "#22c55e") : (isLight ? "#94a3b8" : "#6b7a6b") }}
+                />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search team, ground, note..."
+                  className="w-full text-xs font-medium bg-transparent focus:outline-none placeholder:text-slate-400 dark:placeholder:text-[#556055]"
+                  style={{ color: isLight ? "#0f172a" : "#ffffff" }}
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer shrink-0 ml-1"
+                    title="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5" style={{ color: isLight ? "#64748b" : "#9ca3af" }} />
+                  </button>
+                )}
               </div>
-              <TimePicker value={timeFilter} onChange={setTimeFilter} theme={theme} />
+
+              {/* Divider between Search and Date/Time */}
+              <div className="hidden sm:block w-[1px] h-7 bg-slate-200 dark:bg-[#252d25] shrink-0" />
+              <div className="block sm:hidden h-[1px] w-full bg-slate-100 dark:bg-[#1b221b]" />
+
+              {/* 2. Date & Time Combined Section */}
+              <div className="flex items-center divide-x divide-slate-100 dark:divide-[#252d25] sm:divide-x-0">
+                {/* Date (Calendar) */}
+                <div className="flex-1 sm:w-44 px-3.5 py-2 sm:py-2.5 flex items-center min-w-0">
+                  <CalendarField
+                    value={dateFilter}
+                    onChange={setDateFilter}
+                    theme={theme}
+                    placeholder="Any Date"
+                    clearable={true}
+                    iconPosition="left"
+                    className="w-full"
+                    buttonStyle={{
+                      backgroundColor: "transparent",
+                      border: "none",
+                      boxShadow: "none",
+                      padding: "0",
+                      fontSize: "0.75rem",
+                      fontWeight: dateFilter ? "600" : "500",
+                    }}
+                  />
+                </div>
+
+                <div className="hidden sm:block w-[1px] h-7 bg-slate-200 dark:bg-[#252d25] shrink-0" />
+
+                {/* Time Slot */}
+                <div className="flex-1 sm:w-40 px-3.5 py-2 sm:py-2.5 flex items-center min-w-0">
+                  <TimePicker
+                    value={timeFilter}
+                    onChange={setTimeFilter}
+                    theme={theme}
+                    embedded={true}
+                  />
+                </div>
+              </div>
+
+              {/* Clear button on far right if any filter is active */}
+              {activeFilters.length > 0 && (
+                <>
+                  <div className="hidden sm:block w-[1px] h-7 bg-slate-200 dark:bg-[#252d25] shrink-0" />
+                  <div className="px-3 py-1.5 sm:py-0 shrink-0 flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={clearAllFilters}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-red-500 hover:bg-red-500/10 transition-colors flex items-center gap-1 cursor-pointer"
+                      title="Clear all filters"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>Clear</span>
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
+
+            {/* Active filter tags */}
+            {activeFilters.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap pt-0.5 px-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider mr-0.5" style={{ color: isLight ? "#94a3b8" : "#6b7a6b" }}>
+                  Active:
+                </span>
+                {activeFilters.map(f => (
+                  <span
+                    key={f.id}
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border shadow-2xs"
+                    style={{
+                      backgroundColor: isLight ? "#ecfdf5" : "rgba(34,197,94,0.12)",
+                      color: isLight ? "#065f46" : "#4ade80",
+                      borderColor: isLight ? "#a7f3d0" : "rgba(34,197,94,0.25)"
+                    }}
+                  >
+                    <span>{f.label}</span>
+                    <button
+                      type="button"
+                      onClick={f.clear}
+                      className="p-0.5 rounded-full hover:bg-emerald-200 dark:hover:bg-emerald-900/60 transition-colors cursor-pointer"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         );
 
         return (
           <>
             {formatCardsBlock}
-            {entryMode === "create"
-              ? <>{challengeFormBlock}{mapBlock}{filterBlock}</>
-              : <>{filterBlock}{mapBlock}{challengeFormBlock}</>}
+            {filterBlock}
+            {mapBlock}
           </>
         );
       })()}

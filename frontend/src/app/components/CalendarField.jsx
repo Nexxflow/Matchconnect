@@ -58,7 +58,8 @@ export default function CalendarField({
   clearable = false,
   disabled = false,
   className = "",
-  buttonStyle = {}
+  buttonStyle = {},
+  iconPosition = "right"
 }) {
   const isLight =
     theme === "light" ||
@@ -145,22 +146,45 @@ export default function CalendarField({
           ...buttonStyle
         }}
       >
-        <span className="truncate">
-          {value ? formatDateDisplay(value) : placeholder}
-        </span>
-        <div className="flex items-center gap-1.5 shrink-0 ml-2">
-          {clearable && value && (
-            <X
-              className="w-3.5 h-3.5 hover:opacity-80 transition-opacity"
-              style={{ color: isLight ? "#94a3b8" : "#64748b" }}
-              onClick={handleClear}
-            />
-          )}
-          <Calendar
-            className="w-3.5 h-3.5"
-            style={{ color: isLight ? "#64748b" : "#6b7a6b" }}
-          />
-        </div>
+        {iconPosition === "left" ? (
+          <>
+            <div className="flex items-center gap-1.5 truncate">
+              <Calendar
+                className="w-3.5 h-3.5 shrink-0"
+                style={{ color: value ? (isLight ? "#16a34a" : "#4ade80") : (isLight ? "#64748b" : "#6b7a6b") }}
+              />
+              <span className="truncate">
+                {value ? formatDateDisplay(value) : placeholder}
+              </span>
+            </div>
+            {clearable && value && (
+              <X
+                className="w-3.5 h-3.5 hover:opacity-80 transition-opacity shrink-0 ml-1.5"
+                style={{ color: isLight ? "#94a3b8" : "#64748b" }}
+                onClick={handleClear}
+              />
+            )}
+          </>
+        ) : (
+          <>
+            <span className="truncate">
+              {value ? formatDateDisplay(value) : placeholder}
+            </span>
+            <div className="flex items-center gap-1.5 shrink-0 ml-2">
+              {clearable && value && (
+                <X
+                  className="w-3.5 h-3.5 hover:opacity-80 transition-opacity"
+                  style={{ color: isLight ? "#94a3b8" : "#64748b" }}
+                  onClick={handleClear}
+                />
+              )}
+              <Calendar
+                className="w-3.5 h-3.5"
+                style={{ color: isLight ? "#64748b" : "#6b7a6b" }}
+              />
+            </div>
+          </>
+        )}
       </button>
 
       {open && (
