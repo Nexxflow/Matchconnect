@@ -133,6 +133,9 @@ const allowedOrigins = [
   "http://localhost:5174",
   "http://127.0.0.1:5174",
   "https://hdr2k2kf-5173.inc1.devtunnels.ms",
+  "capacitor://localhost",
+  "https://localhost",
+  "http://localhost",
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
