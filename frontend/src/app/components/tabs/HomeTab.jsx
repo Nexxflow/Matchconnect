@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { MapPin, Star } from "lucide-react";
+import { MapPin, Star, Calendar, Clock } from "lucide-react";
 import { C, cn, Tag, GhostButton } from "../../utils/helpers.jsx";
 import { GROUNDS, ALL_CHALLENGES } from "../../utils/constants";
 
@@ -18,7 +18,27 @@ const GROUND_THEMES = [
   { grad: "linear-gradient(135deg,#a855f7 0%,#ec4899 100%)", soft: "rgba(168,85,247,0.16)" }
 ];
 
+// "2026-09-21T18:30:00.000Z" -> "22 Sept 2026" (IST). Plain text is returned as-is.
+function formatMatchDate(value) {
+  if (!value) return "Date TBD";
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return String(value);
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+}
+
+// "19:00" -> "7:00 PM". Already-formatted values ("7:00 PM") are returned as-is.
+function formatMatchTime(value) {
+  if (!value) return "";
+  const m = String(value).trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!m) return String(value);
+  let h = parseInt(m[1], 10);
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  return `${h}:${m[2]} ${ampm}`;
+}
+
 export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = ALL_CHALLENGES, tournaments = [], allChallenges = [], onCreateChallenge, onCreateTournament, theme = "dark" }) {
+  const isLight = theme === "light";
   const matchesPlayedCount = allChallenges.filter(c => c.status === "accepted").length;
   const activeTeamsCount = new Set(
     allChallenges.flatMap(c => [c.team_name, c.accepted_by_team_name].filter(Boolean))
@@ -57,6 +77,56 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
       { timeout: 8000 }
     );
   }, []);
+
+  // Hero quick actions — all 4 in one row. Each button gets an equal share of the
+  // width (grid-cols-4), so nothing scrolls or gets cut. Below lg the emoji sits
+  // above a wrapping label (never truncated); from lg up it is a single-line pill.
+  const heroActions = [
+    {
+      key: "find",
+      emoji: "🏏",
+      label: "Find a Match",
+      onClick: () => setActiveTab("Find Match"),
+      background: theme === "light"
+        ? "linear-gradient(135deg,#ffffff 0%,#f0fdf4 100%)"
+        : "linear-gradient(135deg,#22c55e 0%,#15803d 100%)",
+      border: theme === "light" ? "2px solid #ffffff" : "2px solid rgba(134,239,172,0.55)",
+      shadow: "0 6px 18px -6px rgba(34,197,94,0.55)",
+      color: theme === "light" ? "#15803d" : "#ffffff"
+    },
+    {
+      key: "ground",
+      emoji: "🏟",
+      label: "Book a Ground",
+      onClick: () => setActiveTab("Grounds"),
+      background: theme === "light"
+        ? "linear-gradient(135deg,#ffffff 0%,#eff6ff 100%)"
+        : "linear-gradient(135deg,#3b82f6 0%,#1e40af 100%)",
+      border: theme === "light" ? "2px solid #ffffff" : "2px solid rgba(147,197,253,0.5)",
+      shadow: "0 6px 18px -6px rgba(59,130,246,0.55)",
+      color: theme === "light" ? "#1d4ed8" : "#ffffff"
+    },
+    {
+      key: "challenge",
+      emoji: "⚡",
+      label: "Create Challenge",
+      onClick: onCreateChallenge,
+      background: "linear-gradient(135deg,#f59e0b 0%,#f97316 55%,#ec4899 100%)",
+      border: theme === "light" ? "2px solid #ffffff" : "2px solid rgba(253,186,116,0.5)",
+      shadow: "0 6px 18px -6px rgba(249,115,22,0.6)",
+      color: "#ffffff"
+    },
+    {
+      key: "tournament",
+      emoji: "🏆",
+      label: "Create Tournament",
+      onClick: onCreateTournament || (() => setActiveTab("Tournaments")),
+      background: "linear-gradient(135deg,#a855f7 0%,#7e22ce 55%,#4c1d95 100%)",
+      border: theme === "light" ? "2px solid #ffffff" : "2px solid rgba(216,180,254,0.5)",
+      shadow: "0 6px 18px -6px rgba(168,85,247,0.6)",
+      color: "#ffffff"
+    }
+  ];
 
   return (
     <div className="space-y-8">
@@ -98,55 +168,26 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
           >
             cricket match
           </h1>
-          <div className="flex flex-row items-center flex-nowrap gap-2 sm:gap-2.5 md:gap-3 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-            <button
-              onClick={() => setActiveTab("Find Match")}
-              className="shrink-0 px-3.5 sm:px-4 md:px-5 py-2 sm:py-2.5 rounded-full font-bold text-xs sm:text-sm hover:opacity-95 hover:scale-[1.03] transition-all text-center justify-center whitespace-nowrap cursor-pointer"
-              style={{
-                background: theme === "light"
-                  ? "linear-gradient(135deg,#ffffff 0%,#f0fdf4 100%)"
-                  : "linear-gradient(135deg,#22c55e 0%,#15803d 100%)",
-                border: theme === "light" ? "2px solid #ffffff" : "2px solid rgba(134,239,172,0.55)",
-                boxShadow: "0 6px 18px -4px rgba(34,197,94,0.55)"
-              }}
-            >
-              <span style={{ color: theme === "light" ? "#15803d" : "#ffffff", fontWeight: 700 }}>🏏 Find a Match</span>
-            </button>
-            <button
-              onClick={() => setActiveTab("Grounds")}
-              className="shrink-0 px-3.5 sm:px-4 md:px-5 py-2 sm:py-2.5 rounded-full font-bold text-xs sm:text-sm hover:opacity-95 hover:scale-[1.03] transition-all text-center justify-center whitespace-nowrap cursor-pointer"
-              style={{
-                background: theme === "light"
-                  ? "linear-gradient(135deg,#ffffff 0%,#eff6ff 100%)"
-                  : "linear-gradient(135deg,#3b82f6 0%,#1e40af 100%)",
-                border: theme === "light" ? "2px solid #ffffff" : "2px solid rgba(147,197,253,0.5)",
-                boxShadow: "0 6px 18px -4px rgba(59,130,246,0.55)"
-              }}
-            >
-              <span style={{ color: theme === "light" ? "#1d4ed8" : "#ffffff", fontWeight: 700 }}>🏟 Book a Ground</span>
-            </button>
-            <button
-              onClick={onCreateChallenge}
-              className="shrink-0 px-3.5 sm:px-4 md:px-5 py-2 sm:py-2.5 rounded-full font-bold text-xs sm:text-sm hover:opacity-95 hover:scale-[1.03] transition-all text-center justify-center whitespace-nowrap cursor-pointer"
-              style={{
-                background: "linear-gradient(135deg,#f59e0b 0%,#f97316 55%,#ec4899 100%)",
-                border: theme === "light" ? "2px solid #ffffff" : "2px solid rgba(253,186,116,0.5)",
-                boxShadow: "0 6px 18px -4px rgba(249,115,22,0.6)"
-              }}
-            >
-              <span style={{ color: "#ffffff", fontWeight: 700 }}>⚡ Create Challenge</span>
-            </button>
-            <button
-              onClick={onCreateTournament || (() => setActiveTab("Tournaments"))}
-              className="shrink-0 px-3.5 sm:px-4 md:px-5 py-2 sm:py-2.5 rounded-full font-bold text-xs sm:text-sm hover:opacity-95 hover:scale-[1.03] transition-all text-center justify-center whitespace-nowrap cursor-pointer"
-              style={{
-                background: "linear-gradient(135deg,#a855f7 0%,#7e22ce 55%,#4c1d95 100%)",
-                border: theme === "light" ? "2px solid #ffffff" : "2px solid rgba(216,180,254,0.5)",
-                boxShadow: "0 6px 18px -4px rgba(168,85,247,0.6)"
-              }}
-            >
-              <span style={{ color: "#ffffff", fontWeight: 700 }}>🏆 Create Tournament</span>
-            </button>
+
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2.5 md:gap-3 w-full">
+            {heroActions.map(a => (
+              <button
+                key={a.key}
+                type="button"
+                onClick={a.onClick}
+                title={a.label}
+                className="w-full min-w-0 flex flex-col lg:flex-row items-center justify-center gap-1 lg:gap-1.5 px-1.5 sm:px-2 lg:px-4 py-2 sm:py-2.5 rounded-2xl lg:rounded-full font-bold hover:opacity-95 hover:scale-[1.03] active:scale-[0.98] transition-all cursor-pointer"
+                style={{ background: a.background, border: a.border, boxShadow: a.shadow }}
+              >
+                <span className="text-lg lg:text-sm leading-none">{a.emoji}</span>
+                <span
+                  className="text-[10px] sm:text-xs lg:text-sm leading-tight text-center lg:whitespace-nowrap"
+                  style={{ color: a.color, fontWeight: 700 }}
+                >
+                  {a.label}
+                </span>
+              </button>
+            ))}
           </div>
         </div>
         <div className="absolute right-4 top-4 sm:right-6 sm:top-6 text-6xl sm:text-7xl opacity-25 select-none pointer-events-none drop-shadow-lg">🏏</div>
@@ -164,7 +205,7 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
           return (
             <div
               key={s.label}
-              className={cn(C, "rounded-2xl p-3.5 sm:p-4 relative overflow-hidden transition-all hover:scale-[1.02]")}
+              className={cn(C, "rounded-2xl p-4 sm:p-5 relative overflow-hidden transition-all hover:-translate-y-0.5 flex flex-col")}
               style={{
                 background: theme === "light"
                   ? `linear-gradient(150deg, #ffffff 0%, ${t.tint} 100%)`
@@ -173,30 +214,40 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
                 boxShadow: `0 6px 20px -8px ${t.glow}, inset 0 1px 0 rgba(255,255,255,0.05)`
               }}
             >
+              {/* corner glow */}
               <div
-                className="absolute -right-6 -top-6 w-20 h-20 rounded-full pointer-events-none"
-                style={{ background: t.grad, opacity: 0.18, filter: "blur(6px)" }}
+                className="absolute -right-8 -top-8 w-28 h-28 rounded-full pointer-events-none"
+                style={{ background: t.grad, opacity: 0.2, filter: "blur(18px)" }}
               />
-              <div
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-lg sm:text-xl mb-2 shadow-md"
-                style={{ background: t.grad, boxShadow: `0 4px 14px -4px ${t.glow}` }}
-              >
-                {s.icon}
+
+              {/* Big number on top */}
+              <div className="relative flex-1 flex items-center justify-center py-2 sm:py-3">
+                <span
+                  className="text-5xl sm:text-6xl font-black leading-none tracking-tighter tabular-nums"
+                  style={{
+                    background: t.grad,
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    backgroundClip: "text",
+                    filter: `drop-shadow(0 4px 14px ${t.glow})`
+                  }}
+                >
+                  {s.value}
+                </span>
               </div>
+
+              {/* Label at the bottom */}
               <div
-                className="text-xl sm:text-2xl font-black font-mono"
-                style={{
-                  background: t.grad,
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text"
-                }}
+                className="relative mt-3 pt-3 border-t text-center"
+                style={{ borderColor: `${t.ring}33` }}
               >
-                {s.value}
+                <div className="text-sm sm:text-base font-bold leading-tight" style={{ color: theme === "light" ? "#1f2937" : "#e5ece5" }}>
+                  {s.label}
+                </div>
+                <div className="text-[11px] sm:text-xs mt-1 font-medium" style={{ color: theme === "light" ? "#64748b" : "#7d8a7d" }}>
+                  {s.sub}
+                </div>
               </div>
-              <div className="text-xs mt-0.5 font-bold" style={{ color: theme === "light" ? "#1f2937" : "#c9d6c9" }}>{s.label}</div>
-              <div className="text-[11px] mt-0.5 truncate font-medium" style={{ color: theme === "light" ? "#64748b" : "#6b7a6b" }}>{s.sub}</div>
-              <div className="absolute bottom-0 left-0 right-0 h-1" style={{ background: t.grad, opacity: 0.85 }} />
             </div>
           );
         })}
@@ -205,11 +256,11 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
       {/* Urgent match requests */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold flex items-center gap-2" style={{ color: theme === "light" ? "#000000" : "#ffffff" }}>
+          <h2 className="text-base font-semibold flex items-center gap-2" style={{ color: isLight ? "#000000" : "#ffffff" }}>
             <span className="w-1.5 h-5 rounded-full" style={{ background: "linear-gradient(180deg,#f59e0b,#ec4899)" }} />
             Urgent Match Requests
           </h2>
-          <button onClick={() => setActiveTab("Find Match")} className="text-xs text-green-500 hover:text-green-600 font-medium">View all →</button>
+          <button onClick={() => setActiveTab("Find Match")} className="text-xs text-green-500 hover:text-green-600 font-medium cursor-pointer">View all →</button>
         </div>
         <div className="space-y-3">
           {[...challenges]
@@ -217,120 +268,142 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
             .slice(0, 3)
             .map((req, idx) => {
               const accent = GROUND_THEMES[idx % GROUND_THEMES.length];
+              const muted = isLight ? "#64748b" : "#8fa38f";
+              const initials = String(req.team || "?").split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
               return (
                 <div
                   key={req.id}
-                  className={cn(C, "rounded-2xl p-4 relative overflow-hidden transition-all hover:scale-[1.005]")}
+                  className={cn(C, "rounded-2xl p-4 sm:p-5 pt-5 sm:pt-6 relative overflow-hidden")}
                   style={{
                     border: `1px solid ${accent.soft.replace("0.16", "0.45")}`,
-                    boxShadow: `0 6px 22px -12px rgba(0,0,0,0.6)`
+                    boxShadow: "0 6px 22px -12px rgba(0,0,0,0.6)"
                   }}
                 >
-                  <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ background: req.urgent ? "linear-gradient(180deg,#f59e0b,#ef4444)" : accent.grad }} />
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 pl-1.5">
-                    <div className="flex-1 min-w-0 w-full sm:w-auto">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md"
-                          style={{ background: accent.grad, boxShadow: `0 4px 14px -4px ${accent.soft.replace("0.16", "0.8")}` }}
-                        >
-                          {req.team.split(" ").map(w => w[0]).slice(0, 2).join("")}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-semibold truncate" style={{ color: theme === "light" ? "#000000" : "#ffffff" }}>{req.team}</div>
-                          {(req.rating > 0 || req.reviewsCount > 0) && (
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                              <span className="text-xs font-bold text-amber-400">{req.rating.toFixed(1)}</span>
-                              {req.reviewsCount > 0 && (
-                                <span className="text-[10px] text-neutral-400">({req.reviewsCount} review{req.reviewsCount !== 1 ? "s" : ""})</span>
-                              )}
-                            </div>
-                          )}
-                        </div>
+                  {/* top accent line (sits inside the rounded corners) */}
+                  <div
+                    className="absolute top-0 left-0 right-0 h-1"
+                    style={{ background: req.urgent ? "linear-gradient(90deg,#f59e0b,#ef4444)" : accent.grad }}
+                  />
+
+                  {/* Team  —  VS  —  Opponent needed */}
+                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-5">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0"
+                        style={{ background: accent.grad, boxShadow: `0 4px 14px -4px ${accent.soft.replace("0.16", "0.8")}` }}
+                      >
+                        {initials}
                       </div>
-                      {req.latestReview && (
-                        <div
-                          className="mt-2 p-2 rounded-xl text-[11px]"
-                          style={{
-                            background: theme === "light"
-                              ? "linear-gradient(135deg,#f8fafc 0%,#f0fdf4 100%)"
-                              : "linear-gradient(135deg,#0f120f 0%,#101a12 100%)",
-                            border: `1px solid ${theme === "light" ? "#e2e8f0" : "#222922"}`
-                          }}
-                        >
-                          <div className="flex items-center justify-between gap-1 text-[10px] text-neutral-400 mb-0.5">
-                            <span className="font-semibold truncate flex items-center gap-1" style={{ color: theme === "light" ? "#000000" : "#e2e8f0" }}>
-                              <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400 shrink-0" />
-                              <span>{Number(req.latestReview.rating || 5.0).toFixed(1)}★</span>
-                              <span>by {req.latestReview.reviewer_name}</span>
-                              {req.latestReview.reviewer_team_name ? ` (${req.latestReview.reviewer_team_name})` : ""}:
-                            </span>
-                            <span className="shrink-0 text-[9px]" style={{ color: theme === "light" ? "#000000" : "#737373" }}>
-                              {req.latestReview.created_at
-                                ? new Date(req.latestReview.created_at).toLocaleString("en-IN", {
-                                    day: "numeric",
-                                    month: "short",
-                                    hour: "numeric",
-                                    minute: "2-digit",
-                                    hour12: true,
-                                    timeZone: "Asia/Kolkata"
-                                  })
-                                : "Recent"}
-                            </span>
+                      <div className="min-w-0">
+                        <div className="text-base font-bold truncate" style={{ color: isLight ? "#000000" : "#ffffff" }}>{req.team}</div>
+                        {(req.rating > 0 || req.reviewsCount > 0) && (
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                            <span className="text-xs font-bold text-amber-400">{Number(req.rating || 0).toFixed(1)}</span>
+                            {req.reviewsCount > 0 && (
+                              <span className="text-[11px]" style={{ color: muted }}>({req.reviewsCount} review{req.reviewsCount !== 1 ? "s" : ""})</span>
+                            )}
                           </div>
-                          <p className="italic line-clamp-1 pl-2 border-l-2 border-green-500/60" style={{ color: theme === "light" ? "#000000" : "#d4d4d4" }}>
-                            "{req.latestReview.review_text}"
-                          </p>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
+
                     <div
-                      className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 self-center shadow-lg"
+                      className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center shrink-0"
                       style={{
                         background: "linear-gradient(135deg,#22c55e 0%,#0ea5e9 100%)",
                         border: "2px solid rgba(255,255,255,0.25)",
                         boxShadow: "0 4px 16px -4px rgba(34,197,94,0.7)"
                       }}
                     >
-                      <span className="text-white font-black text-[10px] sm:text-xs">VS</span>
+                      <span className="text-white font-black text-xs">VS</span>
                     </div>
-                    <div className="flex-1 min-w-0 w-full sm:w-auto">
-                      <div
-                        className="rounded-xl p-2.5 sm:p-3 text-center"
-                        style={{
-                          background: theme === "light"
-                            ? "linear-gradient(135deg,#fef3c7 0%,#fce7f3 100%)"
-                            : "linear-gradient(135deg,rgba(245,158,11,0.12) 0%,rgba(236,72,153,0.12) 100%)",
-                          border: `2px dashed ${theme === "light" ? "#fbbf24" : "rgba(251,191,36,0.45)"}`
-                        }}
-                      >
-                        <div className="text-xs font-medium" style={{ color: theme === "light" ? "#92400e" : "#fbbf24" }}>Opponent needed</div>
-                        <div className="text-[11px] mt-0.5 font-semibold" style={{ color: theme === "light" ? "#78350f" : "#fcd34d" }}>11/11 players</div>
-                      </div>
+
+                    <div
+                      className="rounded-xl px-2 py-2.5 sm:py-3 text-center min-w-0"
+                      style={{
+                        background: isLight
+                          ? "linear-gradient(135deg,#fef3c7 0%,#fce7f3 100%)"
+                          : "linear-gradient(135deg,rgba(245,158,11,0.12) 0%,rgba(236,72,153,0.12) 100%)",
+                        border: `2px dashed ${isLight ? "#fbbf24" : "rgba(251,191,36,0.45)"}`
+                      }}
+                    >
+                      <div className="text-xs sm:text-sm font-semibold" style={{ color: isLight ? "#92400e" : "#fbbf24" }}>Opponent needed</div>
+                      <div className="text-[11px] mt-0.5" style={{ color: isLight ? "#78350f" : "#fcd34d" }}>Open to challenge</div>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-1.5 mt-3 pl-1.5">
+
+                  {/* Match info */}
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 mt-4 text-sm" style={{ color: isLight ? "#0f172a" : "#e5e7eb" }}>
+                    <span className="flex items-center gap-1.5">
+                      <Calendar className="w-4 h-4 text-green-500" />
+                      {formatMatchDate(req.date)}
+                    </span>
+                    {req.time && (
+                      <span className="flex items-center gap-1.5">
+                        <Clock className="w-4 h-4 text-green-500" />
+                        {formatMatchTime(req.time)}
+                      </span>
+                    )}
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      <MapPin className="w-4 h-4 text-green-500 shrink-0" />
+                      <span className="truncate">{req.ground || "Ground TBD"}</span>
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 mt-3">
                     {req.urgent && <Tag color="amber">⚡ Urgent</Tag>}
                     <Tag color="blue">{req.format}</Tag>
-                    <Tag color="green">{req.date} {req.time}</Tag>
                   </div>
-                  <div className="text-xs mt-2 font-medium pl-1.5" style={{ color: theme === "light" ? "#000000" : "#8fa38f" }}>📍 {req.ground}</div>
-                  <div className="flex flex-col sm:flex-row gap-2 mt-3 pl-1.5">
+
+                  {/* Latest review — full width, lines up with everything above */}
+                  {req.latestReview && (
+                    <div
+                      className="mt-3 p-3 rounded-xl text-xs"
+                      style={{
+                        background: isLight ? "#f8fafc" : "#101410",
+                        border: `1px solid ${isLight ? "#e2e8f0" : "#222922"}`
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="font-semibold truncate flex items-center gap-1" style={{ color: isLight ? "#000000" : "#e2e8f0" }}>
+                          <Star className="w-3 h-3 fill-amber-400 text-amber-400 shrink-0" />
+                          {Number(req.latestReview.rating || 5.0).toFixed(1)} by {req.latestReview.reviewer_name}
+                          {req.latestReview.reviewer_team_name ? ` (${req.latestReview.reviewer_team_name})` : ""}
+                        </span>
+                        <span className="shrink-0 text-[10px]" style={{ color: muted }}>
+                          {req.latestReview.created_at
+                            ? new Date(req.latestReview.created_at).toLocaleString("en-IN", {
+                                day: "numeric",
+                                month: "short",
+                                hour: "numeric",
+                                minute: "2-digit",
+                                hour12: true,
+                                timeZone: "Asia/Kolkata"
+                              })
+                            : "Recent"}
+                        </span>
+                      </div>
+                      <p className="italic line-clamp-2 pl-2 border-l-2 border-green-500/60" style={{ color: isLight ? "#334155" : "#d4d4d4" }}>
+                        "{req.latestReview.review_text}"
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2 mt-4">
                     <button
                       onClick={() => setActiveTab("Find Match")}
-                      className="flex-1 py-2 rounded-xl text-xs font-bold transition-all text-center cursor-pointer text-white hover:opacity-95 hover:scale-[1.02]"
+                      className="py-2.5 rounded-xl text-sm font-bold transition-all text-center cursor-pointer text-white hover:opacity-95"
                       style={{
-                        background: theme === "light"
+                        background: isLight
                           ? "linear-gradient(135deg,#16a34a 0%,#15803d 100%)"
                           : "linear-gradient(135deg,#22c55e 0%,#0d9488 100%)",
-                        color: "#ffffff",
                         boxShadow: "0 4px 16px -4px rgba(34,197,94,0.65)"
                       }}
                     >
                       Accept Challenge
                     </button>
-                    <GhostButton onClick={() => setActiveTab("Find Match")} className="flex-1 text-center">View Details</GhostButton>
+                    <GhostButton onClick={() => setActiveTab("Find Match")} className="text-center py-2.5 text-sm">View Details</GhostButton>
                   </div>
                 </div>
               );
@@ -347,64 +420,90 @@ export default function HomeTab({ setActiveTab, grounds = GROUNDS, challenges = 
           </h2>
           <button onClick={() => setActiveTab("Grounds")} className="text-xs text-green-600 dark:text-green-500 hover:underline font-semibold">View all →</button>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {grounds.map((g, i) => {
             const gt = GROUND_THEMES[i % GROUND_THEMES.length];
+            const rating = Number(g.rating) || 0;
+            const venue = g.area || g.address || "Location TBD";
+            const price = g.price || (g.price_per_hour ? `₹${g.price_per_hour}/hr` : "");
             return (
               <div
-                key={g.name}
-                className={cn(C, "rounded-2xl overflow-hidden transition-all hover:scale-[1.02]")}
+                key={g.id ?? g.name}
+                className={cn(C, "rounded-2xl overflow-hidden transition-colors")}
                 style={{
                   border: `1px solid ${gt.soft.replace("0.16", "0.5")}`,
                   boxShadow: `0 8px 22px -14px ${gt.soft.replace("0.16", "0.9")}`
                 }}
               >
+                {/* Header: ground name as the title, venue underneath */}
                 <div
-                  className="h-16 flex items-center justify-center border-b relative overflow-hidden"
+                  className="relative px-4 py-4 flex items-center gap-3 border-b"
                   style={{
-                    background: theme === "light"
+                    background: isLight
                       ? `linear-gradient(135deg, ${gt.soft.replace("0.16", "0.28")} 0%, #ffffff 100%)`
                       : `linear-gradient(135deg, ${gt.soft.replace("0.16", "0.35")} 0%, rgba(13,15,13,0.6) 100%)`,
-                    borderColor: theme === "light" ? "#e2e8f0" : "#2a2a2a"
+                    borderColor: isLight ? "#e2e8f0" : "#2a2a2a"
                   }}
                 >
-                  <div className="absolute inset-0 opacity-25" style={{ background: gt.grad }} />
-                  <span className="text-3xl relative z-10 drop-shadow-md">🏟</span>
+                  <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ background: gt.grad }} />
+                  <div
+                    className="relative w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0"
+                    style={{ background: gt.grad, boxShadow: `0 6px 16px -6px ${gt.soft.replace("0.16", "0.9")}` }}
+                  >
+                    🏟
+                  </div>
+                  <div className="relative min-w-0">
+                    <div className="text-lg font-bold leading-tight truncate" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
+                      {g.name}
+                    </div>
+                    <div className="flex items-center gap-1 mt-1 min-w-0">
+                      <MapPin className="w-3.5 h-3.5 shrink-0" style={{ color: isLight ? "#475569" : "#cbd5e1" }} />
+                      <span className="text-sm truncate" style={{ color: isLight ? "#475569" : "#cbd5e1" }}>{venue}</span>
+                    </div>
+                  </div>
                   <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: gt.grad }} />
                 </div>
-                <div className="p-3">
-                  <div className="font-semibold text-sm leading-tight" style={{ color: theme === "light" ? "#000000" : "#ffffff" }}>{g.name}</div>
-                  <div className="flex items-center gap-1 mt-1">
-                    <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                    <span className="text-xs font-semibold" style={{ color: theme === "light" ? "#000000" : "#6b7a6b" }}>{g.rating} · {g.area}</span>
+
+                {/* Body: rating + price */}
+                <div className="px-4 py-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-1.5 text-sm">
+                    <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                    <span className="font-semibold" style={{ color: isLight ? "#0f172a" : "#e5e7eb" }}>
+                      {rating > 0 ? rating.toFixed(1) : "New"}
+                    </span>
                   </div>
-                  <div className="flex flex-wrap gap-1 mt-2">
+                  {price && (
+                    <div
+                      className="font-bold text-base"
+                      style={{
+                        background: gt.grad,
+                        WebkitBackgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                        backgroundClip: "text"
+                      }}
+                    >
+                      {price}
+                    </div>
+                  )}
+                </div>
+
+                {(g.amenities || []).length > 0 && (
+                  <div className="px-4 pb-3 flex flex-wrap gap-1">
                     {g.amenities.map(a => (
                       <span
                         key={a.label}
                         className="text-xs px-1.5 py-0.5 rounded-md font-medium"
                         style={{
-                          backgroundColor: theme === "light" ? "#f1f5f9" : "#222",
-                          color: theme === "light" ? "#000000" : "#8fa38f",
-                          border: `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}`
+                          backgroundColor: isLight ? "#f1f5f9" : "#222",
+                          color: isLight ? "#334155" : "#8fa38f",
+                          border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`
                         }}
                       >
                         {a.label}
                       </span>
                     ))}
                   </div>
-                  <div
-                    className="font-bold text-sm mt-2"
-                    style={{
-                      background: gt.grad,
-                      WebkitBackgroundClip: "text",
-                      WebkitTextFillColor: "transparent",
-                      backgroundClip: "text"
-                    }}
-                  >
-                    {g.price}
-                  </div>
-                </div>
+                )}
               </div>
             );
           })}

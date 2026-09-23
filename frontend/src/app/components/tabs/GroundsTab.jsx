@@ -1,15 +1,292 @@
 import React, { useState, useEffect } from "react";
-import { Filter, Search, ChevronDown, MapPin, Star, Plus, X, Map, Pencil, Trash2, ExternalLink, Hash, RotateCcw, IndianRupee, Sparkles, Zap } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Search, ChevronDown, MapPin, Star, Plus, X, Map, Pencil, Trash2, ExternalLink, Hash, RotateCcw, IndianRupee, Clock } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { apiRequest } from "../../api";
-import { C, cn, Tag, GhostButton, buildGroundMapsEmbedUrl, buildGroundMapsLink } from "../../utils/helpers.jsx";
+import { cn, Tag, buildGroundMapsEmbedUrl, buildGroundMapsLink } from "../../utils/helpers.jsx";
 import { GROUNDS, TIME_SLOTS } from "../../utils/constants";
 import CalendarField from "../CalendarField.jsx";
 
+/* ============================================================================
+   SHARED UI — same visual pattern as the Tournaments tab
+   ============================================================================ */
+const ACCENT_BAR = "linear-gradient(90deg,#22c55e 0%,#10b981 100%)";
+const BRAND_GRAD = "linear-gradient(135deg,#22c55e 0%,#14b8a6 100%)";
+const DANGER_GRAD = "linear-gradient(135deg,#ef4444 0%,#e11d48 100%)";
+
+const detectLight = theme =>
+  theme === "light" || (typeof document !== "undefined" && document.documentElement.classList.contains("light"));
+
+const tokens = isLight => ({
+  text: isLight ? "#0f172a" : "#ffffff",
+  sub: isLight ? "#64748b" : "#9aa59c",
+  faint: isLight ? "#94a3b8" : "#5f6b62",
+  card: isLight ? "#ffffff" : "#0c120e",
+  cardAlt: isLight ? "#f8fafc" : "#101812",
+  border: isLight ? "#e2e8f0" : "#1d2a21",
+  input: isLight ? "#f8fafc" : "#080d0a",
+  inputBorder: isLight ? "#e2e8f0" : "#233027",
+  green: isLight ? "#16a34a" : "#4ade80",
+  greenSoft: isLight ? "#ecfdf5" : "rgba(34,197,94,0.08)",
+  greenBorder: isLight ? "#a7f3d0" : "rgba(34,197,94,0.28)",
+  red: isLight ? "#dc2626" : "#f87171",
+  redSoft: isLight ? "#fef2f2" : "rgba(239,68,68,0.08)",
+  redBorder: isLight ? "#fecaca" : "rgba(239,68,68,0.3)",
+  overlay: isLight ? "rgba(15,23,42,0.55)" : "rgba(0,0,0,0.78)"
+});
+
+function Card({ isLight, children, className = "", style = {}, accent = true }) {
+  const t = tokens(isLight);
+  return (
+    <div
+      className={cn("relative rounded-2xl border", className)}
+      style={{
+        backgroundColor: t.card,
+        borderColor: t.border,
+        boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.06)" : "0 10px 30px -18px rgba(0,0,0,0.8)",
+        ...style
+      }}
+    >
+      {accent && <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl" style={{ background: ACCENT_BAR }} />}
+      {children}
+    </div>
+  );
+}
+
+function PageHeader({ isLight, icon: Icon, title, subtitle, action }) {
+  const t = tokens(isLight);
+  return (
+    <div className="pb-5 border-b" style={{ borderColor: t.border }}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-4 min-w-0">
+          <div
+            className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0"
+            style={{ background: BRAND_GRAD, boxShadow: "0 10px 24px -10px rgba(20,184,166,0.8)" }}
+          >
+            <Icon className="w-7 h-7 text-white" />
+          </div>
+          <div className="min-w-0">
+            <h2
+              className="text-2xl sm:text-3xl font-black tracking-tight bg-clip-text text-transparent"
+              style={{ backgroundImage: isLight ? "linear-gradient(135deg,#15803d,#0f766e)" : "linear-gradient(135deg,#4ade80,#2dd4bf)" }}
+            >
+              {title}
+            </h2>
+            <p className="text-sm mt-0.5" style={{ color: t.sub }}>{subtitle}</p>
+          </div>
+        </div>
+        {action && <div className="shrink-0 self-start sm:self-auto">{action}</div>}
+      </div>
+    </div>
+  );
+}
+
+function SectionTitle({ isLight, title, badge, right }) {
+  const t = tokens(isLight);
+  return (
+    <div className="flex items-center justify-between gap-3 mb-3">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <span className="w-1.5 h-6 rounded-full shrink-0" style={{ background: ACCENT_BAR }} />
+        <h3 className="text-lg font-bold truncate" style={{ color: t.text }}>{title}</h3>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        {right}
+        {badge != null && (
+          <span
+            className="px-3 py-1 rounded-full text-xs font-bold border"
+            style={{ backgroundColor: t.greenSoft, color: t.green, borderColor: t.greenBorder }}
+          >
+            {badge}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ tone = "green", children }) {
+  return (
+    <span
+      className="px-3 py-1 rounded-full text-xs font-bold text-white whitespace-nowrap"
+      style={{ background: tone === "red" ? DANGER_GRAD : BRAND_GRAD }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function Pill({ isLight, children, dot = true }) {
+  const t = tokens(isLight);
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border"
+      style={{ backgroundColor: t.greenSoft, color: t.green, borderColor: t.greenBorder }}
+    >
+      {dot && <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: t.green }} />}
+      {children}
+    </span>
+  );
+}
+
+function MetaRow({ isLight, icon: Icon, children }) {
+  const t = tokens(isLight);
+  return (
+    <div className="flex items-center gap-2 text-sm min-w-0" style={{ color: t.text }}>
+      <Icon className="w-4 h-4 shrink-0" style={{ color: t.green }} />
+      <span className="truncate">{children}</span>
+    </div>
+  );
+}
+
+function PrimaryButton({ children, className = "", style = {}, disabled, ...rest }) {
+  return (
+    <button
+      {...rest}
+      disabled={disabled}
+      className={cn(
+        "px-5 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] active:scale-[0.98] cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100",
+        className
+      )}
+      style={{ background: BRAND_GRAD, color: "#04130a", boxShadow: "0 10px 26px -12px rgba(34,197,94,0.9)", ...style }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SoftButton({ isLight, children, className = "", disabled, ...rest }) {
+  const t = tokens(isLight);
+  return (
+    <button
+      {...rest}
+      disabled={disabled}
+      className={cn(
+        "py-2.5 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 border transition-colors cursor-pointer disabled:cursor-not-allowed",
+        className
+      )}
+      style={
+        disabled
+          ? { backgroundColor: t.cardAlt, color: t.faint, borderColor: t.border }
+          : { backgroundColor: t.greenSoft, color: t.green, borderColor: t.greenBorder }
+      }
+    >
+      {children}
+    </button>
+  );
+}
+
+function OutlineButton({ isLight, children, className = "", tone = "neutral", ...rest }) {
+  const t = tokens(isLight);
+  const danger = tone === "danger";
+  return (
+    <button
+      {...rest}
+      className={cn(
+        "py-2.5 px-4 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 border transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed",
+        className
+      )}
+      style={{
+        backgroundColor: danger ? t.redSoft : "transparent",
+        color: danger ? t.red : t.text,
+        borderColor: danger ? t.redBorder : t.border
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/* Modal rendered into document.body so it is never trapped under
+   transformed parents or Leaflet map panes (fixes map-over-modal bug). */
+function Modal({ isLight, onClose, children, maxWidth = "max-w-lg" }) {
+  const t = tokens(isLight);
+  useEffect(() => {
+    const onKey = e => e.key === "Escape" && onClose?.();
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[2000] flex items-end sm:items-center justify-center p-0 sm:p-4"
+      style={{ backgroundColor: t.overlay, backdropFilter: "blur(6px)" }}
+      onClick={onClose}
+    >
+      <div
+        className={cn("w-full max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl", maxWidth)}
+        onClick={e => e.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function ModalHeader({ isLight, title, onClose }) {
+  const t = tokens(isLight);
+  return (
+    <div className="flex items-center justify-between gap-3 pb-3 mb-1 border-b" style={{ borderColor: t.border }}>
+      <h3 className="text-base font-bold" style={{ color: t.text }}>{title}</h3>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close"
+        className="w-8 h-8 rounded-full flex items-center justify-center border cursor-pointer"
+        style={{ borderColor: t.border, color: t.sub }}
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
+const fieldStyle = isLight => {
+  const t = tokens(isLight);
+  return { backgroundColor: t.input, border: `1px solid ${t.inputBorder}`, color: t.text };
+};
+
+function Label({ isLight, children }) {
+  return (
+    <label className="text-xs mb-1.5 block font-semibold" style={{ color: tokens(isLight).sub }}>
+      {children}
+    </label>
+  );
+}
+
+/* ============================================================================
+   GROUNDS MAP
+   ============================================================================ */
+const makePin = (id, from, to, core) =>
+  L.divIcon({
+    className: "",
+    html: `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="${id}" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="${from}"/><stop offset="100%" stop-color="${to}"/>
+      </linearGradient></defs>
+      <path d="M12 1C7.03 1 3 5.03 3 10c0 6.75 9 14 9 14s9-7.25 9-14c0-4.97-4.03-9-9-9z" fill="url(#${id})"/>
+      <circle cx="12" cy="10" r="3.5" fill="#0c120e"/>
+      <circle cx="12" cy="10" r="1.5" fill="${core}"/>
+    </svg>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+    popupAnchor: [0, -32]
+  });
+
+const availableIcon = makePin("groundPinAvail", "#22c55e", "#14b8a6", "#4ade80");
+const bookedIcon = makePin("groundPinBooked", "#ef4444", "#e11d48", "#f87171");
+
 function GroundsMap({ grounds, canBookGround, displayPrice, displayLocation, theme = "dark" }) {
-  const isLight = theme === "light" || (typeof document !== "undefined" && document.documentElement.classList.contains("light"));
+  const isLight = detectLight(theme);
+  const t = tokens(isLight);
   const withLocation = grounds.filter(g => g.latitude != null && g.longitude != null);
   const withoutLocation = grounds.filter(g => g.latitude == null || g.longitude == null);
 
@@ -22,61 +299,19 @@ function GroundsMap({ grounds, canBookGround, displayPrice, displayLocation, the
       ]
     : [13.0827, 80.2707];
 
-  const availableIcon = L.divIcon({
-    className: "",
-    html: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="groundPinAvail" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#22c55e;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#06b6d4;stop-opacity:1" />
-        </linearGradient>
-      </defs>
-      <path d="M12 0C7.03 0 3 4.03 3 9c0 6.75 9 15 9 15s9-8.25 9-15c0-4.97-4.03-9-9-9z" fill="url(#groundPinAvail)"/>
-      <circle cx="12" cy="9" r="3.5" fill="#0d0f0d"/>
-    </svg>`,
-    iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -28]
-  });
-  const bookedIcon = L.divIcon({
-    className: "",
-    html: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="groundPinBooked" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#ef4444;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#ec4899;stop-opacity:1" />
-        </linearGradient>
-      </defs>
-      <path d="M12 0C7.03 0 3 4.03 3 9c0 6.75 9 15 9 15s9-8.25 9-15c0-4.97-4.03-9-9-9z" fill="url(#groundPinBooked)"/>
-      <circle cx="12" cy="9" r="3.5" fill="#0d0f0d"/>
-    </svg>`,
-    iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -28]
-  });
-
   return (
-    <div
-      className={cn(C, "rounded-2xl p-4 relative overflow-hidden")}
-      style={{
-        backgroundColor: isLight ? "#ffffff" : undefined,
-        border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-        boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.06)" : undefined
-      }}
-    >
-      <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#f97316)" }} />
+    <Card isLight={isLight} className="p-5 pt-6">
       <div className="flex items-center gap-2 mb-3">
-        <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg,#22c55e 0%,#06b6d4 100%)" }}>
-          <MapPin className="w-3.5 h-3.5 text-white" />
-        </div>
-        <span className="text-sm font-bold" style={{
-          background: isLight
-            ? "linear-gradient(135deg,#15803d 0%,#0284c7 100%)"
-            : "linear-gradient(135deg,#4ade80 0%,#38bdf8 100%)",
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-          backgroundClip: "text"
-        }}>Grounds near you</span>
+        <MapPin className="w-4 h-4" style={{ color: t.green }} />
+        <span className="text-base font-bold" style={{ color: t.text }}>Grounds near you</span>
       </div>
 
       {withLocation.length > 0 ? (
-        <div className="rounded-xl overflow-hidden" style={{ height: 220, border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}` }}>
+        /* isolation keeps Leaflet's internal z-indexes (400–1000) inside this box */
+        <div
+          className="rounded-xl overflow-hidden border"
+          style={{ height: 240, borderColor: t.border, isolation: "isolate", position: "relative", zIndex: 0 }}
+        >
           <MapContainer center={center} zoom={11} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -99,24 +334,20 @@ function GroundsMap({ grounds, canBookGround, displayPrice, displayLocation, the
           </MapContainer>
         </div>
       ) : (
-        <p className="text-xs" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>No grounds with a saved location yet — see the list below.</p>
+        <p className="text-sm" style={{ color: t.sub }}>No grounds with a saved location yet. See the list below.</p>
       )}
 
       {withoutLocation.length > 0 && (
         <div className="mt-3">
-          <p className="text-[11px] mb-1.5" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
-            {withoutLocation.length} more ground{withoutLocation.length > 1 ? "s" : ""} — no location on file, so no pin on the map:
+          <p className="text-xs mb-2" style={{ color: t.sub }}>
+            {withoutLocation.length} more ground{withoutLocation.length > 1 ? "s" : ""} without a saved location:
           </p>
           <div className="flex flex-wrap gap-1.5">
             {withoutLocation.map(g => (
               <span
                 key={g.id || g.name}
-                className="px-2 py-1 rounded-lg text-[11px] font-medium"
-                style={{
-                  backgroundColor: isLight ? "#f1f5f9" : "#1a1a1a",
-                  border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-                  color: isLight ? "#475569" : "#c8ccc8"
-                }}
+                className="px-2.5 py-1 rounded-lg text-xs font-medium border"
+                style={{ backgroundColor: t.cardAlt, borderColor: t.border, color: t.sub }}
               >
                 {g.name}
               </span>
@@ -124,12 +355,16 @@ function GroundsMap({ grounds, canBookGround, displayPrice, displayLocation, the
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
+/* ============================================================================
+   REGISTER / EDIT GROUND FORM
+   ============================================================================ */
 function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDeleted, onClose, theme }) {
-  const isLight = theme === "light" || (typeof document !== "undefined" && document.documentElement.classList.contains("light"));
+  const isLight = detectLight(theme);
+  const t = tokens(isLight);
   const buildForm = ground => ({
     name: ground?.name || "",
     area: ground?.area || "",
@@ -156,6 +391,14 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
 
   const update = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
 
+  const closeForm = () => {
+    if (editing) onClose?.();
+    else {
+      setOpen(false);
+      setError(null);
+    }
+  };
+
   const handleSubmit = async e => {
     e.preventDefault();
     setError(null);
@@ -168,44 +411,30 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
     }
     if (!token) return setError("You need to be logged in to register a ground.");
 
+    const body = {
+      name: form.name.trim(),
+      area: form.area.trim(),
+      price_per_hour: Number(form.price_per_hour),
+      google_maps_url: form.google_maps_url.trim() || null,
+      availability_mode: form.availability_mode,
+      available_date: form.availability_mode === "scheduled" ? form.available_date : null,
+      available_time: form.availability_mode === "scheduled" ? form.available_time : null
+    };
+
     setSubmitting(true);
     try {
       if (editing) {
-        const res = await apiRequest(`/grounds/${initialGround.id}`, {
-          method: "PUT",
-          token,
-          body: {
-            name: form.name.trim(),
-            area: form.area.trim(),
-            price_per_hour: Number(form.price_per_hour),
-            google_maps_url: form.google_maps_url.trim() || null,
-            availability_mode: form.availability_mode,
-            available_date: form.availability_mode === "scheduled" ? form.available_date : null,
-            available_time: form.availability_mode === "scheduled" ? form.available_time : null
-          }
-        });
+        const res = await apiRequest(`/grounds/${initialGround.id}`, { method: "PUT", token, body });
         onUpdated?.(res.ground);
         onClose?.();
       } else {
-        const res = await apiRequest("/grounds", {
-          method: "POST",
-          token,
-          body: {
-            name: form.name.trim(),
-            area: form.area.trim(),
-            price_per_hour: Number(form.price_per_hour),
-            google_maps_url: form.google_maps_url.trim() || null,
-            availability_mode: form.availability_mode,
-            available_date: form.availability_mode === "scheduled" ? form.available_date : null,
-            available_time: form.availability_mode === "scheduled" ? form.available_time : null
-          }
-        });
+        const res = await apiRequest("/grounds", { method: "POST", token, body });
         onCreated(res.ground);
         setForm(buildForm(null));
         setOpen(false);
       }
     } catch (err) {
-      setError(err.message || (editing ? "Could not update ground — please try again." : "Could not register ground — please try again."));
+      setError(err.message || (editing ? "Could not update ground. Please try again." : "Could not register ground. Please try again."));
     } finally {
       setSubmitting(false);
     }
@@ -227,289 +456,163 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
     }
   };
 
-  const renderTriggerButton = () => (
-    <button
-      type="button"
-      onClick={() => setOpen(true)}
-      className={cn(
-        "px-5 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shrink-0 cursor-pointer hover:scale-[1.03] active:scale-[0.97]"
-      )}
-      style={{
-        background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
-        color: "#ffffff",
-        boxShadow: isLight
-          ? "0 4px 14px -3px rgba(16,185,129,0.45)"
-          : "0 6px 20px -6px rgba(34,197,94,0.7)"
-      }}
-    >
-      <Plus className="w-4 h-4" /> Register a Ground
-    </button>
-  );
+  // Same shape for both the check and the iframe (was inconsistent before)
+  const previewUrl = buildGroundMapsEmbedUrl({ area: form.area, googleMapsUrl: form.google_maps_url });
 
   const formElement = (
-    <form
-      onSubmit={handleSubmit}
-      className={cn(C, "rounded-2xl p-4 space-y-3 relative overflow-hidden")}
-      style={{
-        backgroundColor: isLight ? "#ffffff" : "#141414",
-        border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-        boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.06)" : "0 8px 32px rgba(0,0,0,0.4)"
-      }}
-    >
-      <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#f97316,#ec4899)" }} />
-      <div className="flex items-center justify-between pb-1 border-b" style={{ borderColor: isLight ? "#e2e8f0" : "#2a2a2a" }}>
-        <span className="text-sm font-bold flex items-center gap-2" style={{
-          background: "linear-gradient(135deg,#22c55e 0%,#3b82f6 100%)",
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-          backgroundClip: "text"
-        }}>
-          <Sparkles className="w-3.5 h-3.5" style={{ color: isLight ? "#16a34a" : "#22c55e", WebkitTextFillColor: "initial" }} />
-          {editing ? "Edit Ground" : "Register a Ground"}
-        </span>
-        <button
-          type="button"
-          onClick={() => { if (editing) onClose?.(); else { setOpen(false); setError(null); } }}
-          className="w-6 h-6 rounded-full flex items-center justify-center hover:opacity-80 transition-colors"
-          style={{ backgroundColor: isLight ? "#f1f5f9" : "#222" }}
-        >
-          <X className="w-3.5 h-3.5" style={{ color: isLight ? "#475569" : "#c8ccc8" }} />
-        </button>
-      </div>
+    <Card isLight={isLight} className="p-5 pt-6">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <ModalHeader isLight={isLight} title={editing ? "Edit Ground" : "Register a Ground"} onClose={closeForm} />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="col-span-2">
-          <label className="text-xs mb-1 block font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Ground name</label>
-          <input
-            value={form.name}
-            onChange={e => update("name", e.target.value)}
-            className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none transition-all"
-            style={{
-              backgroundColor: isLight ? "#f8fafc" : "#111",
-              border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-              color: isLight ? "#0f172a" : "#fff",
-              boxShadow: "none"
-            }}
-            onFocus={e => e.currentTarget.style.boxShadow = isLight ? "0 0 0 3px rgba(22,163,74,0.12)" : "0 0 0 3px rgba(34,197,94,0.18)"}
-            onBlur={e => e.currentTarget.style.boxShadow = "none"}
-            placeholder="Green Park Cricket Ground"
-          />
-        </div>
-        <div className="col-span-2">
-          <label className="text-xs mb-1 block font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Location / Area</label>
-          <input
-            value={form.area}
-            onChange={e => update("area", e.target.value)}
-            className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none transition-all"
-            style={{
-              backgroundColor: isLight ? "#f8fafc" : "#111",
-              border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-              color: isLight ? "#0f172a" : "#fff"
-            }}
-            onFocus={e => e.currentTarget.style.boxShadow = isLight ? "0 0 0 3px rgba(22,163,74,0.12)" : "0 0 0 3px rgba(34,197,94,0.18)"}
-            onBlur={e => e.currentTarget.style.boxShadow = "none"}
-            placeholder="Linking Road, Bandra West"
-          />
-        </div>
-        <div>
-          <label className="text-xs mb-1 block font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Price per hour (₹)</label>
-          <input
-            type="number"
-            min="1"
-            value={form.price_per_hour}
-            onChange={e => update("price_per_hour", e.target.value)}
-            className="w-full rounded-xl px-3 py-2 text-sm font-mono focus:outline-none transition-all"
-            style={{
-              backgroundColor: isLight ? "#f8fafc" : "#111",
-              border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-              color: isLight ? "#0f172a" : "#fff"
-            }}
-            onFocus={e => e.currentTarget.style.boxShadow = isLight ? "0 0 0 3px rgba(22,163,74,0.12)" : "0 0 0 3px rgba(34,197,94,0.18)"}
-            onBlur={e => e.currentTarget.style.boxShadow = "none"}
-            placeholder="1200"
-          />
-        </div>
-        <div>
-          <label className="text-xs mb-1 block font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Google Maps link</label>
-          <input
-            value={form.google_maps_url}
-            onChange={e => update("google_maps_url", e.target.value)}
-            className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none transition-all"
-            style={{
-              backgroundColor: isLight ? "#f8fafc" : "#111",
-              border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-              color: isLight ? "#0f172a" : "#fff"
-            }}
-            onFocus={e => e.currentTarget.style.boxShadow = isLight ? "0 0 0 3px rgba(22,163,74,0.12)" : "0 0 0 3px rgba(34,197,94,0.18)"}
-            onBlur={e => e.currentTarget.style.boxShadow = "none"}
-            placeholder="https://www.google.com/maps/..."
-          />
-        </div>
-        <div>
-          <label className="text-xs mb-1 block font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Availability</label>
-          <select
-            value={form.availability_mode}
-            onChange={e => update("availability_mode", e.target.value)}
-            className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none transition-all cursor-pointer"
-            style={{
-              backgroundColor: isLight ? "#f8fafc" : "#111",
-              border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-              color: isLight ? "#0f172a" : "#fff"
-            }}
-          >
-            <option value="always">Always available</option>
-            <option value="scheduled">Available on a date/time</option>
-          </select>
-        </div>
-        {form.availability_mode === "scheduled" && (
-          <>
-            <div>
-              <label className="text-xs mb-1 block font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Available date</label>
-              <CalendarField
-                value={form.available_date}
-                onChange={v => update("available_date", v)}
-                theme={theme}
-                placeholder="Select available date"
-                clearable={true}
-              />
-            </div>
-            <div>
-              <label className="text-xs mb-1 block font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Available time</label>
-              <input
-                type="time"
-                value={form.available_time}
-                onChange={e => update("available_time", e.target.value)}
-                className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none transition-all"
-                style={{
-                  backgroundColor: isLight ? "#f8fafc" : "#111",
-                  border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-                  color: isLight ? "#0f172a" : "#fff"
-                }}
-              />
-            </div>
-          </>
-        )}
-      </div>
-
-      <div className="rounded-2xl overflow-hidden relative" style={{ border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`, backgroundColor: isLight ? "#f8fafc" : "#0f0f0f" }}>
-        <div className="flex items-center gap-2 px-3 py-2 border-b" style={{ borderColor: isLight ? "#e2e8f0" : "#1e1e1e", background: "linear-gradient(90deg,rgba(34,197,94,0.08),rgba(59,130,246,0.08))" }}>
-          <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg,#22c55e 0%,#06b6d4 100%)" }}>
-            <Map className="w-3.5 h-3.5 text-white" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="sm:col-span-2">
+            <Label isLight={isLight}>Ground name</Label>
+            <input
+              value={form.name}
+              onChange={e => update("name", e.target.value)}
+              className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              style={fieldStyle(isLight)}
+              placeholder="Green Park Cricket Ground"
+            />
           </div>
-          <span className="text-xs font-bold" style={{
-            background: isLight
-              ? "linear-gradient(135deg,#15803d 0%,#0284c7 100%)"
-              : "linear-gradient(135deg,#4ade80 0%,#38bdf8 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text"
-          }}>Map Preview</span>
-        </div>
-        {buildGroundMapsEmbedUrl(form) ? (
-          <iframe
-            title="Ground map preview"
-            src={buildGroundMapsEmbedUrl({ area: form.area, googleMapsUrl: form.google_maps_url })}
-            className="w-full h-48"
-            loading="lazy"
-            referrerPolicy="no-referrer-when-downgrade"
-          />
-        ) : (
-          <div className="px-3 py-8 text-center text-xs" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
-            Add a location to preview the ground on Google Maps.
+          <div className="sm:col-span-2">
+            <Label isLight={isLight}>Location / Area</Label>
+            <input
+              value={form.area}
+              onChange={e => update("area", e.target.value)}
+              className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              style={fieldStyle(isLight)}
+              placeholder="Thailapuram, Vanur"
+            />
           </div>
-        )}
-      </div>
-
-      {error && (
-        <div
-          className="text-xs rounded-lg p-2 font-medium"
-          style={{
-            backgroundColor: isLight ? "#fef2f2" : "rgba(239,68,68,0.1)",
-            border: `1px solid ${isLight ? "#fecaca" : "rgba(239,68,68,0.2)"}`,
-            color: isLight ? "#dc2626" : "#f87171"
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      <div className="flex gap-2 pt-1">
-        <button
-          type="button"
-          onClick={() => { if (editing) onClose?.(); else { setOpen(false); setError(null); } }}
-          className="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-          style={{
-            backgroundColor: isLight ? "#f1f5f9" : "#1e1e1e",
-            border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
-            color: isLight ? "#0f172a" : "#c8ccc8"
-          }}
-        >
-          Cancel
-        </button>
-        {editing && (
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={submitting}
-            className="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-            style={{
-              background: "linear-gradient(135deg,rgba(239,68,68,0.15) 0%,rgba(220,38,38,0.15) 100%)",
-              border: `1px solid ${isLight ? "#fecaca" : "rgba(239,68,68,0.35)"}`,
-              color: isLight ? "#dc2626" : "#f87171",
-              ...(submitting ? { opacity: 0.6, cursor: "not-allowed", transform: "none" } : {})
-            }}
-          >
-            Delete Ground
-          </button>
-        )}
-        <button
-          type="submit"
-          disabled={submitting}
-          className={cn(
-            "flex-1 py-2.5 rounded-xl font-bold text-sm transition-all shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+          <div>
+            <Label isLight={isLight}>Price per hour (₹)</Label>
+            <input
+              type="number"
+              min="1"
+              value={form.price_per_hour}
+              onChange={e => update("price_per_hour", e.target.value)}
+              className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              style={fieldStyle(isLight)}
+              placeholder="1200"
+            />
+          </div>
+          <div>
+            <Label isLight={isLight}>Google Maps link</Label>
+            <input
+              value={form.google_maps_url}
+              onChange={e => update("google_maps_url", e.target.value)}
+              className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              style={fieldStyle(isLight)}
+              placeholder="https://www.google.com/maps/..."
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <Label isLight={isLight}>Availability</Label>
+            <div className="relative">
+              <select
+                value={form.availability_mode}
+                onChange={e => update("availability_mode", e.target.value)}
+                className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none cursor-pointer"
+                style={fieldStyle(isLight)}
+              >
+                <option value="always">Always available</option>
+                <option value="scheduled">Available on a date/time</option>
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: t.sub }} />
+            </div>
+          </div>
+          {form.availability_mode === "scheduled" && (
+            <>
+              <div>
+                <Label isLight={isLight}>Available date</Label>
+                <CalendarField
+                  value={form.available_date}
+                  onChange={v => update("available_date", v)}
+                  theme={theme}
+                  placeholder="Select available date"
+                  clearable={true}
+                />
+              </div>
+              <div>
+                <Label isLight={isLight}>Available time</Label>
+                <input
+                  type="time"
+                  value={form.available_time}
+                  onChange={e => update("available_time", e.target.value)}
+                  className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+                  style={fieldStyle(isLight)}
+                />
+              </div>
+            </>
           )}
-          style={{
-            background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
-            color: "#ffffff",
-            boxShadow: isLight
-              ? "0 4px 14px -3px rgba(16,185,129,0.45)"
-              : "0 6px 20px -6px rgba(34,197,94,0.7)",
-            ...(submitting ? { opacity: 0.6, cursor: "not-allowed", transform: "none" } : {})
-          }}
-        >
-          {submitting ? (editing ? "Saving..." : "Registering...") : (editing ? "Save Changes" : "Register Ground")}
-        </button>
-      </div>
-    </form>
+        </div>
+
+        <div className="rounded-xl overflow-hidden border" style={{ borderColor: t.border }}>
+          <div className="flex items-center gap-2 px-3 py-2 border-b" style={{ borderColor: t.border, backgroundColor: t.cardAlt }}>
+            <Map className="w-4 h-4" style={{ color: t.green }} />
+            <span className="text-xs font-bold" style={{ color: t.text }}>Map preview</span>
+          </div>
+          {previewUrl ? (
+            <iframe
+              title="Ground map preview"
+              src={previewUrl}
+              className="w-full h-48"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+            />
+          ) : (
+            <div className="px-3 py-8 text-center text-xs" style={{ color: t.sub }}>
+              Add a location to preview the ground on Google Maps.
+            </div>
+          )}
+        </div>
+
+        {error && (
+          <div className="text-xs rounded-xl p-3 font-medium border" style={{ backgroundColor: t.redSoft, borderColor: t.redBorder, color: t.red }}>
+            {error}
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row gap-2 pt-1">
+          <OutlineButton isLight={isLight} type="button" onClick={closeForm} className="flex-1">
+            Cancel
+          </OutlineButton>
+          {editing && (
+            <OutlineButton isLight={isLight} tone="danger" type="button" onClick={handleDelete} disabled={submitting} className="flex-1">
+              <Trash2 className="w-4 h-4" /> Delete Ground
+            </OutlineButton>
+          )}
+          <PrimaryButton type="submit" disabled={submitting} className="flex-1">
+            {submitting ? (editing ? "Saving..." : "Registering...") : editing ? "Save Changes" : "Register Ground"}
+          </PrimaryButton>
+        </div>
+      </form>
+    </Card>
   );
 
-  if (editing) {
-    return formElement;
-  }
+  if (editing) return formElement;
 
   return (
     <>
-      {renderTriggerButton()}
+      <PrimaryButton type="button" onClick={() => setOpen(true)}>
+        <Plus className="w-4 h-4" /> Register a Ground
+      </PrimaryButton>
       {open && (
-        <div
-          className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4"
-          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)" }}
-          onClick={() => { setOpen(false); setError(null); }}
-        >
-          <div
-            className="w-full sm:max-w-lg max-h-[90vh] sm:max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl pb-[max(1.25rem,env(safe-area-inset-bottom))]"
-            onClick={e => e.stopPropagation()}
-          >
-            {formElement}
-          </div>
-        </div>
+        <Modal isLight={isLight} onClose={closeForm}>
+          {formElement}
+        </Modal>
       )}
     </>
   );
 }
 
+/* ============================================================================
+   GROUNDS TAB
+   ============================================================================ */
 export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundCreated, onGroundUpdated, onGroundDeleted, user, teammateIds = [], theme = "dark" }) {
-  const isLight = theme === "light" || (typeof document !== "undefined" && document.documentElement.classList.contains("light"));
+  const isLight = detectLight(theme);
+  const t = tokens(isLight);
   const [cost, setCost] = useState("1200");
   const [split, setSplit] = useState("11");
   const [ratingFilter, setRatingFilter] = useState("Any Rating");
@@ -532,7 +635,7 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
   };
   const displayLocation = g => g.area || g.address || "";
   const isOwnedByMyTeam = g => g?.posted_by_user_id && teamIdSet.has(String(g.posted_by_user_id));
-  const bookedTodaySlots = g => Array.isArray(g.booked_time_slots_today) ? g.booked_time_slots_today : [];
+  const bookedTodaySlots = g => (Array.isArray(g.booked_time_slots_today) ? g.booked_time_slots_today : []);
   const canBookGround = g => !isOwnedByMyTeam(g) && (Number(g.booking_count_today) || 0) < 2;
 
   const getPriceNum = g => {
@@ -544,9 +647,7 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
     return Number.isFinite(n) ? n : 0;
   };
 
-  const uniqueLocations = Array.from(
-    new Set(grounds.map(g => displayLocation(g)).filter(Boolean))
-  ).sort((a, b) => a.localeCompare(b));
+  const uniqueLocations = Array.from(new Set(grounds.map(g => displayLocation(g)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 
   const ratingThreshold = { "Any Rating": 0, "4.7+": 4.7, "4.5+": 4.5, "4.0+": 4.0 }[ratingFilter];
 
@@ -563,44 +664,15 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
     .filter(g => {
       const q = searchQuery.trim().toLowerCase();
       if (!q) return true;
-      return (
-        (g.name || "").toLowerCase().includes(q) ||
-        displayLocation(g).toLowerCase().includes(q)
-      );
+      return (g.name || "").toLowerCase().includes(q) || displayLocation(g).toLowerCase().includes(q);
     })
     .sort((a, b) => (Number(b.rating) || 0) - (Number(a.rating) || 0));
 
   const activeFilters = [];
-  if (searchQuery.trim()) {
-    activeFilters.push({
-      id: "search",
-      label: `"${searchQuery.trim()}"`,
-      clear: () => setSearchQuery("")
-    });
-  }
-  if (locationFilter !== "All Locations") {
-    activeFilters.push({
-      id: "location",
-      label: `📍 ${locationFilter}`,
-      clear: () => setLocationFilter("All Locations")
-    });
-  }
-  if (priceFilter !== "Any Price") {
-    activeFilters.push({
-      id: "price",
-      label: `💰 ${priceFilter}`,
-      clear: () => setPriceFilter("Any Price")
-    });
-  }
-  if (ratingFilter !== "Any Rating") {
-    activeFilters.push({
-      id: "rating",
-      label: `⭐ ${ratingFilter}`,
-      clear: () => setRatingFilter("Any Rating")
-    });
-  }
-
-  const activeFilterCount = activeFilters.length;
+  if (searchQuery.trim()) activeFilters.push({ id: "search", label: `"${searchQuery.trim()}"`, clear: () => setSearchQuery("") });
+  if (locationFilter !== "All Locations") activeFilters.push({ id: "location", label: `📍 ${locationFilter}`, clear: () => setLocationFilter("All Locations") });
+  if (priceFilter !== "Any Price") activeFilters.push({ id: "price", label: `💰 ${priceFilter}`, clear: () => setPriceFilter("Any Price") });
+  if (ratingFilter !== "Any Rating") activeFilters.push({ id: "rating", label: `⭐ ${ratingFilter}`, clear: () => setRatingFilter("Any Rating") });
 
   const clearAllFilters = () => {
     setRatingFilter("Any Rating");
@@ -622,215 +694,125 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
     return [];
   };
 
+  const deleteGround = async (g, afterDelete) => {
+    if (!window.confirm("Delete this ground?")) return;
+    try {
+      await apiRequest(`/grounds/${g.id}`, { method: "DELETE", token });
+      onGroundDeleted?.(g.id);
+      afterDelete?.();
+    } catch (err) {
+      alert(err.message || "Could not delete ground");
+    }
+  };
+
+  const selectClass = "w-full text-sm bg-transparent focus:outline-none appearance-none pr-6 cursor-pointer truncate";
+  const optionClass = isLight ? "bg-white text-slate-800" : "bg-[#0c120e] text-[#e5e7eb]";
+
   return (
     <div className="space-y-6">
-      {/* Header section with Title on left and Register a Ground button on the right top corner */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3.5 pb-0.5">
-        <div>
-          <h2
-            className="text-xl sm:text-2xl font-black tracking-tight flex items-center gap-2"
-            style={{
-              background: isLight
-                ? "linear-gradient(135deg,#0f172a 0%,#15803d 50%,#3b82f6 100%)"
-                : "linear-gradient(135deg,#ffffff 0%,#4ade80 50%,#60a5fa 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text"
-            }}
-          >
-            <span></span>
-            Cricket Grounds
-          </h2>
-          <p className="text-xs sm:text-sm mt-1" style={{ color: isLight ? "#475569" : "#8a968a" }}>
-            Explore, book, or register cricket grounds for your matches
-          </p>
-        </div>
+      <PageHeader
+        isLight={isLight}
+        icon={MapPin}
+        title="Cricket Grounds"
+        subtitle="Explore, book or register grounds for your matches"
+        action={<GroundForm token={token} onCreated={onGroundCreated} theme={theme} />}
+      />
 
-        <div className="shrink-0 self-start sm:self-auto">
-          <GroundForm token={token} onCreated={onGroundCreated} theme={theme} />
-        </div>
-      </div>
+      {/* FILTERS */}
+      <section>
+        <SectionTitle
+          isLight={isLight}
+          title="Filter Grounds"
+          badge={`${filteredGrounds.length} ground${filteredGrounds.length === 1 ? "" : "s"}`}
+          right={
+            activeFilters.length > 0 && (
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="inline-flex items-center gap-1 text-xs font-semibold cursor-pointer"
+                style={{ color: t.red }}
+              >
+                <RotateCcw className="w-3.5 h-3.5" /> Reset
+              </button>
+            )
+          }
+        />
 
-      {/* FILTER GROUNDS BAR */}
-      <div className="space-y-2.5">
-        {/* Header: Title, match count, and reset button */}
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-2">
-            <Filter className="w-3.5 h-3.5" style={{ color: isLight ? "#16a34a" : "#22c55e" }} />
-            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: isLight ? "#334155" : "#a6b5a6" }}>
-              Filter Grounds
-            </span>
-            <span
-              className="px-2 py-0.5 rounded-full text-[10px] font-bold"
-              style={{
-                background: "linear-gradient(135deg,#22c55e 0%,#10b981 100%)",
-                color: "#ffffff",
-                boxShadow: isLight ? "0 2px 6px -1px rgba(16,185,129,0.4)" : "0 2px 8px -2px rgba(34,197,94,0.6)"
-              }}
-            >
-              {filteredGrounds.length} ground{filteredGrounds.length === 1 ? "" : "s"}
-            </span>
-          </div>
-
-          {activeFilters.length > 0 && (
-            <button
-              type="button"
-              onClick={clearAllFilters}
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-500 hover:text-red-400 transition-colors cursor-pointer hover:scale-105"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span>Reset filters</span>
-            </button>
-          )}
-        </div>
-
-        {/* UNIFIED MERGED FILTER BAR */}
-        <div
-          className={cn(
-            "rounded-2xl transition-all duration-200 border",
-            "flex flex-col md:flex-row md:items-center",
-            isLight
-              ? "bg-white border-slate-200 shadow-sm focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/10"
-              : "bg-[#111411] border-[#252c25] shadow-lg focus-within:border-emerald-500/60 focus-within:ring-2 focus-within:ring-emerald-500/10"
-          )}
-        >
-          {/* 1. Search Section */}
-          <div className="flex-1 flex items-center px-3.5 py-2.5 min-w-0">
-            <Search
-              className="w-4 h-4 shrink-0 mr-2.5 transition-colors"
-              style={{ color: searchQuery ? (isLight ? "#16a34a" : "#22c55e") : (isLight ? "#94a3b8" : "#6b7a6b") }}
-            />
+        <Card isLight={isLight} accent={false} className="flex flex-col md:flex-row md:items-center">
+          <div className="flex-1 flex items-center px-4 py-3 min-w-0">
+            <Search className="w-4 h-4 shrink-0 mr-2.5" style={{ color: searchQuery ? t.green : t.faint }} />
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search by ground name or area..."
-              className="w-full text-xs font-medium bg-transparent focus:outline-none placeholder:text-slate-400 dark:placeholder:text-[#556055]"
-              style={{ color: isLight ? "#0f172a" : "#ffffff" }}
+              placeholder="Search by ground name or area"
+              className="w-full text-sm bg-transparent focus:outline-none"
+              style={{ color: t.text }}
             />
             {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer shrink-0 ml-1"
-                title="Clear search"
-              >
-                <X className="w-3.5 h-3.5" style={{ color: isLight ? "#64748b" : "#9ca3af" }} />
+              <button type="button" onClick={() => setSearchQuery("")} className="p-1 cursor-pointer" aria-label="Clear search">
+                <X className="w-3.5 h-3.5" style={{ color: t.sub }} />
               </button>
             )}
           </div>
 
-          {/* Divider between Search and Dropdowns */}
-          <div className="hidden md:block w-[1px] h-7 bg-slate-200 dark:bg-[#252d25] shrink-0" />
-          <div className="block md:hidden h-[1px] w-full bg-slate-100 dark:bg-[#1b221b]" />
-
-          {/* 2. Dropdowns Section: Location, Price, Rating */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 dark:divide-[#252d25] shrink-0">
-            {/* Location */}
-            <div className="relative px-3.5 py-2.5 flex items-center min-w-[135px]">
-              <MapPin
-                className="w-3.5 h-3.5 shrink-0 mr-2"
-                style={{ color: locationFilter !== "All Locations" ? (isLight ? "#16a34a" : "#4ade80") : (isLight ? "#64748b" : "#6b7a6b") }}
-              />
-              <select
-                value={locationFilter}
-                onChange={e => setLocationFilter(e.target.value)}
-                className="w-full text-xs bg-transparent focus:outline-none appearance-none pr-5 cursor-pointer font-medium truncate"
-                style={{
-                  color: locationFilter !== "All Locations" ? (isLight ? "#0f172a" : "#ffffff") : (isLight ? "#64748b" : "#8a968a"),
-                  fontWeight: locationFilter !== "All Locations" ? "600" : "500"
-                }}
-              >
-                <option value="All Locations" className={isLight ? "bg-white text-slate-800" : "bg-[#161a16] text-[#c8ccc8]"}>All Locations</option>
+          <div
+            className="grid grid-cols-1 sm:grid-cols-3 border-t md:border-t-0 md:border-l shrink-0"
+            style={{ borderColor: t.border }}
+          >
+            <div className="relative px-4 py-3 flex items-center min-w-[150px] border-b sm:border-b-0 sm:border-r" style={{ borderColor: t.border }}>
+              <MapPin className="w-4 h-4 shrink-0 mr-2" style={{ color: locationFilter !== "All Locations" ? t.green : t.faint }} />
+              <select value={locationFilter} onChange={e => setLocationFilter(e.target.value)} className={selectClass} style={{ color: t.text }}>
+                <option value="All Locations" className={optionClass}>All Locations</option>
                 {uniqueLocations.map(loc => (
-                  <option key={loc} value={loc} className={isLight ? "bg-white text-slate-800" : "bg-[#161a16] text-[#c8ccc8]"}>
-                    {loc}
-                  </option>
+                  <option key={loc} value={loc} className={optionClass}>{loc}</option>
                 ))}
               </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none opacity-60" style={{ color: isLight ? "#64748b" : "#8a968a" }} />
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: t.sub }} />
             </div>
 
-            {/* Price */}
-            <div className="relative px-3.5 py-2.5 flex items-center min-w-[130px]">
-              <IndianRupee
-                className="w-3.5 h-3.5 shrink-0 mr-1.5"
-                style={{ color: priceFilter !== "Any Price" ? (isLight ? "#16a34a" : "#4ade80") : (isLight ? "#64748b" : "#6b7a6b") }}
-              />
-              <select
-                value={priceFilter}
-                onChange={e => setPriceFilter(e.target.value)}
-                className="w-full text-xs bg-transparent focus:outline-none appearance-none pr-5 cursor-pointer font-medium truncate"
-                style={{
-                  color: priceFilter !== "Any Price" ? (isLight ? "#0f172a" : "#ffffff") : (isLight ? "#64748b" : "#8a968a"),
-                  fontWeight: priceFilter !== "Any Price" ? "600" : "500"
-                }}
-              >
+            <div className="relative px-4 py-3 flex items-center min-w-[150px] border-b sm:border-b-0 sm:border-r" style={{ borderColor: t.border }}>
+              <IndianRupee className="w-4 h-4 shrink-0 mr-2" style={{ color: priceFilter !== "Any Price" ? t.green : t.faint }} />
+              <select value={priceFilter} onChange={e => setPriceFilter(e.target.value)} className={selectClass} style={{ color: t.text }}>
                 {["Any Price", "Under ₹500/hr", "₹500–₹1000/hr", "₹1000+/hr"].map(o => (
-                  <option key={o} value={o} className={isLight ? "bg-white text-slate-800" : "bg-[#161a16] text-[#c8ccc8]"}>
-                    {o}
-                  </option>
+                  <option key={o} value={o} className={optionClass}>{o}</option>
                 ))}
               </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none opacity-60" style={{ color: isLight ? "#64748b" : "#8a968a" }} />
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: t.sub }} />
             </div>
 
-            {/* Rating */}
-            <div className="relative px-3.5 py-2.5 flex items-center min-w-[115px]">
+            <div className="relative px-4 py-3 flex items-center min-w-[130px]">
               <Star
-                className={cn("w-3.5 h-3.5 shrink-0 mr-1.5", ratingFilter !== "Any Rating" ? "fill-amber-400 text-amber-400" : "")}
-                style={{ color: ratingFilter !== "Any Rating" ? "#f59e0b" : (isLight ? "#64748b" : "#6b7a6b") }}
+                className={cn("w-4 h-4 shrink-0 mr-2", ratingFilter !== "Any Rating" ? "fill-amber-400" : "")}
+                style={{ color: ratingFilter !== "Any Rating" ? "#f59e0b" : t.faint }}
               />
-              <select
-                value={ratingFilter}
-                onChange={e => setRatingFilter(e.target.value)}
-                className="w-full text-xs bg-transparent focus:outline-none appearance-none pr-5 cursor-pointer font-medium truncate"
-                style={{
-                  color: ratingFilter !== "Any Rating" ? (isLight ? "#0f172a" : "#ffffff") : (isLight ? "#64748b" : "#8a968a"),
-                  fontWeight: ratingFilter !== "Any Rating" ? "600" : "500"
-                }}
-              >
+              <select value={ratingFilter} onChange={e => setRatingFilter(e.target.value)} className={selectClass} style={{ color: t.text }}>
                 {["Any Rating", "4.7+", "4.5+", "4.0+"].map(o => (
-                  <option key={o} value={o} className={isLight ? "bg-white text-slate-800" : "bg-[#161a16] text-[#c8ccc8]"}>
-                    {o === "Any Rating" ? o : `${o} ★`}
-                  </option>
+                  <option key={o} value={o} className={optionClass}>{o === "Any Rating" ? o : `${o} ★`}</option>
                 ))}
               </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none opacity-60" style={{ color: isLight ? "#64748b" : "#8a968a" }} />
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: t.sub }} />
             </div>
           </div>
-        </div>
+        </Card>
 
-        {/* 3. Active filter tags pill chips */}
         {activeFilters.length > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap pt-0.5 px-1 animate-[fadeIn_.15s_ease-out]">
-            <span className="text-[10px] font-bold uppercase tracking-wider mr-1" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
-              Active:
-            </span>
+          <div className="flex items-center gap-1.5 flex-wrap pt-2.5">
             {activeFilters.map(af => (
               <span
                 key={af.id}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all group"
-                style={{
-                  backgroundColor: isLight ? "#f0fdf4" : "rgba(34,197,94,0.12)",
-                  border: `1px solid ${isLight ? "#bbf7d0" : "rgba(34,197,94,0.3)"}`,
-                  color: isLight ? "#15803d" : "#4ade80"
-                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border"
+                style={{ backgroundColor: t.greenSoft, color: t.green, borderColor: t.greenBorder }}
               >
-                <span>{af.label}</span>
-                <button
-                  type="button"
-                  onClick={af.clear}
-                  className="hover:opacity-70 transition-opacity p-0.5 rounded-full cursor-pointer"
-                  title="Remove this filter"
-                >
+                {af.label}
+                <button type="button" onClick={af.clear} className="cursor-pointer" aria-label="Remove filter">
                   <X className="w-3 h-3" />
                 </button>
               </span>
             ))}
           </div>
         )}
-      </div>
+      </section>
 
       <GroundsMap
         grounds={filteredGrounds}
@@ -840,573 +822,274 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
         theme={theme}
       />
 
-      <div
-        className="rounded-2xl p-5 relative overflow-hidden"
-        style={{
-          background: isLight
-            ? "linear-gradient(135deg, #ecfdf5 0%, #f0f9ff 50%, #f5f3ff 100%)"
-            : "linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(59,130,246,0.08) 50%, rgba(168,85,247,0.1) 100%)",
-          border: isLight ? "1px solid #a7f3d0" : "1px solid rgba(34,197,94,0.35)",
-          boxShadow: isLight ? "0 4px 20px rgba(22,163,74,0.08)" : "0 8px 32px rgba(22,101,52,0.15)"
-        }}
-      >
-        <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7)" }} />
+      {/* COST SPLIT */}
+      <Card isLight={isLight} className="p-5 pt-6">
         <div className="flex items-center gap-2 mb-4">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm"
-            style={{ background: "linear-gradient(135deg,#22c55e 0%,#06b6d4 100%)" }}
-          >
-            <Hash className="w-4 h-4 text-white" />
-          </div>
-          <span className="font-bold text-sm" style={{
-            background: isLight
-              ? "linear-gradient(135deg,#15803d 0%,#0284c7 100%)"
-              : "linear-gradient(135deg,#4ade80 0%,#38bdf8 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text"
-          }}>Auto Cost Split Calculator</span>
+          <Hash className="w-4 h-4" style={{ color: t.green }} />
+          <span className="text-base font-bold" style={{ color: t.text }}>Cost split calculator</span>
         </div>
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
-            <label className="text-xs mb-1.5 block font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Ground cost (₹/hr)</label>
+            <Label isLight={isLight}>Ground cost (₹/hr)</Label>
             <input
               type="number"
               value={cost}
               onChange={e => setCost(e.target.value)}
-              className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none font-mono transition-all"
-              style={{
-                backgroundColor: isLight ? "#ffffff" : "#111",
-                border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-                color: isLight ? "#0f172a" : "#ffffff"
-              }}
-              onFocus={e => e.currentTarget.style.boxShadow = isLight ? "0 0 0 3px rgba(22,163,74,0.12)" : "0 0 0 3px rgba(34,197,94,0.18)"}
-              onBlur={e => e.currentTarget.style.boxShadow = "none"}
+              className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              style={fieldStyle(isLight)}
               placeholder="1200"
             />
           </div>
           <div>
-            <label className="text-xs mb-1.5 block font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Split between</label>
+            <Label isLight={isLight}>Split between</Label>
             <div className="relative">
               <select
                 value={split}
                 onChange={e => setSplit(e.target.value)}
-                className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none transition-all cursor-pointer"
-                style={{
-                  backgroundColor: isLight ? "#ffffff" : "#111",
-                  border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-                  color: isLight ? "#0f172a" : "#ffffff"
-                }}
+                className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none cursor-pointer"
+                style={fieldStyle(isLight)}
               >
-                {[11, 12, 14, 22].map(n => <option key={n} value={n}>{n} players</option>)}
+                {[11, 12, 14, 22].map(n => (
+                  <option key={n} value={n}>{n} players</option>
+                ))}
               </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: isLight ? "#64748b" : "#6b7a6b" }} />
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: t.sub }} />
             </div>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3 mb-4">
-          <div
-            className="rounded-xl p-3 relative overflow-hidden"
-            style={{
-              background: isLight
-                ? "linear-gradient(135deg,#ffffff 0%,#ecfdf5 100%)"
-                : "linear-gradient(135deg,rgba(34,197,94,0.12) 0%,rgba(6,182,212,0.08) 100%)",
-              border: isLight ? "1px solid #a7f3d0" : "1px solid rgba(34,197,94,0.3)",
-              boxShadow: isLight ? "0 2px 8px rgba(16,185,129,0.12)" : "0 4px 14px rgba(34,197,94,0.15)"
-            }}
-          >
-            <div className="absolute top-0 left-0 bottom-0 w-1" style={{ background: "linear-gradient(180deg,#22c55e,#06b6d4)" }} />
-            <div className="text-xs mb-1 font-medium pl-1.5" style={{ color: isLight ? "#64748b" : "#8a968a" }}>Per head</div>
-            <div className="text-2xl font-black font-mono pl-1.5" style={{
-              background: isLight
-                ? "linear-gradient(135deg,#15803d 0%,#0284c7 100%)"
-                : "linear-gradient(135deg,#4ade80 0%,#38bdf8 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text"
-            }}>₹{perHead}</div>
+          <div className="rounded-xl p-3 border" style={{ backgroundColor: t.greenSoft, borderColor: t.greenBorder }}>
+            <div className="text-xs mb-1 font-medium" style={{ color: t.sub }}>Per head</div>
+            <div className="text-2xl font-black" style={{ color: t.green }}>₹{perHead}</div>
           </div>
-          <div
-            className="rounded-xl p-3 relative overflow-hidden"
-            style={{
-              background: isLight
-                ? "linear-gradient(135deg,#ffffff 0%,#f5f3ff 100%)"
-                : "linear-gradient(135deg,rgba(168,85,247,0.12) 0%,rgba(236,72,153,0.08) 100%)",
-              border: isLight ? "1px solid #ddd6fe" : "1px solid rgba(168,85,247,0.3)",
-              boxShadow: isLight ? "0 2px 8px rgba(168,85,247,0.12)" : "0 4px 14px rgba(168,85,247,0.15)"
-            }}
-          >
-            <div className="absolute top-0 left-0 bottom-0 w-1" style={{ background: "linear-gradient(180deg,#a855f7,#ec4899)" }} />
-            <div className="text-xs mb-1 font-medium pl-1.5" style={{ color: isLight ? "#64748b" : "#8a968a" }}>Total cost</div>
-            <div className="text-2xl font-black font-mono pl-1.5" style={{
-              background: isLight
-                ? "linear-gradient(135deg,#7e22ce 0%,#be185d 100%)"
-                : "linear-gradient(135deg,#c084fc 0%,#f472b6 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text"
-            }}>₹{Number(cost || 0).toLocaleString()}</div>
+          <div className="rounded-xl p-3 border" style={{ backgroundColor: t.cardAlt, borderColor: t.border }}>
+            <div className="text-xs mb-1 font-medium" style={{ color: t.sub }}>Total cost</div>
+            <div className="text-2xl font-black" style={{ color: t.text }}>₹{Number(cost || 0).toLocaleString()}</div>
           </div>
         </div>
-        <button
-          className="w-full py-2.5 rounded-xl font-bold text-sm transition-all shadow-sm cursor-pointer hover:scale-[1.01] active:scale-[0.99]"
-          style={{
-            background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
-            color: "#ffffff",
-            boxShadow: isLight
-              ? "0 4px 14px -3px rgba(16,185,129,0.45)"
-              : "0 6px 20px -6px rgba(34,197,94,0.7)"
-          }}
-        >
-          Share Split Request
-        </button>
-      </div>
+        <SoftButton isLight={isLight} type="button" className="w-full">Share Split Request</SoftButton>
+      </Card>
 
+      {/* GROUND LIST */}
       <section>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-semibold flex items-center gap-2" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
-            <span className="w-1 h-4 rounded-full" style={{ background: "linear-gradient(180deg,#22c55e,#3b82f6)" }} />
-            Available Grounds
-          </h3>
-          <span className="text-xs" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
-            {filteredGrounds.length} result{filteredGrounds.length !== 1 ? "s" : ""}
-            {activeFilterCount > 0 && ` · ${activeFilterCount} filter${activeFilterCount !== 1 ? "s" : ""} applied`}
-          </span>
-        </div>
-        <div className="space-y-3">
+        <SectionTitle
+          isLight={isLight}
+          title="Available Grounds"
+          badge={`${filteredGrounds.length} result${filteredGrounds.length === 1 ? "" : "s"}`}
+        />
+
+        <div className="space-y-4">
           {filteredGrounds.length === 0 && (
-            <div
-              className={cn(C, "rounded-2xl p-8 text-center relative overflow-hidden")}
-              style={{
-                backgroundColor: isLight ? "#ffffff" : undefined,
-                border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`
-              }}
-            >
-              <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7)" }} />
-              <div
-                className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center text-xl shadow-sm"
-                style={{ background: "linear-gradient(135deg,#22c55e 0%,#06b6d4 100%)" }}
-              >
-                🏟
-              </div>
-              <div className="text-sm font-bold" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
-                No grounds match your filters
-              </div>
-              <p className="text-xs mt-1" style={{ color: isLight ? "#64748b" : "#8a968a" }}>
-                Try adjusting your search query, location, price range, or rating threshold.
-              </p>
+            <Card isLight={isLight} className="p-8 text-center">
+              <div className="text-3xl mb-2">🏟</div>
+              <div className="text-sm font-bold" style={{ color: t.text }}>No grounds match your filters</div>
+              <p className="text-xs mt-1" style={{ color: t.sub }}>Try a different search, location, price or rating.</p>
               {activeFilters.length > 0 && (
-                <button
-                  type="button"
-                  onClick={clearAllFilters}
-                  className="mt-3.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-sm hover:scale-[1.03] active:scale-[0.97]"
-                  style={{
-                    background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
-                    color: "#ffffff",
-                    boxShadow: isLight ? "0 4px 14px -3px rgba(16,185,129,0.45)" : "0 6px 20px -6px rgba(34,197,94,0.7)"
-                  }}
-                >
-                  <RotateCcw className="w-3.5 h-3.5" /> Clear All Filters
-                </button>
+                <div className="flex justify-center mt-4">
+                  <SoftButton isLight={isLight} type="button" onClick={clearAllFilters}>
+                    <RotateCcw className="w-4 h-4" /> Clear all filters
+                  </SoftButton>
+                </div>
               )}
-            </div>
+            </Card>
           )}
+
           {filteredGrounds.map(g => {
             const amenities = asArray(g.amenities);
             const tags = asArray(g.tags);
             const rating = Number(g.rating) || 0;
             const availableNow = canBookGround(g);
-            const priceNum = getPriceNum(g);
-            const isPremium = priceNum > 1000;
+            const isPremium = getPriceNum(g) > 1000;
+            const mine = isOwnedByMyTeam(g);
             return (
-              <div
-                key={g.id ?? g.name}
-                className={cn(C, "rounded-2xl p-4 transition-all relative overflow-hidden hover:shadow-lg")}
-                style={{
-                  backgroundColor: isLight ? "#ffffff" : undefined,
-                  border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-                  boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.06)" : undefined
-                }}
-              >
-                <div
-                  className="absolute top-0 left-0 right-0 h-0.5"
-                  style={{
-                    background: isPremium
-                      ? "linear-gradient(90deg,#a855f7,#ec4899,#f97316)"
-                      : "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7)"
-                  }}
-                />
-                <div className="flex items-start gap-3">
-                  <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-md"
-                    style={{
-                      background: isPremium
-                        ? "linear-gradient(135deg,#a855f7 0%,#ec4899 100%)"
-                        : "linear-gradient(135deg,#22c55e 0%,#06b6d4 100%)"
+              <Card key={g.id ?? g.name} isLight={isLight} className="p-5 pt-6">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <h4 className="text-xl font-bold truncate" style={{ color: t.text }}>{g.name}</h4>
+                    {mine && <StatusBadge>Your team</StatusBadge>}
+                    {isPremium && <StatusBadge>Premium</StatusBadge>}
+                  </div>
+                  <StatusBadge tone={availableNow ? "green" : "red"}>{availableNow ? "Available today" : "Booked today"}</StatusBadge>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-3">
+                  <MetaRow isLight={isLight} icon={MapPin}>{displayLocation(g) || "Location TBD"}</MetaRow>
+                  <MetaRow isLight={isLight} icon={IndianRupee}>{displayPrice(g)}</MetaRow>
+                  {rating > 0 && <MetaRow isLight={isLight} icon={Star}>{rating}</MetaRow>}
+                </div>
+
+                {amenities.length > 0 && (
+                  <div className="flex items-center gap-3 mt-3 flex-wrap">
+                    {amenities.map((a, i) => (
+                      <span key={a?.label ?? i} className="flex items-center gap-1 text-xs" style={{ color: t.sub }}>
+                        <span style={{ color: t.green }}>{a?.icon}</span>
+                        {a?.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <Pill isLight={isLight}>
+                    {bookedTodaySlots(g).length} booked today · {g.availability_mode === "scheduled" ? "Scheduled" : "Always open"}
+                  </Pill>
+                  {tags.map((tg, i) => (
+                    <Tag key={tg?.label ?? i} color={tg?.color}>{tg?.label}</Tag>
+                  ))}
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2 mt-4">
+                  <SoftButton isLight={isLight} type="button" disabled={!availableNow} onClick={() => onBook(g)} className="flex-1">
+                    {availableNow ? "Book Now" : "Unavailable"}
+                  </SoftButton>
+                  <OutlineButton
+                    isLight={isLight}
+                    type="button"
+                    className="flex-1"
+                    onClick={() => {
+                      setSelectedGround(g);
+                      setShowMap(false);
                     }}
                   >
-                    <span className="text-2xl">🏟</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="font-semibold text-sm" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>{g.name}</div>
-                        <div className="flex items-center gap-1 mt-0.5">
-                          <MapPin className="w-3 h-3" style={{ color: isLight ? "#16a34a" : "#4ade80" }} />
-                          <span className="text-xs" style={{ color: isLight ? "#64748b" : "#8a968a" }}>{displayLocation(g)}</span>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5 mt-1.5">
-                          <Tag color={availableNow ? "green" : "red"}>{availableNow ? "Available today" : "Booked today"}</Tag>
-                          {isOwnedByMyTeam(g) && <Tag color="blue">Your team posted this</Tag>}
-                          {isPremium && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white shadow-sm" style={{ background: "linear-gradient(135deg,#a855f7 0%,#ec4899 100%)" }}>
-                              ✨ Premium
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <div className="font-bold text-sm font-mono" style={{
-                          background: isPremium
-                            ? (isLight ? "linear-gradient(135deg,#7e22ce 0%,#be185d 100%)" : "linear-gradient(135deg,#c084fc 0%,#f472b6 100%)")
-                            : (isLight ? "linear-gradient(135deg,#15803d 0%,#0284c7 100%)" : "linear-gradient(135deg,#4ade80 0%,#38bdf8 100%)"),
-                          WebkitBackgroundClip: "text",
-                          WebkitTextFillColor: "transparent",
-                          backgroundClip: "text"
-                        }}>{displayPrice(g)}</div>
-                        {rating > 0 && (
-                          <div className="flex items-center gap-1 justify-end mt-0.5">
-                            <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-                            <span className="text-xs font-semibold" style={{ color: isLight ? "#64748b" : "#8a968a" }}>{rating}</span>
-                          </div>
-                        )}
-                      </div>
+                    View Details
+                  </OutlineButton>
+                  {mine && (
+                    <div className="flex gap-2">
+                      <OutlineButton isLight={isLight} type="button" onClick={() => setEditingGround(g)} title="Edit ground" className="px-3.5">
+                        <Pencil className="w-4 h-4" />
+                      </OutlineButton>
+                      <OutlineButton isLight={isLight} tone="danger" type="button" onClick={() => deleteGround(g)} title="Delete ground" className="px-3.5">
+                        <Trash2 className="w-4 h-4" />
+                      </OutlineButton>
                     </div>
-                    {amenities.length > 0 && (
-                      <div className="flex items-center gap-3 mt-2 flex-wrap">
-                        {amenities.map((a, i) => (
-                          <span key={a?.label ?? i} className="flex items-center gap-1 text-xs" style={{ color: isLight ? "#64748b" : "#8a968a" }}>
-                            <span style={{ color: isLight ? "#16a34a" : "#4ade80" }}>{a?.icon}</span>{a?.label}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {tags.map((t, i) => <Tag key={t?.label ?? i} color={t?.color}>{t?.label}</Tag>)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2 mt-3">
-                  <button
-                    disabled={!availableNow}
-                    onClick={() => onBook(g)}
-                    className="flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-                    style={availableNow
-                      ? {
-                          background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
-                          color: "#ffffff",
-                          boxShadow: isLight ? "0 4px 14px -3px rgba(16,185,129,0.45)" : "0 6px 20px -6px rgba(34,197,94,0.7)"
-                        }
-                      : { backgroundColor: isLight ? "#f1f5f9" : "#1e211e", color: isLight ? "#94a3b8" : "#3a3a3a", cursor: "not-allowed", transform: "none" }}
-                  >
-                    {availableNow ? "Book Now" : "Unavailable"}
-                  </button>
-                  <GhostButton className="flex-1 text-center" onClick={() => { setSelectedGround(g); setShowMap(false); }}>View Details</GhostButton>
-                  {isOwnedByMyTeam(g) && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setEditingGround(g)}
-                        title="Edit Ground"
-                        className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer hover:scale-[1.05] active:scale-[0.95] ${
-                          isLight
-                            ? "text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200"
-                            : "text-gray-300 hover:text-white bg-[#252525] hover:bg-[#333] border border-[#2a2a2a]"
-                        }`}
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (!window.confirm("Delete this ground?")) return;
-                          try {
-                            await apiRequest(`/grounds/${g.id}`, { method: "DELETE", token });
-                            onGroundDeleted?.(g.id);
-                          } catch (err) {
-                            alert(err.message || "Could not delete ground");
-                          }
-                        }}
-                        title="Delete Ground"
-                        className="px-3 py-2 rounded-xl text-xs font-bold transition-all text-red-500 hover:text-red-600 cursor-pointer hover:scale-[1.05] active:scale-[0.95]"
-                        style={{
-                          background: "linear-gradient(135deg,rgba(239,68,68,0.12) 0%,rgba(220,38,38,0.12) 100%)",
-                          border: "1px solid rgba(239,68,68,0.25)"
-                        }}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </>
                   )}
                 </div>
-              </div>
+              </Card>
             );
           })}
         </div>
       </section>
 
+      {/* DETAILS MODAL */}
       {selectedGround && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
-          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)" }}
-          onClick={() => setSelectedGround(null)}
-        >
-          <div
-            className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl sm:rounded-3xl p-4 sm:p-5 relative animate-in fade-in zoom-in-95 duration-150"
-            style={{
-              backgroundColor: isLight ? "#ffffff" : "#141414",
-              border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-              boxShadow: isLight ? "0 20px 50px rgba(15,23,42,0.15)" : "0 20px 60px rgba(0,0,0,0.5)"
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl sm:rounded-t-3xl" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#f97316,#ec4899)" }} />
-            <div className="absolute top-4 right-4 flex items-center gap-2">
-              <button
-                onClick={() => setShowMap(prev => !prev)}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all cursor-pointer hover:scale-105 active:scale-95"
-                style={{
-                  background: showMap
-                    ? "linear-gradient(135deg,#22c55e 0%,#06b6d4 100%)"
-                    : (isLight ? "#f1f5f9" : "#1e211e"),
-                  color: showMap ? "#ffffff" : (isLight ? "#64748b" : "#8a978a"),
-                  border: `1px solid ${isLight ? "#e2e8f0" : "#2a2a2a"}`,
-                  boxShadow: showMap ? "0 4px 12px -3px rgba(16,185,129,0.5)" : "none"
-                }}
-              >
-                <Map className="w-3.5 h-3.5" />
-                {showMap ? "Hide Map" : "View Map"}
-              </button>
-              <button
-                onClick={() => setSelectedGround(null)}
-                className="w-7 h-7 rounded-full flex items-center justify-center hover:opacity-80 transition-colors"
-                style={{ backgroundColor: isLight ? "#f1f5f9" : "#1e211e" }}
-              >
-                <X className="w-4 h-4" style={{ color: isLight ? "#475569" : "#9ca39c" }} />
-              </button>
+        <Modal isLight={isLight} onClose={() => setSelectedGround(null)} maxWidth="max-w-2xl">
+          <Card isLight={isLight} className="p-5 pt-6">
+            <ModalHeader isLight={isLight} title={selectedGround.name} onClose={() => setSelectedGround(null)} />
+
+            <div className="space-y-2 mt-3">
+              <MetaRow isLight={isLight} icon={MapPin}>{displayLocation(selectedGround) || "Location TBD"}</MetaRow>
+              <MetaRow isLight={isLight} icon={Clock}>
+                {selectedGround.availability_mode === "scheduled"
+                  ? `${selectedGround.available_date || "Date TBD"} at ${selectedGround.available_time || "Time TBD"}`
+                  : "Always available"}
+              </MetaRow>
             </div>
 
-            <div className="pr-24 flex items-center gap-3">
-              <div
-                className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 shadow-md"
-                style={{ background: "linear-gradient(135deg,#22c55e 0%,#06b6d4 100%)" }}
-              >
-                <span className="text-3xl">🏟</span>
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              <div className="rounded-xl p-3 border" style={{ backgroundColor: t.greenSoft, borderColor: t.greenBorder }}>
+                <div className="text-xs mb-1 font-medium" style={{ color: t.sub }}>Price</div>
+                <div className="text-lg font-black" style={{ color: t.green }}>{displayPrice(selectedGround)}</div>
               </div>
-              <div>
-                <div className="text-lg font-black" style={{
-                  background: isLight
-                    ? "linear-gradient(135deg,#0f172a 0%,#15803d 50%,#0284c7 100%)"
-                    : "linear-gradient(135deg,#ffffff 0%,#4ade80 50%,#38bdf8 100%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text"
-                }}>{selectedGround.name}</div>
-                <div className="flex items-center gap-1 mt-1">
-                  <MapPin className="w-4 h-4" style={{ color: isLight ? "#16a34a" : "#22c55e" }} />
-                  <span className="text-sm" style={{ color: isLight ? "#64748b" : "#c8ccc8" }}>{displayLocation(selectedGround)}</span>
+              <div className="rounded-xl p-3 border" style={{ backgroundColor: t.cardAlt, borderColor: t.border }}>
+                <div className="text-xs mb-1 font-medium" style={{ color: t.sub }}>Rating</div>
+                <div className="text-lg font-black flex items-center gap-1" style={{ color: t.text }}>
+                  <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                  {selectedGround.rating || 0}
                 </div>
               </div>
             </div>
 
-            <div
-              className="mt-4 rounded-2xl p-4 space-y-3"
-              style={{
-                backgroundColor: isLight ? "#f8fafc" : "#0f0f0f",
-                border: `1px solid ${isLight ? "#e2e8f0" : "#1e1e1e"}`
-              }}
-            >
-              <div className="pb-3 border-b" style={{ borderColor: isLight ? "#e2e8f0" : "#1e1e1e" }}>
-                <div className="text-xs uppercase tracking-wide font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Posted by</div>
-                <div className="text-sm font-semibold mt-1" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>{selectedGround.postedByName || "MatchConnect user"}</div>
-                {selectedGround.postedByPhone ? <div className="text-xs mt-1 font-mono" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>{selectedGround.postedByPhone}</div> : <div className="text-xs mt-1" style={{ color: isLight ? "#94a3b8" : "#6b7a6b" }}>No posted phone number was saved.</div>}
+            <div className="rounded-xl p-4 border mt-3" style={{ backgroundColor: t.cardAlt, borderColor: t.border }}>
+              <div className="text-xs font-semibold mb-1" style={{ color: t.sub }}>Posted by</div>
+              <div className="text-sm font-semibold" style={{ color: t.text }}>{selectedGround.postedByName || "MatchConnect user"}</div>
+              <div className="text-xs mt-0.5" style={{ color: t.sub }}>
+                {selectedGround.postedByPhone || "No phone number saved."}
               </div>
-              <div className="pb-3 border-b" style={{ borderColor: isLight ? "#e2e8f0" : "#1e1e1e" }}>
-                <div className="text-xs uppercase tracking-wide font-medium" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Availability</div>
-                <div className="text-sm mt-1" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
-                  {selectedGround.availability_mode === "scheduled"
-                    ? `${selectedGround.available_date || "Date TBD"} · ${selectedGround.available_time || "Time TBD"}`
-                    : "Always available"}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div
-                  className="rounded-xl p-3 relative overflow-hidden"
-                  style={{
-                    background: isLight
-                      ? "linear-gradient(135deg,#ffffff 0%,#ecfdf5 100%)"
-                      : "linear-gradient(135deg,rgba(34,197,94,0.12) 0%,rgba(6,182,212,0.08) 100%)",
-                    border: isLight ? "1px solid #a7f3d0" : "1px solid rgba(34,197,94,0.3)",
-                    boxShadow: isLight ? "0 2px 8px rgba(16,185,129,0.1)" : "none"
-                  }}
-                >
-                  <div className="text-xs mb-1 font-medium" style={{ color: isLight ? "#64748b" : "#8a968a" }}>Price</div>
-                  <div className="text-base font-black font-mono" style={{
-                    background: isLight
-                      ? "linear-gradient(135deg,#15803d 0%,#0284c7 100%)"
-                      : "linear-gradient(135deg,#4ade80 0%,#38bdf8 100%)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                    backgroundClip: "text"
-                  }}>{displayPrice(selectedGround)}</div>
-                </div>
-                <div
-                  className="rounded-xl p-3 relative overflow-hidden"
-                  style={{
-                    background: isLight
-                      ? "linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%)"
-                      : "linear-gradient(135deg,rgba(245,158,11,0.12) 0%,rgba(236,72,153,0.08) 100%)",
-                    border: isLight ? "1px solid #fde68a" : "1px solid rgba(245,158,11,0.3)",
-                    boxShadow: isLight ? "0 2px 8px rgba(245,158,11,0.1)" : "none"
-                  }}
-                >
-                  <div className="text-xs mb-1 font-medium" style={{ color: isLight ? "#64748b" : "#8a968a" }}>Rating</div>
-                  <div className="text-base font-black font-mono flex items-center gap-1" style={{
-                    background: isLight
-                      ? "linear-gradient(135deg,#b45309 0%,#be185d 100%)"
-                      : "linear-gradient(135deg,#fbbf24 0%,#f472b6 100%)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                    backgroundClip: "text"
-                  }}>
-                    <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" style={{ WebkitTextFillColor: "initial" }} />
-                    {selectedGround.rating || 0}★
-                  </div>
-                </div>
-              </div>
+            </div>
 
-              <div
-                className="rounded-2xl p-3 relative overflow-hidden"
-                style={{
-                  backgroundColor: isLight ? "#ffffff" : "#111",
-                  border: `1px solid ${isLight ? "#e2e8f0" : "#1e1e1e"}`,
-                  boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.05)" : "none"
-                }}
-              >
-                <div className="absolute top-0 left-0 bottom-0 w-1" style={{ background: "linear-gradient(180deg,#f59e0b,#ec4899)" }} />
-                <div className="text-xs uppercase tracking-wide mb-2 font-medium pl-2" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Today's bookings</div>
-                <div className="pl-2">
-                  {bookedTodaySlots(selectedGround).length > 0 ? <div className="flex flex-wrap gap-1.5">{bookedTodaySlots(selectedGround).map(slot => <Tag key={slot} color="amber">{slot}</Tag>)}</div> : <div className="text-xs" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>No bookings yet today.</div>}
-                  <div className="text-xs mt-2" style={{ color: isLight ? "#94a3b8" : "#4a5a4a" }}>
-                    Remaining timings: {TIME_SLOTS.filter(slot => !bookedTodaySlots(selectedGround).includes(slot)).join(" · ") || "No slots left today"}
-                  </div>
+            <div className="rounded-xl p-4 border mt-3" style={{ backgroundColor: t.cardAlt, borderColor: t.border }}>
+              <div className="text-xs font-semibold mb-2" style={{ color: t.sub }}>Today's bookings</div>
+              {bookedTodaySlots(selectedGround).length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {bookedTodaySlots(selectedGround).map(slot => (
+                    <Tag key={slot} color="amber">{slot}</Tag>
+                  ))}
                 </div>
+              ) : (
+                <div className="text-xs" style={{ color: t.sub }}>No bookings yet today.</div>
+              )}
+              <div className="text-xs mt-2" style={{ color: t.faint }}>
+                Free slots: {TIME_SLOTS.filter(slot => !bookedTodaySlots(selectedGround).includes(slot)).join(", ") || "No slots left today"}
               </div>
+            </div>
 
-              {selectedGround.googleMapsUrl || displayLocation(selectedGround) ? (
-                <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${isLight ? "#e2e8f0" : "#1e1e1e"}` }}>
-                  {showMap ? <iframe title="Ground map" src={buildGroundMapsEmbedUrl(selectedGround)} className="w-full h-72" loading="lazy" referrerPolicy="no-referrer-when-downgrade" /> : <div className="p-4 text-sm text-center" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>Click View Map to open the ground on Google Maps.</div>}
-                </div>
-              ) : null}
+            {(selectedGround.googleMapsUrl || displayLocation(selectedGround)) && showMap && (
+              <div className="rounded-xl overflow-hidden border mt-3" style={{ borderColor: t.border }}>
+                <iframe
+                  title="Ground map"
+                  src={buildGroundMapsEmbedUrl(selectedGround)}
+                  className="w-full h-72"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+              </div>
+            )}
 
-              <div className="flex flex-wrap gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowMap(prev => !prev)}
-                  className="px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-                  style={{
-                    background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
-                    color: "#ffffff",
-                    boxShadow: isLight ? "0 4px 14px -3px rgba(16,185,129,0.45)" : "0 6px 20px -6px rgba(34,197,94,0.7)"
-                  }}
+            <div className="flex flex-wrap gap-2 mt-4">
+              <SoftButton isLight={isLight} type="button" onClick={() => setShowMap(prev => !prev)}>
+                <Map className="w-4 h-4" /> {showMap ? "Hide Map" : "View Map"}
+              </SoftButton>
+              {buildGroundMapsLink(selectedGround) && (
+                <a
+                  href={buildGroundMapsLink(selectedGround)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="py-2.5 px-4 rounded-xl text-sm font-semibold flex items-center gap-2 border"
+                  style={{ borderColor: t.border, color: t.text }}
                 >
-                  {showMap ? "Hide Map" : "View Map"}
-                </button>
-                {isOwnedByMyTeam(selectedGround) && (
-                  <button
-                    type="button"
-                    onClick={() => setEditingGround(selectedGround)}
-                    className="px-4 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-                    style={{
-                      backgroundColor: isLight ? "#f1f5f9" : "transparent",
-                      border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
-                      color: isLight ? "#0f172a" : "#c8ccc8"
-                    }}
-                  >
+                  <ExternalLink className="w-4 h-4" /> Open in Google Maps
+                </a>
+              )}
+              {isOwnedByMyTeam(selectedGround) && (
+                <>
+                  <OutlineButton isLight={isLight} type="button" onClick={() => setEditingGround(selectedGround)}>
                     <Pencil className="w-4 h-4" /> Edit
-                  </button>
-                )}
-                {buildGroundMapsLink(selectedGround) && (
-                  <a
-                    href={buildGroundMapsLink(selectedGround)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="px-4 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-                    style={{
-                      backgroundColor: isLight ? "#eff6ff" : "rgba(59,130,246,0.08)",
-                      border: `1px solid ${isLight ? "#bfdbfe" : "rgba(59,130,246,0.3)"}`,
-                      color: isLight ? "#1d4ed8" : "#60a5fa"
-                    }}
-                  >
-                    <ExternalLink className="w-4 h-4" /> Open in Google Maps
-                  </a>
-                )}
-                {isOwnedByMyTeam(selectedGround) && (
-                  <button
+                  </OutlineButton>
+                  <OutlineButton
+                    isLight={isLight}
+                    tone="danger"
                     type="button"
-                    onClick={async () => {
-                      if (!window.confirm("Delete this ground?")) return;
-                      try {
-                        await apiRequest(`/grounds/${selectedGround.id}`, { method: "DELETE", token });
-                        onGroundDeleted?.(selectedGround.id);
-                        setSelectedGround(null);
-                      } catch (err) {
-                        console.error(err.message || "Could not delete ground");
-                      }
-                    }}
-                    className="px-4 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-                    style={{
-                      background: "linear-gradient(135deg,rgba(239,68,68,0.12) 0%,rgba(220,38,38,0.12) 100%)",
-                      border: `1px solid ${isLight ? "#fecaca" : "rgba(239,68,68,0.35)"}`,
-                      color: isLight ? "#dc2626" : "#f87171"
-                    }}
+                    onClick={() => deleteGround(selectedGround, () => setSelectedGround(null))}
                   >
-                    Delete
-                  </button>
-                )}
-              </div>
+                    <Trash2 className="w-4 h-4" /> Delete
+                  </OutlineButton>
+                </>
+              )}
             </div>
-          </div>
-        </div>
+          </Card>
+        </Modal>
       )}
 
+      {/* EDIT MODAL */}
       {editingGround && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)" }}
-          onClick={() => setEditingGround(null)}
-        >
-          <div className="w-full max-w-2xl" onClick={e => e.stopPropagation()}>
-            <GroundForm
-              token={token}
-              initialGround={editingGround}
-              onUpdated={updated => {
-                onGroundUpdated?.(updated);
-                setSelectedGround(updated);
-                setEditingGround(null);
-              }}
-              onDeleted={id => {
-                onGroundDeleted?.(id);
-                setSelectedGround(null);
-                setEditingGround(null);
-              }}
-              onClose={() => setEditingGround(null)}
-              theme={theme}
-            />
-          </div>
-        </div>
+        <Modal isLight={isLight} onClose={() => setEditingGround(null)} maxWidth="max-w-2xl">
+          <GroundForm
+            token={token}
+            initialGround={editingGround}
+            onUpdated={updated => {
+              onGroundUpdated?.(updated);
+              setSelectedGround(updated);
+              setEditingGround(null);
+            }}
+            onDeleted={id => {
+              onGroundDeleted?.(id);
+              setSelectedGround(null);
+              setEditingGround(null);
+            }}
+            onClose={() => setEditingGround(null)}
+            theme={theme}
+          />
+        </Modal>
       )}
     </div>
   );
