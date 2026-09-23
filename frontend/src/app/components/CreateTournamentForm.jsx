@@ -112,11 +112,17 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
     startDate: initialTournament?.start_date ? initialTournament.start_date.split("T")[0] : "",
   });
 
-  const parsedPrizes = Array.isArray(initialTournament?.prizes)
-    ? initialTournament.prizes
-    : typeof initialTournament?.prizes === "string"
-    ? JSON.parse(initialTournament.prizes || "[]")
-    : [];
+  const parsedPrizes = (() => {
+    if (Array.isArray(initialTournament?.prizes)) return initialTournament.prizes;
+    if (typeof initialTournament?.prizes === "string") {
+      try {
+        return JSON.parse(initialTournament.prizes || "[]");
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  })();
 
   const [prizeCount, setPrizeCount] = useState(parsedPrizes.length > 0 ? parsedPrizes.length : 1);
   const [prizes, setPrizes] = useState([
@@ -126,7 +132,46 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
   ]);
 
   const [submitting, setSubmitting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (initialTournament) {
+      setForm({
+        name: initialTournament.name || "",
+        maxTeams: initialTournament.max_teams || 8,
+        includeOwnTeam: initialTournament.creator_included !== undefined ? !!initialTournament.creator_included : true,
+        phone: initialTournament.phone || user?.phone || "",
+        coPhone: initialTournament.co_phone || "",
+        entryFee: initialTournament.entry_fee ?? "",
+        description: initialTournament.description || "",
+        venue: initialTournament.venue || "",
+        startDate: initialTournament.start_date ? String(initialTournament.start_date).split("T")[0] : "",
+      });
+
+      const pArr = (() => {
+        if (Array.isArray(initialTournament.prizes)) return initialTournament.prizes;
+        if (typeof initialTournament.prizes === "string") {
+          try {
+            return JSON.parse(initialTournament.prizes || "[]");
+          } catch {
+            return [];
+          }
+        }
+        return [];
+      })();
+
+      if (pArr.length > 0) {
+        setPrizeCount(pArr.length);
+        setPrizes([
+          { position: 1, money: pArr[0]?.money ?? "", trophy: pArr[0]?.trophy ?? true },
+          { position: 2, money: pArr[1]?.money ?? "", trophy: pArr[1]?.trophy ?? false },
+          { position: 3, money: pArr[2]?.money ?? "", trophy: pArr[2]?.trophy ?? false },
+        ]);
+      }
+    }
+  }, [initialTournament, user]);
 
   useEffect(() => {
     if (!loadingTeam && !myTeam && !user?.team_name?.trim() && !initialTournament) {
@@ -144,7 +189,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
   const validate = () => {
     const nameVal = user?.name?.trim() || "";
     const phoneVal = form.phone?.trim() || user?.phone?.trim() || "";
-    const teamVal = user?.team_name?.trim() || myTeam?.team_name?.trim() || "";
+    const teamVal = user?.team_name?.trim() || myTeam?.name?.trim() || myTeam?.team_name?.trim() || "";
 
     const missingProfile = [];
     if (!nameVal) missingProfile.push("Name");
@@ -156,7 +201,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
       alert(msg);
       return msg;
     }
-    if (!form.name.trim()) return "Tournament name is required";
+    if (!form.name?.trim()) return "Tournament name is required";
     const maxTeams = parseInt(form.maxTeams, 10);
     if (!Number.isInteger(maxTeams) || maxTeams < 2) return "Number of teams must be at least 2";
     if (form.includeOwnTeam && !myTeam && !user?.team_name?.trim() && !initialTournament) return "You don't have a team registered — turn off 'include my team', or register a team first";
@@ -184,19 +229,14 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
     try {
       const payload = {
         name: form.name.trim(),
-        venue: form.venue || null,
+        venue: form.venue?.trim() || null,
         start_date: form.startDate || null,
-        format: form.format,
-        overs: form.format === "Test" ? 0 : Number(form.overs) || 20,
-        ball_type: form.ballType,
-        start_date: form.startDate,
-        end_date: form.endDate || null,
-        venue: form.venue.trim(),
+        phone: form.phone?.trim() || null,
+        co_phone: form.coPhone?.trim() || null,
         entry_fee: Number(form.entryFee) || 0,
+        description: form.description?.trim() || null,
         max_teams: Number(form.maxTeams) || 8,
-        organizer_contact: form.organizerContact.trim(),
-        rules: form.rules.trim() || null,
-        prizes: form.prizes.map((p) => ({
+        prizes: prizes.slice(0, prizeCount).map((p) => ({
           position: p.position,
           money: Number(p.money) || 0,
           trophy: !!p.trophy,
@@ -224,6 +264,25 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
       setError(err.message || "Failed to save tournament");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!initialTournament?.id) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await apiRequest(`/tournaments/${initialTournament.id}`, {
+        method: "DELETE",
+        token,
+      });
+      setShowDeleteConfirm(false);
+      onDeleted?.(initialTournament.id);
+      onClose?.();
+    } catch (err) {
+      setError(err.message || "Failed to delete tournament");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -446,8 +505,8 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
             {initialTournament && (
               <button
                 type="button"
-                onClick={handleDelete}
-                disabled={submitting}
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={submitting || deleting}
                 className={cn(
                   "py-2.5 px-5 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-1.5 border",
                   isLight
@@ -463,7 +522,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
             </GhostButton>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || deleting}
               className={cn(
                 "flex-1 py-2.5 rounded-xl font-bold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2",
                 isLight
@@ -478,6 +537,66 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
         </form>
         </fieldset>
       </div>
+
+      {/* Delete Tournament Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4 animate-[fadeIn_.15s_ease-out]"
+          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.6)" : "rgba(0,0,0,0.8)", backdropFilter: "blur(3px)" }}
+          onClick={() => !deleting && setShowDeleteConfirm(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl p-5 space-y-4"
+            style={isLight ? {
+              backgroundColor: "#ffffff",
+              border: "1px solid #fee2e2",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+            } : {
+              backgroundColor: "#0d0f0d",
+              border: "1px solid #3a1a1a",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/15 flex items-center justify-center text-red-500 shrink-0 mt-0.5">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h4 className={cn("text-sm font-bold", isLight ? "text-slate-900" : "text-white")}>
+                  Delete Tournament?
+                </h4>
+                <p className={cn("text-xs mt-1 leading-relaxed", isLight ? "text-slate-600" : "text-slate-400")}>
+                  Are you sure you want to delete <span className={cn("font-bold", isLight ? "text-slate-900" : "text-white")}>{initialTournament?.name || "this tournament"}</span>? All matches and team registrations will be permanently deleted.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 pt-2 border-t border-slate-100 dark:border-[#1f221f]">
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => setShowDeleteConfirm(false)}
+                className={cn(
+                  "flex-1 py-2 rounded-xl text-xs font-semibold transition-colors",
+                  isLight ? "bg-slate-100 hover:bg-slate-200 text-slate-700" : "bg-[#1c1f1c] hover:bg-[#252825] text-[#c8ccc8]"
+                )}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={confirmDelete}
+                className="flex-1 py-2 rounded-xl text-xs font-bold transition-all bg-red-600 hover:bg-red-500 text-white flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
+              >
+                {deleting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {deleting ? "Deleting..." : "Delete Tournament"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

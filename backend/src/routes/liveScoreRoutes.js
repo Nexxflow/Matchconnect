@@ -26,27 +26,27 @@ const { authRequired, optionalAuth } = require("../middleware/auth");
 // Static/specific paths first, so Express doesn't swallow them into "/:matchId/..."
 router.get("/live/current", getCurrentLiveMatch);
 
-router.get("/", listMatches);         // GET  /api/matches
+router.get("/", optionalAuth, listMatches);         // GET  /api/matches
 router.post("/", optionalAuth, createMatch);        // POST /api/matches — attaches user if logged in
-router.put("/:matchId", updateMatch);
-router.post("/:matchId/update", updateMatch);
+router.put("/:matchId", optionalAuth, updateMatch);
+router.post("/:matchId/update", optionalAuth, updateMatch);
 router.delete("/:matchId", optionalAuth, deleteMatch);
 
-router.get("/:matchId/squads", getSquads);
-router.post("/:matchId/squads", addSquads);   // add player names to the two teams
-router.post("/:matchId/toss", recordToss);    // record toss winner + bat/bowl decision
-router.get("/:matchId/live", getLiveScore);
-router.get("/:matchId/scoreboard", getScoreboard);
+router.get("/:matchId/squads", optionalAuth, getSquads);
+router.post("/:matchId/squads", optionalAuth, addSquads);   // add player names to the two teams
+router.post("/:matchId/toss", optionalAuth, recordToss);    // record toss winner + bat/bowl decision
+router.get("/:matchId/live", optionalAuth, getLiveScore);
+router.get("/:matchId/scoreboard", optionalAuth, getScoreboard);
 
-router.post("/:matchId/start-innings", startInnings);
-router.post("/:matchId/set-players", setActivePlayers);
-router.post("/:matchId/balls", recordBall);
-router.post("/:matchId/balls/undo", undoBall);
-router.post("/:matchId/select-bowler", selectBowler);
-router.post("/:matchId/new-batsman", newBatsman);
-router.post("/:matchId/complete", completeMatch);
-router.post("/:matchId/end-innings", endInnings);
-router.post("/:matchId/players/:playerId/update-name", updatePlayerName);
+router.post("/:matchId/start-innings", optionalAuth, startInnings);
+router.post("/:matchId/set-players", optionalAuth, setActivePlayers);
+router.post("/:matchId/balls", optionalAuth, recordBall);
+router.post("/:matchId/balls/undo", optionalAuth, undoBall);
+router.post("/:matchId/select-bowler", optionalAuth, selectBowler);
+router.post("/:matchId/new-batsman", optionalAuth, newBatsman);
+router.post("/:matchId/complete", optionalAuth, completeMatch);
+router.post("/:matchId/end-innings", optionalAuth, endInnings);
+router.post("/:matchId/players/:playerId/update-name", optionalAuth, updatePlayerName);
 
 module.exports = router;
 

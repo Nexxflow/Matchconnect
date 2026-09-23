@@ -34,6 +34,43 @@ const listTournaments = asyncHandler(async (req, res) => {
   res.json({ tournaments: rows });
 });
 
+// Helper to resolve or auto-create a team by name and ensure it is registered/confirmed in the tournament
+async function ensureTournamentTeam(tournamentId, teamName, userId = null) {
+  if (!tournamentId || !teamName || !teamName.trim()) return null;
+  const clean = teamName.trim();
+
+  try {
+    let teamId = null;
+    const findRes = await pool.query(
+      `SELECT id FROM teams WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
+      [clean]
+    );
+    if (findRes.rows.length > 0) {
+      teamId = findRes.rows[0].id;
+    } else {
+      const insRes = await pool.query(
+        `INSERT INTO teams (name, created_by) VALUES ($1, $2) RETURNING id`,
+        [clean, userId]
+      );
+      teamId = insRes.rows[0]?.id || null;
+    }
+
+    if (teamId) {
+      await pool.query(
+        `INSERT INTO tournament_registrations (tournament_id, team_id, registered_by, status)
+         VALUES ($1, $2, $3, 'confirmed')
+         ON CONFLICT (tournament_id, team_id)
+         DO UPDATE SET status = 'confirmed'`,
+        [tournamentId, teamId, userId]
+      );
+    }
+    return teamId;
+  } catch (err) {
+    console.error(`Error ensuring tournament team "${clean}":`, err.message);
+    return null;
+  }
+}
+
 const getTournament = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const tRes = await pool.query(
@@ -45,6 +82,20 @@ const getTournament = asyncHandler(async (req, res) => {
   );
   if (tRes.rows.length === 0) return res.status(404).json({ error: "Tournament not found" });
   const tournament = tRes.rows[0];
+
+  // Auto-sync any teams from existing matches in this tournament into tournament_registrations
+  try {
+    const matchTeams = await pool.query(
+      `SELECT DISTINCT team1_name, team2_name FROM matches WHERE tournament_id = $1`,
+      [id]
+    );
+    for (const row of matchTeams.rows) {
+      if (row.team1_name?.trim()) await ensureTournamentTeam(id, row.team1_name);
+      if (row.team2_name?.trim()) await ensureTournamentTeam(id, row.team2_name);
+    }
+  } catch (syncErr) {
+    console.warn("Failed to auto-sync match teams to tournament registrations:", syncErr.message);
+  }
 
   const teamsRes = await pool.query(
     `SELECT tm.id, tm.name, r.status, r.registered_at
@@ -531,8 +582,8 @@ const updateTournament = asyncHandler(async (req, res) => {
     }
   }
 
-  const updatedRes = await pool.query(
-    `UPDATE tournaments
+  let updatedRes;
+  const updateQuery = `UPDATE tournaments
      SET name = $1,
          format = $2,
          venue = $3,
@@ -545,21 +596,32 @@ const updateTournament = asyncHandler(async (req, res) => {
          prizes = $10::jsonb,
          updated_at = now()
      WHERE id = $11
-     RETURNING *`,
-    [
-      name.trim(),
-      format,
-      venue,
-      start_date,
-      max_teams,
-      phone,
-      co_phone,
-      entry_fee,
-      description,
-      JSON.stringify(prizes),
-      id,
-    ]
-  );
+     RETURNING *`;
+  const updateParams = [
+    name.trim(),
+    format,
+    venue,
+    start_date,
+    max_teams,
+    phone,
+    co_phone,
+    entry_fee,
+    description,
+    JSON.stringify(prizes),
+    id,
+  ];
+
+  try {
+    updatedRes = await pool.query(updateQuery, updateParams);
+  } catch (err) {
+    if (err.code === "42703") {
+      // Missing column (e.g. updated_at); ensure column exists and retry
+      await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()`);
+      updatedRes = await pool.query(updateQuery, updateParams);
+    } else {
+      throw err;
+    }
+  }
 
   const team_count_res = await pool.query(
     `SELECT COUNT(*)::int AS count FROM tournament_registrations WHERE tournament_id = $1 AND status = 'confirmed'`,
@@ -753,19 +815,11 @@ const createTournamentMatch = asyncHandler(async (req, res) => {
   let resolvedTeam1Id = team1_id;
   let resolvedTeam2Id = team2_id;
 
-  if (!resolvedTeam1Id && team1_name) {
-    const t1 = await pool.query(
-      `SELECT id FROM teams WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
-      [team1_name.trim()]
-    );
-    if (t1.rows.length > 0) resolvedTeam1Id = t1.rows[0].id;
+  if (team1_name?.trim()) {
+    resolvedTeam1Id = await ensureTournamentTeam(id, team1_name.trim(), req.user?.id) || resolvedTeam1Id;
   }
-  if (!resolvedTeam2Id && team2_name) {
-    const t2 = await pool.query(
-      `SELECT id FROM teams WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
-      [team2_name.trim()]
-    );
-    if (t2.rows.length > 0) resolvedTeam2Id = t2.rows[0].id;
+  if (team2_name?.trim()) {
+    resolvedTeam2Id = await ensureTournamentTeam(id, team2_name.trim(), req.user?.id) || resolvedTeam2Id;
   }
 
   const insertRes = await pool.query(
@@ -855,6 +909,16 @@ const updateTournamentMatch = asyncHandler(async (req, res) => {
   const updatedRound = round !== undefined ? (round ? round.trim() : null) : existing.round;
   const updatedOvers = overs_limit !== undefined ? Number(overs_limit) || 20 : existing.overs_limit;
 
+  let resolvedTeam1Id = team1_id || existing.team1_id;
+  let resolvedTeam2Id = team2_id || existing.team2_id;
+
+  if (updatedTeam1Name?.trim()) {
+    resolvedTeam1Id = (await ensureTournamentTeam(id, updatedTeam1Name.trim(), req.user?.id)) || resolvedTeam1Id;
+  }
+  if (updatedTeam2Name?.trim()) {
+    resolvedTeam2Id = (await ensureTournamentTeam(id, updatedTeam2Name.trim(), req.user?.id)) || resolvedTeam2Id;
+  }
+
   const updateRes = await pool.query(
     `UPDATE matches
      SET team1_name = $1,
@@ -877,8 +941,8 @@ const updateTournamentMatch = asyncHandler(async (req, res) => {
     [
       updatedTeam1Name,
       updatedTeam2Name,
-      team1_id,
-      team2_id,
+      resolvedTeam1Id,
+      resolvedTeam2Id,
       updatedStatus,
       updatedResult,
       updatedMom,

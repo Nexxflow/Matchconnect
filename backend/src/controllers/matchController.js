@@ -9,14 +9,28 @@ const {
   notifyUser,
 } = require("../services/notificationService");
 
-// Ensure non_striker_id exists on balls table
-pool.query(`ALTER TABLE balls ADD COLUMN IF NOT EXISTS non_striker_id UUID REFERENCES players(id);`).catch((err) => {
-  console.error("Migration error (non_striker_id on balls):", err.message);
+// Ensure required columns exist on matches and balls
+pool.query(`
+  ALTER TABLE balls ADD COLUMN IF NOT EXISTS non_striker_id UUID REFERENCES players(id);
+  ALTER TABLE matches ADD COLUMN IF NOT EXISTS result TEXT;
+  ALTER TABLE matches ADD COLUMN IF NOT EXISTS potm_name TEXT;
+  ALTER TABLE matches ADD COLUMN IF NOT EXISTS potm_stats TEXT;
+  ALTER TABLE matches ADD COLUMN IF NOT EXISTS potm_team TEXT;
+`).catch((err) => {
+  console.error("Migration error (matches result/potm columns):", err.message);
 });
 
 // ============================================================
 // Helpers
 // ============================================================
+
+function checkMatchCreator(match, reqUser) {
+  if (reqUser?.id && match?.created_by && String(match.created_by) !== String(reqUser.id)) {
+    const err = new Error("Forbidden: Only the match creator can modify or resume this scoreboard");
+    err.status = 403;
+    throw err;
+  }
+}
 
 async function findOrCreateTeam(client, name) {
   const existing = await client.query(`SELECT id FROM teams WHERE name = $1`, [name]);
@@ -162,6 +176,16 @@ const cancelChallenge = asyncHandler(async (req, res) => {
 // List every match for the home screen.
 // ============================================================
 const listMatches = asyncHandler(async (req, res) => {
+  const userId = req.user?.id || req.query?.user_id;
+  const mineOnly = req.query?.mine === "true" || req.query?.only_created === "true";
+
+  let whereClause = "";
+  const params = [];
+  if (mineOnly && userId) {
+    params.push(userId);
+    whereClause = `WHERE m.created_by = $${params.length}`;
+  }
+
   const matchesRes = await pool.query(
     `SELECT
        m.*,
@@ -171,6 +195,7 @@ const listMatches = asyncHandler(async (req, res) => {
          WHEN m.status = 'not_started' THEN NULL
          ELSE inn.summary
        END AS current_innings_summary,
+       all_inn.list AS innings_list,
        CASE
          WHEN m.status = 'not_started' THEN
            (COALESCE(sq.t1_count, 0) < 2 OR COALESCE(sq.t2_count, 0) < 2)
@@ -191,11 +216,26 @@ const listMatches = asyncHandler(async (req, res) => {
        LIMIT 1
      ) inn ON true
      LEFT JOIN LATERAL (
+       SELECT json_agg(
+         json_build_object(
+           'inning_number', i.inning_number,
+           'batting_team_id', i.batting_team_id,
+           'total_runs', i.total_runs,
+           'wickets', i.wickets,
+           'overs_completed', i.overs_completed
+         ) ORDER BY i.inning_number ASC
+       ) AS list
+       FROM innings i
+       WHERE i.match_id = m.id
+     ) all_inn ON true
+     LEFT JOIN LATERAL (
        SELECT
          (SELECT COUNT(*)::int FROM players WHERE team_id = m.team1_id) AS t1_count,
          (SELECT COUNT(*)::int FROM players WHERE team_id = m.team2_id) AS t2_count
      ) sq ON m.status = 'not_started'
-     ORDER BY m.updated_at DESC NULLS LAST, m.created_at DESC`
+     ${whereClause}
+     ORDER BY m.updated_at DESC NULLS LAST, m.created_at DESC`,
+    params
   );
 
   res.json(matchesRes.rows);
@@ -211,7 +251,7 @@ const listMatches = asyncHandler(async (req, res) => {
 const createMatch = asyncHandler(async (req, res) => {
   const {
     team1_name, team2_name, venue = null, overs_limit = 20,
-    team1_players = [], team2_players = [],
+    team1_players = [], team2_players = [], created_by: bodyCreatedBy,
   } = req.body;
 
   if (!team1_name || !team2_name) {
@@ -230,7 +270,7 @@ const createMatch = asyncHandler(async (req, res) => {
     const matchRes = await client.query(
       `INSERT INTO matches (team1_id, team2_id, venue, overs_limit, status, created_by)
        VALUES ($1,$2,$3,$4,'not_started',$5) RETURNING id`,
-      [team1Id, team2Id, venue, overs_limit, req.user?.id || null]
+      [team1Id, team2Id, venue, overs_limit, req.user?.id || bodyCreatedBy || null]
     );
     const matchId = matchRes.rows[0].id;
 
@@ -274,6 +314,7 @@ const updateMatch = asyncHandler(async (req, res) => {
     const matchRes = await client.query(`SELECT * FROM matches WHERE id = $1 FOR UPDATE`, [matchId]);
     if (matchRes.rows.length === 0) return res.status(404).json({ error: "Match not found" });
     const match = matchRes.rows[0];
+    checkMatchCreator(match, req.user);
 
     if (overs_limit != null) {
       await client.query(`UPDATE matches SET overs_limit = $1, updated_at = now() WHERE id = $2`, [Number(overs_limit), matchId]);
@@ -377,9 +418,11 @@ const recordToss = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "toss_winner_team must be 'team1'|'team2' and toss_decision must be 'bat'|'bowl'" });
   }
 
-  const matchRes = await pool.query(`SELECT team1_id, team2_id FROM matches WHERE id = $1`, [matchId]);
+  const matchRes = await pool.query(`SELECT * FROM matches WHERE id = $1`, [matchId]);
   if (matchRes.rows.length === 0) return res.status(404).json({ error: "Match not found" });
-  const { team1_id, team2_id } = matchRes.rows[0];
+  const match = matchRes.rows[0];
+  checkMatchCreator(match, req.user);
+  const { team1_id, team2_id } = match;
 
   const winnerTeamId = toss_winner_team === "team1" ? team1_id : team2_id;
   const loserTeamId = toss_winner_team === "team1" ? team2_id : team1_id;
@@ -465,6 +508,7 @@ const startInnings = asyncHandler(async (req, res) => {
     );
     if (matchRes.rows.length === 0) throw new Error("Match not found");
     const match = matchRes.rows[0];
+    checkMatchCreator(match, req.user);
 
     const battingTeamId = batting_team === match.team1_name ? match.team1_id : match.team2_id;
     const bowlingTeamId = battingTeamId === match.team1_id ? match.team2_id : match.team1_id;
@@ -508,6 +552,238 @@ const startInnings = asyncHandler(async (req, res) => {
   const live = await buildLiveState(matchId);
   res.status(201).json(live);
 });
+
+// ============================================================
+// Helper: Calculate exact victory margin and Player of the Match across BOTH innings
+// ============================================================
+async function calculateMatchOutcomeAndPOTM(client, matchId) {
+  const db = client || pool;
+
+  // 1. Fetch match and teams
+  const matchRes = await db.query(
+    `SELECT m.*, t1.name AS team1_name, t2.name AS team2_name
+     FROM matches m
+     JOIN teams t1 ON t1.id = m.team1_id
+     JOIN teams t2 ON t2.id = m.team2_id
+     WHERE m.id = $1`,
+    [matchId]
+  );
+  if (matchRes.rows.length === 0) return null;
+  const match = matchRes.rows[0];
+
+  // 2. Fetch innings
+  const inningsRes = await db.query(
+    `SELECT i.*, tb.name AS batting_team_name, tw.name AS bowling_team_name
+     FROM innings i
+     JOIN teams tb ON tb.id = i.batting_team_id
+     JOIN teams tw ON tw.id = i.bowling_team_id
+     WHERE i.match_id = $1 ORDER BY i.inning_number ASC`,
+    [matchId]
+  );
+
+  const inn1 = inningsRes.rows.find((i) => i.inning_number === 1);
+  const inn2 = inningsRes.rows.find((i) => i.inning_number === 2);
+
+  // 3. Compute win description: "won by 20 runs" or "won by 3 wickets"
+  let resultText = "Match completed";
+  let winningTeamName = null;
+  let winningTeamId = null;
+
+  if (inn1 && inn2) {
+    const inn1Runs = Number(inn1.total_runs || 0);
+    const inn2Runs = Number(inn2.total_runs || 0);
+    const inn2Wickets = Number(inn2.wickets || 0);
+
+    if (inn2Runs > inn1Runs) {
+      // 2nd innings batting team won by wickets
+      winningTeamName = inn2.batting_team_name;
+      winningTeamId = inn2.batting_team_id;
+      const wicketsInHand = Math.max(1, 10 - inn2Wickets);
+      resultText = `${winningTeamName} won by ${wicketsInHand} wicket${wicketsInHand === 1 ? "" : "s"}`;
+    } else if (inn1Runs > inn2Runs) {
+      // 1st innings batting team won by runs
+      winningTeamName = inn1.batting_team_name;
+      winningTeamId = inn1.batting_team_id;
+      const runMargin = inn1Runs - inn2Runs;
+      resultText = `${winningTeamName} won by ${runMargin} run${runMargin === 1 ? "" : "s"}`;
+    } else {
+      resultText = `Match tied! Both teams scored ${inn1Runs} runs`;
+    }
+  } else if (inn1) {
+    resultText = `${inn1.batting_team_name} scored ${inn1.total_runs}/${inn1.wickets} (${inn1.overs_completed} ov)`;
+  }
+
+  // 4. Calculate Player of the Match (calculated carefully across BOTH innings)
+  const battingStatsRes = await db.query(
+    `SELECT bs.*, p.name AS player_name, COALESCE(p.team_id, i.batting_team_id) AS team_id,
+            COALESCE(tb.name, t.name) AS team_name
+     FROM batting_stats bs
+     JOIN players p ON p.id = bs.player_id
+     JOIN innings i ON i.id = bs.innings_id
+     LEFT JOIN teams tb ON tb.id = i.batting_team_id
+     LEFT JOIN teams t ON t.id = p.team_id
+     WHERE i.match_id = $1`,
+    [matchId]
+  );
+
+  const bowlingStatsRes = await db.query(
+    `SELECT bw.*, p.name AS player_name, COALESCE(p.team_id, i.bowling_team_id) AS team_id,
+            COALESCE(tw.name, t.name) AS team_name
+     FROM bowling_stats bw
+     JOIN players p ON p.id = bw.player_id
+     JOIN innings i ON i.id = bw.innings_id
+     LEFT JOIN teams tw ON tw.id = i.bowling_team_id
+     LEFT JOIN teams t ON t.id = p.team_id
+     WHERE i.match_id = $1`,
+    [matchId]
+  );
+
+  const playerMap = new Map();
+
+  for (const row of battingStatsRes.rows) {
+    const pid = String(row.player_id);
+    if (!playerMap.has(pid)) {
+      playerMap.set(pid, {
+        id: pid,
+        name: row.player_name || "Unknown",
+        team_name: row.team_name || (String(row.team_id) === String(match.team1_id) ? match.team1_name : match.team2_name),
+        team_id: row.team_id,
+        runs: 0,
+        balls_faced: 0,
+        fours: 0,
+        sixes: 0,
+        is_out: false,
+        wickets: 0,
+        runs_conceded: 0,
+        balls_bowled: 0,
+      });
+    }
+    const p = playerMap.get(pid);
+    p.runs += Number(row.runs || 0);
+    p.balls_faced += Number(row.balls_faced || 0);
+    p.fours += Number(row.fours || 0);
+    p.sixes += Number(row.sixes || 0);
+    if (row.is_out) p.is_out = true;
+  }
+
+  for (const row of bowlingStatsRes.rows) {
+    const pid = String(row.player_id);
+    if (!playerMap.has(pid)) {
+      playerMap.set(pid, {
+        id: pid,
+        name: row.player_name || "Unknown",
+        team_name: row.team_name || (String(row.team_id) === String(match.team1_id) ? match.team1_name : match.team2_name),
+        team_id: row.team_id,
+        runs: 0,
+        balls_faced: 0,
+        fours: 0,
+        sixes: 0,
+        is_out: false,
+        wickets: 0,
+        runs_conceded: 0,
+        balls_bowled: 0,
+      });
+    }
+    const p = playerMap.get(pid);
+    const ob = Number(row.overs_bowled || 0);
+    const balls = Math.floor(ob) * 6 + Math.round((ob % 1) * 10);
+    p.balls_bowled += balls;
+    p.wickets += Number(row.wickets || 0);
+    p.runs_conceded += Number(row.runs_conceded || 0);
+  }
+
+  let topCandidate = null;
+  let highestScore = -Infinity;
+
+  for (const p of playerMap.values()) {
+    let score = 0;
+
+    // Batting points
+    score += p.runs * 1;
+    score += p.fours * 1;
+    score += p.sixes * 2;
+    if (p.runs >= 100) score += 20;
+    else if (p.runs >= 50) score += 12;
+    else if (p.runs >= 30) score += 6;
+
+    if (p.balls_faced >= 8) {
+      const sr = (p.runs / p.balls_faced) * 100;
+      if (sr >= 200) score += 8;
+      else if (sr >= 150) score += 4;
+      else if (sr < 75 && p.runs < 20) score -= 4;
+    }
+    if (p.runs >= 20 && !p.is_out && p.balls_faced > 0) {
+      score += 4;
+    }
+
+    // Bowling points
+    score += p.wickets * 25;
+    if (p.wickets >= 5) score += 25;
+    else if (p.wickets >= 4) score += 16;
+    else if (p.wickets >= 3) score += 8;
+
+    if (p.balls_bowled >= 12) {
+      const oversDec = p.balls_bowled / 6;
+      const econ = p.runs_conceded / oversDec;
+      if (econ <= 5.0) score += 10;
+      else if (econ <= 6.5) score += 6;
+      else if (econ <= 7.5) score += 2;
+      else if (econ >= 12.0) score -= 6;
+    }
+
+    // All-round bonuses
+    if (p.runs >= 25 && p.wickets >= 1) score += 10;
+    if (p.runs >= 40 && p.wickets >= 2) score += 15;
+
+    // Winning team bonus
+    if (winningTeamId && String(p.team_id) === String(winningTeamId)) {
+      score += 6;
+    }
+
+    p.points = score;
+
+    const statParts = [];
+    if (p.runs > 0 || p.balls_faced > 0) {
+      statParts.push(`${p.runs}${!p.is_out && p.runs > 0 ? "*" : ""} (${p.balls_faced}b${p.fours ? `, ${p.fours}x4` : ""}${p.sixes ? `, ${p.sixes}x6` : ""})`);
+    }
+    if (p.balls_bowled > 0 || p.wickets > 0) {
+      const oStr = `${Math.floor(p.balls_bowled / 6)}.${p.balls_bowled % 6}`;
+      statParts.push(`${p.wickets}/${p.runs_conceded} (${oStr} ov)`);
+    }
+    p.statsSummary = statParts.join(" & ") || `${p.runs} runs`;
+
+    if (score > highestScore) {
+      highestScore = score;
+      topCandidate = p;
+    }
+  }
+
+  if (topCandidate) {
+    await db.query(
+      `UPDATE matches
+       SET result = $1,
+           potm_name = $2,
+           potm_stats = $3,
+           potm_team = $4,
+           status = 'completed',
+           updated_at = now()
+       WHERE id = $5`,
+      [resultText, topCandidate.name, topCandidate.statsSummary, topCandidate.team_name, matchId]
+    );
+  } else {
+    await db.query(
+      `UPDATE matches SET result = $1, status = 'completed', updated_at = now() WHERE id = $2`,
+      [resultText, matchId]
+    );
+  }
+
+  return {
+    result: resultText,
+    potm_name: topCandidate?.name || null,
+    potm_stats: topCandidate?.statsSummary || null,
+    potm_team: topCandidate?.team_name || null,
+  };
+}
 
 // ============================================================
 // POST /api/matches/:matchId/balls
@@ -567,6 +843,7 @@ const recordBall = asyncHandler(async (req, res) => {
     const matchRes = await client.query(`SELECT * FROM matches WHERE id = $1 FOR UPDATE`, [matchId]);
     if (matchRes.rows.length === 0) throw new Error("Match not found");
     const match = matchRes.rows[0];
+    checkMatchCreator(match, req.user);
 
     const inningsRes = await client.query(
       `SELECT * FROM innings WHERE match_id = $1 AND is_completed = false
@@ -756,7 +1033,7 @@ const recordBall = asyncHandler(async (req, res) => {
       await client.query(`UPDATE innings SET is_completed = true WHERE id = $1`, [innings.id]);
     }
     if (matchComplete) {
-      await client.query(`UPDATE matches SET status = 'completed', updated_at = now() WHERE id = $1`, [matchId]);
+      await calculateMatchOutcomeAndPOTM(client, matchId);
     } else {
       await client.query(`UPDATE matches SET updated_at = now() WHERE id = $1`, [matchId]);
     }
@@ -812,7 +1089,9 @@ const undoBall = asyncHandler(async (req, res) => {
 
   const client = await pool.connect();
   try {
-    await client.query("BEGIN");
+    const matchRes = await client.query(`SELECT * FROM matches WHERE id = $1 FOR UPDATE`, [matchId]);
+    if (matchRes.rows.length === 0) throw new Error("Match not found");
+    checkMatchCreator(matchRes.rows[0], req.user);
 
     const inningsRes = await client.query(
       `SELECT * FROM innings WHERE match_id = $1 ORDER BY inning_number DESC LIMIT 1 FOR UPDATE`,
@@ -1050,6 +1329,10 @@ const selectBowler = asyncHandler(async (req, res) => {
   const { bowler_id } = req.body;
   if (!bowler_id) return res.status(400).json({ error: "bowler_id is required" });
 
+  const matchRes = await pool.query(`SELECT * FROM matches WHERE id = $1`, [matchId]);
+  if (matchRes.rows.length === 0) return res.status(404).json({ error: "Match not found" });
+  checkMatchCreator(matchRes.rows[0], req.user);
+
   const inningsRes = await pool.query(
     `SELECT id FROM innings WHERE match_id = $1 AND is_completed = false ORDER BY inning_number DESC LIMIT 1`,
     [matchId]
@@ -1091,6 +1374,10 @@ const newBatsman = asyncHandler(async (req, res) => {
   const { matchId } = req.params;
   const { player_id, replaces_position } = req.body;
   if (!player_id) return res.status(400).json({ error: "player_id is required" });
+
+  const matchRes = await pool.query(`SELECT * FROM matches WHERE id = $1`, [matchId]);
+  if (matchRes.rows.length === 0) return res.status(404).json({ error: "Match not found" });
+  checkMatchCreator(matchRes.rows[0], req.user);
 
   const inningsRes = await pool.query(
     `SELECT id FROM innings WHERE match_id = $1 AND is_completed = false ORDER BY inning_number DESC LIMIT 1`,
@@ -1143,13 +1430,17 @@ const completeMatch = asyncHandler(async (req, res) => {
   const { matchId } = req.params;
   const { result } = req.body;
 
-  await pool.query(
-    `UPDATE matches SET status = 'completed', result = $1, updated_at = now() WHERE id = $2`,
-    [result || null, matchId]
-  );
-  await pool.query(`UPDATE innings SET is_completed = true WHERE match_id = $1`, [matchId]);
+  const matchRes = await pool.query(`SELECT * FROM matches WHERE id = $1`, [matchId]);
+  if (matchRes.rows.length === 0) return res.status(404).json({ error: "Match not found" });
+  checkMatchCreator(matchRes.rows[0], req.user);
 
-  res.json({ ok: true });
+  await pool.query(`UPDATE innings SET is_completed = true WHERE match_id = $1`, [matchId]);
+  const outcome = await calculateMatchOutcomeAndPOTM(pool, matchId);
+  if (result && result.trim()) {
+    await pool.query(`UPDATE matches SET result = $1 WHERE id = $2`, [result.trim(), matchId]);
+  }
+
+  res.json({ ok: true, ...outcome });
 });
 
 async function fetchFallOfWickets(inningsId) {
@@ -1249,7 +1540,28 @@ const getScoreboard = asyncHandler(async (req, res) => {
     })
   );
 
-  res.json({ match, result: match.result, innings });
+  if (match.status === "completed" && (!match.potm_name || !match.result)) {
+    try {
+      const outcome = await calculateMatchOutcomeAndPOTM(pool, matchId);
+      if (outcome) {
+        match.result = outcome.result;
+        match.potm_name = outcome.potm_name;
+        match.potm_stats = outcome.potm_stats;
+        match.potm_team = outcome.potm_team;
+      }
+    } catch (e) {
+      console.error("calculateMatchOutcomeAndPOTM on getScoreboard error:", e.message);
+    }
+  }
+
+  res.json({
+    match,
+    result: match.result,
+    potm_name: match.potm_name,
+    potm_stats: match.potm_stats,
+    potm_team: match.potm_team,
+    innings,
+  });
 });
 
 // ============================================================
@@ -1265,6 +1577,20 @@ async function buildLiveState(matchId) {
   );
   if (matchRes.rows.length === 0) return null;
   let match = matchRes.rows[0];
+
+  if (match.status === "completed" && (!match.potm_name || !match.result)) {
+    try {
+      const outcome = await calculateMatchOutcomeAndPOTM(pool, matchId);
+      if (outcome) {
+        match.result = outcome.result;
+        match.potm_name = outcome.potm_name;
+        match.potm_stats = outcome.potm_stats;
+        match.potm_team = outcome.potm_team;
+      }
+    } catch (e) {
+      console.error("buildLiveState outcome calc error:", e.message);
+    }
+  }
 
   const inningsRes = await pool.query(
     `SELECT * FROM innings WHERE match_id = $1 ORDER BY inning_number`,
@@ -1624,6 +1950,10 @@ const endInnings = asyncHandler(async (req, res) => {
   try {
     await client.query("BEGIN");
 
+    const matchRes = await client.query(`SELECT * FROM matches WHERE id = $1 FOR UPDATE`, [matchId]);
+    if (matchRes.rows.length === 0) throw new Error("Match not found");
+    checkMatchCreator(matchRes.rows[0], req.user);
+
     const inningsRes = await client.query(
       `SELECT * FROM innings WHERE match_id = $1 AND is_completed = false ORDER BY inning_number DESC LIMIT 1 FOR UPDATE`,
       [matchId]
@@ -1635,39 +1965,7 @@ const endInnings = asyncHandler(async (req, res) => {
 
     // If this was innings 2, or if match complete
     if (activeInnings.inning_number >= 2) {
-      const firstInningsRes = await client.query(
-        `SELECT total_runs, batting_team_id FROM innings WHERE match_id = $1 AND inning_number = 1`,
-        [matchId]
-      );
-      const first = firstInningsRes.rows[0];
-      const matchRes = await client.query(
-        `SELECT m.*, t1.name AS team1_name, t2.name AS team2_name FROM matches m
-         JOIN teams t1 ON t1.id = m.team1_id JOIN teams t2 ON t2.id = m.team2_id WHERE m.id = $1`,
-        [matchId]
-      );
-      const match = matchRes.rows[0];
-
-      let resultText = "Match Completed";
-      if (first) {
-        const team1BatFirst = first.batting_team_id === match.team1_id;
-        const team1Name = team1BatFirst ? match.team1_name : match.team2_name;
-        const team2Name = team1BatFirst ? match.team2_name : match.team1_name;
-        const team1Runs = Number(first.total_runs || 0);
-        const team2Runs = Number(activeInnings.total_runs || 0);
-
-        if (team2Runs > team1Runs) {
-          resultText = `${team2Name} won by chasing the target`;
-        } else if (team1Runs > team2Runs) {
-          resultText = `${team1Name} won by ${team1Runs - team2Runs} runs`;
-        } else {
-          resultText = `Match tied! Both teams scored ${team1Runs} runs`;
-        }
-      }
-
-      await client.query(
-        `UPDATE matches SET status = 'completed', result = $1, updated_at = now() WHERE id = $2`,
-        [resultText, matchId]
-      );
+      await calculateMatchOutcomeAndPOTM(client, matchId);
     }
 
     await client.query("COMMIT");

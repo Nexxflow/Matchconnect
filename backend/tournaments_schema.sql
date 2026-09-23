@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS tournaments (
+gCREATE TABLE IF NOT EXISTS tournaments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR(150) NOT NULL,
   format VARCHAR(20) DEFAULT 'T20',
@@ -38,6 +38,7 @@ ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS co_phone VARCHAR(20);
 ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS entry_fee NUMERIC DEFAULT 0;
 ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS description TEXT;
 ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS prizes JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
 
 CREATE TABLE IF NOT EXISTS tournament_registrations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

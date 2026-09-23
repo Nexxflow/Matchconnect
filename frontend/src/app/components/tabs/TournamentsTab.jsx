@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Award, MapPin, CalendarDays, Users, DollarSign, Phone, Trophy, X, Pencil, Trash2, CheckCircle, Info, Plus, Swords, FileText, Download, UploadCloud, AlertCircle } from "lucide-react";
+import { Award, MapPin, CalendarDays, Users, DollarSign, Phone, Trophy, X, Pencil, Trash2, CheckCircle, Info, Plus, Swords, FileText, Download, UploadCloud, AlertCircle, Loader2 } from "lucide-react";
 import { apiRequest } from "../../api";
 import CreateTournamentForm from "../CreateTournamentForm";
 import { C, cn, Tag, GhostButton } from "../../utils/helpers.jsx";
@@ -105,18 +105,41 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
   useEffect(() => {
     if (!isOpen) return;
     if (match) {
-      setTeam1Name(match.team1_name || "");
-      setTeam2Name(match.team2_name || "");
-      setTeam1Select(match.team1_name || "");
-      setTeam2Select(match.team2_name || "");
-      setStatus(match.status || "completed");
+      const t1 = match.team1_name || "";
+      const t2 = match.team2_name || "";
+      const t1InConfirmed = confirmedTeams.some((ct) => ct.name === t1);
+      const t2InConfirmed = confirmedTeams.some((ct) => ct.name === t2);
+
+      setTeam1Name(t1);
+      setTeam2Name(t2);
+      setTeam1Select(t1InConfirmed ? t1 : (t1 ? "__custom__" : ""));
+      setTeam2Select(t2InConfirmed ? t2 : (t2 ? "__custom__" : ""));
+
+      const normStatus = (match.status || "completed").toLowerCase();
+      setStatus(["completed", "scheduled", "live"].includes(normStatus) ? normStatus : "completed");
       setResult(match.result || "");
       setMom(match.mom || match.man_of_the_match || "");
       setScoreboardUrl(match.scoreboard_url || null);
       setScoreboardName(match.scoreboard_name || "");
       setVenue(match.venue || tournament?.venue || "");
       setRound(match.round || "League Match");
-      setMatchDate(match.match_date ? new Date(match.match_date).toISOString().slice(0, 16) : "");
+
+      let dateVal = "";
+      if (match.match_date) {
+        if (typeof match.match_date === "string") {
+          dateVal = match.match_date.split("T")[0];
+        } else {
+          try {
+            const d = new Date(match.match_date);
+            if (!isNaN(d.getTime())) {
+              dateVal = d.toISOString().split("T")[0];
+            }
+          } catch {
+            dateVal = "";
+          }
+        }
+      }
+      setMatchDate(dateVal);
       setOversLimit(match.overs_limit || 20);
     } else {
       const defaultT1 = confirmedTeams[0]?.name || "";
@@ -167,11 +190,11 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!team1Name.trim()) {
+    if (!team1Name?.trim()) {
       setError("Please specify Team 1");
       return;
     }
-    if (!team2Name.trim()) {
+    if (!team2Name?.trim()) {
       setError("Please specify Team 2");
       return;
     }
@@ -187,13 +210,13 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
       const payload = {
         team1_name: team1Name.trim(),
         team2_name: team2Name.trim(),
-        status,
-        result: result.trim(),
-        mom: mom.trim(),
-        scoreboard_url: scoreboardUrl,
-        scoreboard_name: scoreboardName,
-        venue: venue.trim(),
-        round: round.trim(),
+        status: status || "completed",
+        result: result?.trim() || "",
+        mom: mom?.trim() || "",
+        scoreboard_url: scoreboardUrl || null,
+        scoreboard_name: scoreboardName || "",
+        venue: venue?.trim() || "",
+        round: round?.trim() || "League Match",
         match_date: matchDate ? new Date(matchDate).toISOString() : null,
         overs_limit: Number(oversLimit) || 20,
       };
@@ -272,8 +295,9 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
                   <select
                     value={team1Select}
                     onChange={(e) => {
-                      setTeam1Select(e.target.value);
-                      if (e.target.value !== "__custom__") setTeam1Name(e.target.value);
+                      const val = e.target.value;
+                      setTeam1Select(val);
+                      if (val !== "__custom__") setTeam1Name(val);
                     }}
                     className={fieldClass}
                   >
@@ -283,6 +307,9 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
                         {ct.name}
                       </option>
                     ))}
+                    {match?.team1_name && !confirmedTeams.some((ct) => ct.name === match.team1_name) && (
+                      <option value={match.team1_name}>{match.team1_name}</option>
+                    )}
                     <option value="__custom__">+ Other / Custom Team</option>
                   </select>
                   {team1Select === "__custom__" && (
@@ -315,8 +342,9 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
                   <select
                     value={team2Select}
                     onChange={(e) => {
-                      setTeam2Select(e.target.value);
-                      if (e.target.value !== "__custom__") setTeam2Name(e.target.value);
+                      const val = e.target.value;
+                      setTeam2Select(val);
+                      if (val !== "__custom__") setTeam2Name(val);
                     }}
                     className={fieldClass}
                   >
@@ -326,6 +354,9 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
                         {ct.name}
                       </option>
                     ))}
+                    {match?.team2_name && !confirmedTeams.some((ct) => ct.name === match.team2_name) && (
+                      <option value={match.team2_name}>{match.team2_name}</option>
+                    )}
                     <option value="__custom__">+ Other / Custom Team</option>
                   </select>
                   {team2Select === "__custom__" && (
@@ -352,8 +383,8 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
             </div>
           </div>
 
-          {/* Status & Round */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Status, Round, Overs Limit */}
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block mb-1 font-semibold" style={labelStyle}>Match Status</label>
               <select
@@ -373,6 +404,18 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
                 placeholder="e.g. League, Semi-Final, Final"
                 value={round}
                 onChange={(e) => setRound(e.target.value)}
+                className={fieldClass}
+              />
+            </div>
+            <div>
+              <label className="block mb-1 font-semibold" style={labelStyle}>Overs</label>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                placeholder="20"
+                value={oversLimit}
+                onChange={(e) => setOversLimit(e.target.value)}
                 className={fieldClass}
               />
             </div>
@@ -518,6 +561,10 @@ function TournamentDetailsModal({
   const [matches, setMatches] = useState([]);
   const [showMatchModal, setShowMatchModal] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
+  const [matchToDelete, setMatchToDelete] = useState(null);
+  const [deletingMatch, setDeletingMatch] = useState(false);
+  const [showDeleteTournamentConfirm, setShowDeleteTournamentConfirm] = useState(false);
+  const [deletingTournament, setDeletingTournament] = useState(false);
 
   const canManage = Boolean(token) || canManageMatches || isOrganizer || details?.can_manage || !t.created_by || false;
 
@@ -553,7 +600,7 @@ function TournamentDetailsModal({
     return () => { cancelled = true; };
   }, [t?.id]);
 
-  const handleMatchSaved = (savedMatch) => {
+  const handleMatchSaved = async (savedMatch) => {
     if (!savedMatch) return;
     setMatches((prev) => {
       const idx = prev.findIndex((m) => m.id === savedMatch.id);
@@ -565,7 +612,22 @@ function TournamentDetailsModal({
       return [...prev, savedMatch];
     });
 
-    // Notify parent to refresh tournament list counts if available
+    // Re-fetch latest tournament details to immediately update confirmed teams count and team list
+    try {
+      const data = await apiRequest(`/tournaments/${t.id}`);
+      if (data?.tournament) {
+        setDetails(data.tournament);
+        if (Array.isArray(data.tournament.matches)) {
+          setMatches(data.tournament.matches);
+        }
+        onTournamentUpdated?.(data.tournament);
+        return;
+      }
+    } catch (err) {
+      console.error("Failed to re-fetch tournament after match saved:", err);
+    }
+
+    // Fallback parent update
     onTournamentUpdated?.({
       ...t,
       matches_count: (t.matches_count || 0) + (selectedMatch ? 0 : 1),
@@ -573,20 +635,46 @@ function TournamentDetailsModal({
     });
   };
 
-  const handleDeleteMatch = async (matchId) => {
-    if (!window.confirm("Are you sure you want to delete this tournament match?")) return;
+  const confirmDeleteMatch = async () => {
+    if (!matchToDelete?.id) return;
+    setDeletingMatch(true);
     try {
-      await apiRequest(`/tournaments/${t.id}/matches/${matchId}`, {
+      await apiRequest(`/tournaments/${t.id}/matches/${matchToDelete.id}`, {
         method: "DELETE",
         token,
       });
-      setMatches((prev) => prev.filter((m) => m.id !== matchId));
+      setMatches((prev) => prev.filter((m) => m.id !== matchToDelete.id));
+      setMatchToDelete(null);
+      try {
+        const data = await apiRequest(`/tournaments/${t.id}`);
+        if (data?.tournament) {
+          setDetails(data.tournament);
+          onTournamentUpdated?.(data.tournament);
+          return;
+        }
+      } catch {}
       onTournamentUpdated?.({
         ...t,
         matches_count: Math.max((t.matches_count || 1) - 1, 0),
       });
     } catch (err) {
       alert(err.message || "Failed to delete tournament match");
+    } finally {
+      setDeletingMatch(false);
+    }
+  };
+
+  const confirmDeleteTournamentAction = async () => {
+    setDeletingTournament(true);
+    try {
+      await apiRequest(`/tournaments/${t.id}`, { method: "DELETE", token });
+      onDelete?.(t.id);
+      setShowDeleteTournamentConfirm(false);
+      onClose();
+    } catch (err) {
+      alert(err.message || "Failed to delete tournament");
+    } finally {
+      setDeletingTournament(false);
     }
   };
 
@@ -933,7 +1021,7 @@ function TournamentDetailsModal({
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleDeleteMatch(m.id)}
+                              onClick={() => setMatchToDelete(m)}
                               className={cn(
                                 "px-2.5 py-1 rounded-lg text-[11px] font-bold border flex items-center gap-1 transition-colors",
                                 isLight ? "bg-red-50 hover:bg-red-100 text-red-600 border-red-200" : "bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20"
@@ -996,16 +1084,7 @@ function TournamentDetailsModal({
               </button>
               <button
                 type="button"
-                onClick={async () => {
-                  if (!window.confirm("Are you sure you want to delete this tournament?")) return;
-                  try {
-                    await apiRequest(`/tournaments/${t.id}`, { method: "DELETE", token });
-                    onDelete?.(t.id);
-                    onClose();
-                  } catch (err) {
-                    alert(err.message || "Failed to delete tournament");
-                  }
-                }}
+                onClick={() => setShowDeleteTournamentConfirm(true)}
                 className={cn(
                   "px-3 py-2 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors border",
                   isLight ? "bg-red-50 hover:bg-red-100 text-red-600 border-red-200 shadow-xs" : "bg-red-500/10 border-red-500/25 text-red-400 hover:bg-red-500/20"
@@ -1086,12 +1165,134 @@ function TournamentDetailsModal({
         onSaved={handleMatchSaved}
         theme={theme}
       />
+
+      {/* Delete Match Confirmation Modal */}
+      {matchToDelete && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4 animate-[fadeIn_.15s_ease-out]"
+          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.6)" : "rgba(0,0,0,0.8)", backdropFilter: "blur(3px)" }}
+          onClick={() => !deletingMatch && setMatchToDelete(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl p-5 space-y-4"
+            style={isLight ? {
+              backgroundColor: "#ffffff",
+              border: "1px solid #fee2e2",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+            } : {
+              backgroundColor: "#0d0f0d",
+              border: "1px solid #3a1a1a",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/15 flex items-center justify-center text-red-500 shrink-0 mt-0.5">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h4 className={cn("text-sm font-bold", isLight ? "text-slate-900" : "text-white")}>
+                  Delete Match?
+                </h4>
+                <p className={cn("text-xs mt-1 leading-relaxed", isLight ? "text-slate-600" : "text-slate-400")}>
+                  Are you sure you want to delete <span className={cn("font-bold", isLight ? "text-slate-900" : "text-white")}>{matchToDelete.team1_name || "Team 1"} vs {matchToDelete.team2_name || "Team 2"}</span>? This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 pt-2 border-t border-slate-100 dark:border-[#1f221f]">
+              <button
+                type="button"
+                disabled={deletingMatch}
+                onClick={() => setMatchToDelete(null)}
+                className={cn(
+                  "flex-1 py-2 rounded-xl text-xs font-semibold transition-colors",
+                  isLight ? "bg-slate-100 hover:bg-slate-200 text-slate-700" : "bg-[#1c1f1c] hover:bg-[#252825] text-[#c8ccc8]"
+                )}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletingMatch}
+                onClick={confirmDeleteMatch}
+                className="flex-1 py-2 rounded-xl text-xs font-bold transition-all bg-red-600 hover:bg-red-500 text-white flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
+              >
+                {deletingMatch && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {deletingMatch ? "Deleting..." : "Delete Match"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Tournament Confirmation Modal */}
+      {showDeleteTournamentConfirm && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4 animate-[fadeIn_.15s_ease-out]"
+          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.6)" : "rgba(0,0,0,0.8)", backdropFilter: "blur(3px)" }}
+          onClick={() => !deletingTournament && setShowDeleteTournamentConfirm(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl p-5 space-y-4"
+            style={isLight ? {
+              backgroundColor: "#ffffff",
+              border: "1px solid #fee2e2",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+            } : {
+              backgroundColor: "#0d0f0d",
+              border: "1px solid #3a1a1a",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/15 flex items-center justify-center text-red-500 shrink-0 mt-0.5">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h4 className={cn("text-sm font-bold", isLight ? "text-slate-900" : "text-white")}>
+                  Delete Tournament?
+                </h4>
+                <p className={cn("text-xs mt-1 leading-relaxed", isLight ? "text-slate-600" : "text-slate-400")}>
+                  Are you sure you want to delete <span className={cn("font-bold", isLight ? "text-slate-900" : "text-white")}>{t.name}</span>? This will permanently delete all its matches and registrations.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 pt-2 border-t border-slate-100 dark:border-[#1f221f]">
+              <button
+                type="button"
+                disabled={deletingTournament}
+                onClick={() => setShowDeleteTournamentConfirm(false)}
+                className={cn(
+                  "flex-1 py-2 rounded-xl text-xs font-semibold transition-colors",
+                  isLight ? "bg-slate-100 hover:bg-slate-200 text-slate-700" : "bg-[#1c1f1c] hover:bg-[#252825] text-[#c8ccc8]"
+                )}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletingTournament}
+                onClick={confirmDeleteTournamentAction}
+                className="flex-1 py-2 rounded-xl text-xs font-bold transition-all bg-red-600 hover:bg-red-500 text-white flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
+              >
+                {deletingTournament && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {deletingTournament ? "Deleting..." : "Delete Tournament"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegister, onUnregister, onView, onEdit, onDelete, token, theme = "dark" }) {
   const isLight = theme === "light";
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const spotsLeft = t.spots_left ?? Math.max((t.max_teams || 0) - (t.team_count || 0), 0);
   const full = spotsLeft === 0;
   const canRegister = t.status === "registering" && !full && !registered && !isMine;
@@ -1187,15 +1388,7 @@ function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegis
                 </button>
                 <button
                   type="button"
-                  onClick={async () => {
-                    if (!window.confirm("Are you sure you want to delete this tournament?")) return;
-                    try {
-                      await apiRequest(`/tournaments/${t.id}`, { method: "DELETE", token });
-                      onDelete?.(t.id);
-                    } catch (err) {
-                      alert(err.message || "Could not delete tournament");
-                    }
-                  }}
+                  onClick={() => setShowDeleteConfirm(true)}
                   title="Delete Tournament"
                   className={cn(
                     "px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 border",
@@ -1262,6 +1455,77 @@ function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegis
           View Tournament
         </GhostButton>
       </div>
+
+      {/* Delete Tournament Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4 animate-[fadeIn_.15s_ease-out]"
+          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.6)" : "rgba(0,0,0,0.8)", backdropFilter: "blur(3px)" }}
+          onClick={() => !deleting && setShowDeleteConfirm(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl p-5 space-y-4"
+            style={isLight ? {
+              backgroundColor: "#ffffff",
+              border: "1px solid #fee2e2",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+            } : {
+              backgroundColor: "#0d0f0d",
+              border: "1px solid #3a1a1a",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/15 flex items-center justify-center text-red-500 shrink-0 mt-0.5">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h4 className={cn("text-sm font-bold", isLight ? "text-slate-900" : "text-white")}>
+                  Delete Tournament?
+                </h4>
+                <p className={cn("text-xs mt-1 leading-relaxed", isLight ? "text-slate-600" : "text-slate-400")}>
+                  Are you sure you want to delete <span className={cn("font-bold", isLight ? "text-slate-900" : "text-white")}>{t.name}</span>? All matches and team registrations under this tournament will be permanently removed.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 pt-2 border-t border-slate-100 dark:border-[#1f221f]">
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => setShowDeleteConfirm(false)}
+                className={cn(
+                  "flex-1 py-2 rounded-xl text-xs font-semibold transition-colors",
+                  isLight ? "bg-slate-100 hover:bg-slate-200 text-slate-700" : "bg-[#1c1f1c] hover:bg-[#252825] text-[#c8ccc8]"
+                )}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={async () => {
+                  setDeleting(true);
+                  try {
+                    await apiRequest(`/tournaments/${t.id}`, { method: "DELETE", token });
+                    setShowDeleteConfirm(false);
+                    onDelete?.(t.id);
+                  } catch (err) {
+                    alert(err.message || "Could not delete tournament");
+                  } finally {
+                    setDeleting(false);
+                  }
+                }}
+                className="flex-1 py-2 rounded-xl text-xs font-bold transition-all bg-red-600 hover:bg-red-500 text-white flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
+              >
+                {deleting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {deleting ? "Deleting..." : "Delete Tournament"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

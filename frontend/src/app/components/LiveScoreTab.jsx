@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { API_BASE as SHARED_API_BASE } from "../api";
+import { API_BASE as SHARED_API_BASE, getStoredToken } from "../api";
 
 /* ============================================================================
    BACKEND CONTRACT (matches matchController.js / liveScoreRoutes.js)
@@ -22,7 +22,47 @@ import { API_BASE as SHARED_API_BASE } from "../api";
 
 const API_BASE = SHARED_API_BASE;
 
+let globalLiveScoreToken = null;
+export function setLiveScoreToken(token) {
+  globalLiveScoreToken = token;
+}
+
+export function getMyCreatedMatchIds() {
+  try {
+    return JSON.parse(localStorage.getItem("mc_my_matches") || "[]").map(String);
+  } catch {
+    return [];
+  }
+}
+
+export function saveCreatedMatchId(matchId) {
+  if (!matchId) return;
+  try {
+    const ids = getMyCreatedMatchIds();
+    if (!ids.includes(String(matchId))) {
+      ids.push(String(matchId));
+      localStorage.setItem("mc_my_matches", JSON.stringify(ids));
+    }
+  } catch {}
+}
+
+export function isMatchCreator(match, user) {
+  if (!match) return false;
+  const currentUserId = user?.id ? String(user.id) : null;
+  // 1. Matches where created_by in DB matches user's ID
+  if (currentUserId && match.created_by && String(match.created_by) === currentUserId) {
+    return true;
+  }
+  // 2. Matches stored in local storage for this browser/user session
+  const localCreated = getMyCreatedMatchIds();
+  if (localCreated.includes(String(match.id))) {
+    return true;
+  }
+  return false;
+}
+
 async function api(path, options) {
+  const token = options?.token || globalLiveScoreToken || getStoredToken();
   const cleanPath = path.startsWith("/api/")
     ? path.slice(4)
     : path.startsWith("api/")
@@ -31,9 +71,15 @@ async function api(path, options) {
     ? path
     : `/${path}`;
 
+  const headers = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...options?.headers,
+  };
+
   const res = await fetch(`${API_BASE}${cleanPath}`, {
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers,
   });
 
   const contentType = res.headers.get("content-type") || "";
@@ -238,7 +284,11 @@ const cardStyle = {
 
 const BTN_TRANSITION = "transition-all duration-150 ease-out active:scale-[0.97]";
 
-export default function ScoringApp({ user, theme = "dark" }) {
+export default function ScoringApp({ user, token, theme = "dark" }) {
+  useEffect(() => {
+    if (token) setLiveScoreToken(token);
+  }, [token]);
+
   const [view, setView] = useState("home");
   const [activeMatchId, setActiveMatchId] = useState(null);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
@@ -306,6 +356,10 @@ export default function ScoringApp({ user, theme = "dark" }) {
           key={homeRefreshKey}
           onScoreNew={() => setView("new")}
           onResume={(id, m) => {
+            if (!isMatchCreator(m, user)) {
+              alert("Only the creator of this scoreboard can resume it.");
+              return;
+            }
             setActiveMatchId(id);
             if (m.status === "not_started") {
               setView(m.needs_squads ? "squads" : "toss");
@@ -313,7 +367,11 @@ export default function ScoringApp({ user, theme = "dark" }) {
               setView("score");
             }
           }}
-          onViewScoreboard={(id) => {
+          onViewScoreboard={(id, m) => {
+            if (m && !isMatchCreator(m, user)) {
+              alert("Only the creator of this scoreboard can view it.");
+              return;
+            }
             setActiveMatchId(id);
             setView("scoreboard");
           }}
@@ -350,10 +408,10 @@ export default function ScoringApp({ user, theme = "dark" }) {
       )}
 
       {view === "score" && activeMatchId && (
-        <MatchLiveConsole user={user} matchId={activeMatchId} onChangeStage={(stage) => setView(stage)} onMatchComplete={() => setView("scoreboard")} />
+        <MatchLiveConsole user={user} matchId={activeMatchId} onBack={goHome} onChangeStage={(stage) => setView(stage)} onMatchComplete={() => setView("scoreboard")} />
       )}
 
-      {view === "scoreboard" && activeMatchId && <FinalScoreboard matchId={activeMatchId} />}
+      {view === "scoreboard" && activeMatchId && <FinalScoreboard user={user} matchId={activeMatchId} onBack={goHome} />}
     </div>
   );
 }
@@ -397,6 +455,186 @@ function SetupProgress({ step }) {
   );
 }
 
+function CompletedMatchCard({ match: m, onViewScoreboard, onDelete }) {
+  const [potmData, setPotmData] = useState({
+    name: m.potm_name,
+    stats: m.potm_stats,
+    team: m.potm_team,
+    result: m.result,
+  });
+
+  useEffect(() => {
+    // If potm or descriptive result is missing, auto-fetch scoreboard to compute & save it
+    if ((!m.potm_name || !m.result || m.result === "Match completed") && m.status === "completed") {
+      api(`/api/matches/${m.id}/scoreboard`)
+        .then((res) => {
+          if (res?.potm_name || res?.result) {
+            setPotmData({
+              name: res.potm_name || res.match?.potm_name,
+              stats: res.potm_stats || res.match?.potm_stats,
+              team: res.potm_team || res.match?.potm_team,
+              result: res.result || res.match?.result,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [m.id, m.potm_name, m.result, m.status]);
+
+  // Compute innings scores & fallback outcome
+  const innList = Array.isArray(m.innings_list) ? m.innings_list : [];
+  const inn1 = innList.find((i) => i.inning_number === 1);
+  const inn2 = innList.find((i) => i.inning_number === 2);
+
+  let t1Score = null;
+  let t2Score = null;
+  if (inn1) {
+    const isT1 = String(inn1.batting_team_id) === String(m.team1_id);
+    const { display } = formatOvers(inn1.overs_completed || 0);
+    const scoreStr = `${inn1.total_runs}/${inn1.wickets} (${display} ov)`;
+    if (isT1) t1Score = scoreStr; else t2Score = scoreStr;
+  }
+  if (inn2) {
+    const isT1 = String(inn2.batting_team_id) === String(m.team1_id);
+    const { display } = formatOvers(inn2.overs_completed || 0);
+    const scoreStr = `${inn2.total_runs}/${inn2.wickets} (${display} ov)`;
+    if (isT1) t1Score = scoreStr; else t2Score = scoreStr;
+  }
+
+  // Determine realistic result string
+  let displayResult = potmData.result || m.result;
+  if (!displayResult || displayResult === "Match completed" || displayResult === "Match finished" || displayResult.toLowerCase().includes("chasing the target")) {
+    if (inn1 && inn2) {
+      const r1 = Number(inn1.total_runs || 0);
+      const r2 = Number(inn2.total_runs || 0);
+      const w2 = Number(inn2.wickets || 0);
+      const t1Name = String(inn1.batting_team_id) === String(m.team1_id) ? m.team1_name : m.team2_name;
+      const t2Name = String(inn2.batting_team_id) === String(m.team1_id) ? m.team1_name : m.team2_name;
+
+      if (r2 > r1) {
+        const wkts = Math.max(1, 10 - w2);
+        displayResult = `${t2Name} won by ${wkts} wicket${wkts === 1 ? "" : "s"}`;
+      } else if (r1 > r2) {
+        const diff = r1 - r2;
+        displayResult = `${t1Name} won by ${diff} run${diff === 1 ? "" : "s"}`;
+      } else {
+        displayResult = `Match tied (${r1} runs each)`;
+      }
+    } else {
+      displayResult = "Match completed";
+    }
+  }
+
+  const potmName = potmData.name || m.potm_name;
+  const potmStats = potmData.stats || m.potm_stats;
+  const potmTeam = potmData.team || m.potm_team;
+
+  return (
+    <div
+      onClick={() => onViewScoreboard(m.id, m)}
+      className={`w-full text-left p-4 sm:p-5 rounded-2xl space-y-3.5 transition-all hover:border-emerald-500/40 hover:bg-slate-800/40 cursor-pointer ${BTN_TRANSITION} border border-slate-800/80`}
+      style={cardStyle}
+    >
+      {/* Top Header: Venue / Format & Completed Badge */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 text-[10px] font-black uppercase tracking-wider">
+            COMPLETED
+          </span>
+          <span className="text-xs text-slate-400 font-mono">{m.venue || `${m.overs_limit || 20} Overs Match`}</span>
+        </div>
+        <span className="text-xs font-mono text-slate-400">{m.overs_limit} Overs</span>
+      </div>
+
+      {/* Teams and Scores Display */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+        {/* Team 1 */}
+        <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/60">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 font-extrabold flex items-center justify-center text-xs">
+              {teamInitials(m.team1_name)}
+            </div>
+            <span className="font-bold text-sm text-slate-100">{m.team1_name}</span>
+          </div>
+          {t1Score ? (
+            <span className="font-mono font-bold text-sm text-slate-200">{t1Score}</span>
+          ) : (
+            <span className="font-mono text-xs text-slate-500">-</span>
+          )}
+        </div>
+
+        {/* Team 2 */}
+        <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/60">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-sky-500/20 text-sky-400 font-extrabold flex items-center justify-center text-xs">
+              {teamInitials(m.team2_name)}
+            </div>
+            <span className="font-bold text-sm text-slate-100">{m.team2_name}</span>
+          </div>
+          {t2Score ? (
+            <span className="font-mono font-bold text-sm text-slate-200">{t2Score}</span>
+          ) : (
+            <span className="font-mono text-xs text-slate-500">-</span>
+          )}
+        </div>
+      </div>
+
+      {/* Realistic Result Banner */}
+      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/25">
+        <span className="text-base">🏆</span>
+        <span className="text-xs sm:text-sm font-extrabold text-emerald-400 tracking-wide">
+          {displayResult}
+        </span>
+      </div>
+
+      {/* Man of the Match / Player of the Match Showcase */}
+      {potmName && (
+        <div className="p-3 rounded-xl bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-slate-900 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-base shrink-0 border border-amber-500/30">
+              🏅
+            </div>
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-wider text-amber-400">
+                Man of the Match
+              </div>
+              <div className="text-xs sm:text-sm font-extrabold text-amber-200 flex items-center gap-2">
+                <span>{potmName}</span>
+                {potmTeam && (
+                  <span className="text-[10px] font-normal text-slate-400 px-1.5 py-0.5 rounded bg-slate-800/80">
+                    {potmTeam}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          {potmStats && (
+            <div className="text-[11px] font-mono font-bold text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded-md border border-amber-500/20 shrink-0">
+              {potmStats}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Footer Actions */}
+      <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between gap-2">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(m);
+          }}
+          className={`px-2.5 py-1.5 rounded-lg text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 ${BTN_TRANSITION}`}
+        >
+          🗑️ Delete
+        </button>
+        <span className="text-xs text-sky-400 font-bold hover:underline flex items-center gap-1">
+          Full Scorecard ➔
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function MatchHome({ user, onScoreNew, onResume, onViewScoreboard }) {
   const [matches, setMatches] = useState(null);
   const [error, setError] = useState(null);
@@ -424,8 +662,9 @@ function MatchHome({ user, onScoreNew, onResume, onViewScoreboard }) {
     };
   }, []);
 
-  const inProgress = matches?.filter((m) => m.status !== "completed") || [];
-  const completed = matches?.filter((m) => m.status === "completed") || [];
+  const myMatches = matches?.filter((m) => isMatchCreator(m, user)) || [];
+  const inProgress = myMatches.filter((m) => m.status !== "completed");
+  const completed = myMatches.filter((m) => m.status === "completed");
 
   return (
     <div className="space-y-6">
@@ -460,11 +699,13 @@ function MatchHome({ user, onScoreNew, onResume, onViewScoreboard }) {
         </div>
       )}
 
-      {matches !== null && matches.length === 0 && !error && (
+      {matches !== null && myMatches.length === 0 && !error && (
         <div className="text-center p-8 rounded-2xl border border-dashed border-slate-700">
           <div className="text-4xl mb-2">🏏</div>
-          <div className="text-sm font-bold text-slate-200 mb-1">No Active Matches</div>
-          <p className="text-xs text-slate-400 mb-4">Start scoring a match to see live updates.</p>
+          <div className="text-sm font-bold text-slate-200 mb-1">No Scoreboards Created Yet</div>
+          <p className="text-xs text-slate-400 mb-4 max-w-sm mx-auto">
+            Only the creator of a match scoreboard can view and resume scoring. Create a match scoreboard to start scoring.
+          </p>
           <button
             onClick={onScoreNew}
             className={`px-4 py-2 rounded-xl text-xs font-bold ${BTN_TRANSITION}`}
@@ -475,13 +716,12 @@ function MatchHome({ user, onScoreNew, onResume, onViewScoreboard }) {
         </div>
       )}
 
-      {/* Live & In Progress Section */}
+      {/* Live & In Progress Section (Only Creator Can See and Resume) */}
       {inProgress.length > 0 && (
         <div className="space-y-3">
           <div className="text-xs font-extrabold uppercase tracking-widest text-slate-400 px-1">Live & Ongoing</div>
           {inProgress.map((m) => {
             const { display: oversDisplay } = formatOvers(m.current_innings_summary?.overs_completed ?? 0);
-            const isCreator = !m.created_by || (user?.id && String(m.created_by) === String(user.id));
             return (
               <div
                 key={m.id}
@@ -524,38 +764,27 @@ function MatchHome({ user, onScoreNew, onResume, onViewScoreboard }) {
                     vs {m.team2_name}
                   </span>
                   <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                    {isCreator && (
-                      <button
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          if (!window.confirm(`Are you sure you want to delete "${m.team1_name} vs ${m.team2_name}"? This action cannot be undone.`)) return;
-                          try {
-                            await api(`/api/matches/${m.id}`, { method: "DELETE" });
-                            setMatches((prev) => prev.filter((item) => item.id !== m.id));
-                          } catch (err) {
-                            alert(err.message || "Failed to delete match");
-                          }
-                        }}
-                        className={`px-2.5 py-1.5 rounded-lg text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 ${BTN_TRANSITION}`}
-                      >
-                        🗑️ Delete
-                      </button>
-                    )}
-                    {isCreator ? (
-                      <button
-                        onClick={() => onResume(m.id, m)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 ${BTN_TRANSITION}`}
-                      >
-                        {m.status === "not_started" ? "Setup XI & Toss" : "Resume Scoring ✍️"}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => onResume(m.id, m)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-500/10 text-sky-400 border border-sky-500/30 ${BTN_TRANSITION}`}
-                      >
-                        View Live Score 👁️
-                      </button>
-                    )}
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!window.confirm(`Are you sure you want to delete "${m.team1_name} vs ${m.team2_name}"? This action cannot be undone.`)) return;
+                        try {
+                          await api(`/api/matches/${m.id}`, { method: "DELETE" });
+                          setMatches((prev) => prev.filter((item) => item.id !== m.id));
+                        } catch (err) {
+                          alert(err.message || "Failed to delete match");
+                        }
+                      }}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 ${BTN_TRANSITION}`}
+                    >
+                      🗑️ Delete
+                    </button>
+                    <button
+                      onClick={() => onResume(m.id, m)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 ${BTN_TRANSITION}`}
+                    >
+                      {m.status === "not_started" ? "Setup XI & Toss" : "Resume Scoring ✍️"}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -568,45 +797,22 @@ function MatchHome({ user, onScoreNew, onResume, onViewScoreboard }) {
       {completed.length > 0 && (
         <div className="space-y-3">
           <div className="text-xs font-extrabold uppercase tracking-widest text-slate-400 px-1">Completed Matches</div>
-          {completed.map((m) => {
-            const isCreator = !m.created_by || (user?.id && String(m.created_by) === String(user.id));
-            return (
-              <div
-                key={m.id}
-                onClick={() => onViewScoreboard(m.id)}
-                className={`w-full text-left p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 transition-all hover:bg-slate-800/50 cursor-pointer ${BTN_TRANSITION}`}
-                style={cardStyle}
-              >
-                <div>
-                  <div className="font-bold text-sm text-slate-200 mb-1">{m.team1_name} vs {m.team2_name}</div>
-                  <div className="text-xs text-emerald-400 font-bold flex items-center gap-1.5">
-                    <span>🏆</span>
-                    <span>{m.result || "Match completed"}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
-                  {isCreator && (
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        if (!window.confirm(`Are you sure you want to delete completed match "${m.team1_name} vs ${m.team2_name}"?`)) return;
-                        try {
-                          await api(`/api/matches/${m.id}`, { method: "DELETE" });
-                          setMatches((prev) => prev.filter((item) => item.id !== m.id));
-                        } catch (err) {
-                          alert(err.message || "Failed to delete match");
-                        }
-                      }}
-                      className={`px-2.5 py-1.5 rounded-lg text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 ${BTN_TRANSITION}`}
-                    >
-                      🗑️ Delete
-                    </button>
-                  )}
-                  <span className="text-xs text-sky-400 font-bold underline shrink-0">Full Scorecard →</span>
-                </div>
-              </div>
-            );
-          })}
+          {completed.map((m) => (
+            <CompletedMatchCard
+              key={m.id}
+              match={m}
+              onViewScoreboard={onViewScoreboard}
+              onDelete={async (matchToDelete) => {
+                if (!window.confirm(`Are you sure you want to delete completed match "${matchToDelete.team1_name} vs ${matchToDelete.team2_name}"?`)) return;
+                try {
+                  await api(`/api/matches/${matchToDelete.id}`, { method: "DELETE" });
+                  setMatches((prev) => prev.filter((item) => item.id !== matchToDelete.id));
+                } catch (err) {
+                  alert(err.message || "Failed to delete match");
+                }
+              }}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -668,8 +874,10 @@ function NewMatchForm({ user, matchId, onCreated, onUpdated, onCancel }) {
             team2_name: team2Name.trim(),
             venue: venue.trim() || undefined,
             overs_limit: Number(oversLimit),
+            created_by: user?.id || undefined,
           }),
         });
+        saveCreatedMatchId(res.match_id);
         onCreated(res.match_id);
       }
     } catch (err) {
@@ -1026,7 +1234,7 @@ function TossForm({ matchId, onDone, onBack, onCancel }) {
 /* ============================================================================
    GOOGLE & CRICBUZZ MATCH LIVE CONSOLE
    ============================================================================ */
-function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
+function MatchLiveConsole({ user, matchId, onBack, onChangeStage, onMatchComplete }) {
   const [squads, setSquads] = useState(null);
   const [live, setLive] = useState(null);
   const [prompts, setPrompts] = useState(null);
@@ -1101,7 +1309,7 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
   }, [matchId, loadScorecard]);
 
   // Determine if the current user is the match creator/scorer
-  const isCreator = !live?.match?.created_by || (user?.id && String(live?.match?.created_by) === String(user.id));
+  const isCreator = isMatchCreator(live?.match, user);
 
   // Real-time asynchronous polling: ONLY for viewers (creators receive instant state via action responses)
   useEffect(() => {
@@ -1433,7 +1641,8 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
     setBusy(true);
     try {
       await api(`/api/matches/${matchId}/complete`, { method: "POST", body: JSON.stringify({ result }) });
-      onMatchComplete();
+      const freshLive = await api(`/api/matches/${matchId}/live`);
+      setLive(freshLive);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1461,24 +1670,151 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
     return addedPlayer?.id || null;
   }
 
-  if (error) return <div className="text-xs p-4 bg-red-500/10 text-red-400 rounded-xl">Error: {error}</div>;
+  if (error && !showBowlerPicker) {
+    const isBowlerConsecutiveError =
+      error.toLowerCase().includes("cannot bowl") ||
+      error.toLowerCase().includes("consecutive") ||
+      error.toLowerCase().includes("different bowler") ||
+      error.toLowerCase().includes("bowler");
+
+    return (
+      <div className="space-y-4">
+        <div className="text-xs p-4 sm:p-5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl shrink-0">⚠️</span>
+            <div className="space-y-0.5">
+              <div className="font-extrabold text-sm text-red-300">
+                {isBowlerConsecutiveError ? "Bowler Selection Warning" : "Error Notice"}
+              </div>
+              <div className="text-xs text-red-400 font-semibold">
+                Error: {error.replace(/^Error:\s*/i, "")}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0 pt-1 sm:pt-0">
+            <button
+              type="button"
+              onClick={async () => {
+                setError(null);
+                if (!live || !squads) {
+                  try {
+                    const [sq, lv] = await Promise.all([
+                      api(`/api/matches/${matchId}/squads`),
+                      api(`/api/matches/${matchId}/live`),
+                    ]);
+                    setSquads(sq);
+                    setLive(lv);
+                  } catch {}
+                }
+                setShowBowlerPicker(true);
+              }}
+              className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-md flex items-center gap-1.5 ${BTN_TRANSITION}`}
+            >
+              <span>Choose Bowler ➔</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              className={`px-3.5 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 ${BTN_TRANSITION}`}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+
+        {(!live || !squads) && (
+          <div className="text-center py-4">
+            <button
+              onClick={() => {
+                setError(null);
+                if (onBack) onBack();
+              }}
+              className={`px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 text-slate-300 ${BTN_TRANSITION}`}
+            >
+              ← Back to Matches
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
   if (!squads || !live) return <div className="text-xs text-slate-400 p-6">Loading Match Console...</div>;
+
+  if (!isCreator) {
+    return (
+      <div className="p-8 text-center space-y-4 rounded-2xl border border-red-500/30 bg-red-500/10 max-w-md mx-auto my-8">
+        <div className="text-4xl">🔒</div>
+        <h3 className="text-base font-extrabold text-red-400">Scoreboard Access Restricted</h3>
+        <p className="text-xs text-slate-300 max-w-sm mx-auto leading-relaxed">
+          Only the creator of this scoreboard can resume and view this live scoreboard. Other users cannot access it.
+        </p>
+        {onBack && (
+          <button
+            onClick={onBack}
+            className={`px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 text-white ${BTN_TRANSITION}`}
+          >
+            ← Back to Matches
+          </button>
+        )}
+      </div>
+    );
+  }
 
   const { match, current_innings, batting, bowling, recent_balls } = live;
 
   if (!live.current_innings) {
     if (live.match?.status === "completed") {
       return (
-        <div className="p-6 rounded-2xl text-center space-y-3" style={cardStyle}>
-          <div className="text-3xl">🏆</div>
-          <div className="text-base font-bold text-white">Match Completed</div>
-          <p className="text-xs text-emerald-400 font-semibold">{live.match.result || "Match finished"}</p>
-          <button
-            onClick={() => setActiveTab("scorecard")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 text-black ${BTN_TRANSITION}`}
-          >
-            View Full Scorecard ➔
-          </button>
+        <div className="p-6 rounded-2xl text-center space-y-4" style={cardStyle}>
+          <div className="text-4xl animate-bounce">🏆</div>
+          <div className="text-lg font-black text-white">Match Completed</div>
+          <div className="inline-block px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-extrabold text-sm sm:text-base">
+            {live.match.result || "Match finished"}
+          </div>
+
+          {live.match.potm_name && (
+            <div className="max-w-md mx-auto p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-slate-900 border border-amber-500/30 text-left space-y-2 shadow-lg shadow-amber-500/5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-xl shrink-0 border border-amber-500/30">
+                  🏅
+                </div>
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-wider text-amber-400">
+                    Man of the Match
+                  </div>
+                  <div className="text-sm font-extrabold text-amber-200">
+                    {live.match.potm_name}
+                    {live.match.potm_team && (
+                      <span className="text-xs text-slate-400 font-normal ml-2">
+                        ({live.match.potm_team})
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {live.match.potm_stats && (
+                <div className="text-xs font-mono font-bold text-amber-300 bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20">
+                  {live.match.potm_stats}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="pt-2">
+            <button
+              onClick={() => {
+                if (onMatchComplete) {
+                  onMatchComplete();
+                } else {
+                  setActiveTab("scorecard");
+                }
+              }}
+              className={`px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-500 text-black shadow-lg shadow-emerald-500/20 hover:brightness-110 ${BTN_TRANSITION}`}
+            >
+              View Full Scoreboard ➔
+            </button>
+          </div>
         </div>
       );
     }
@@ -1637,6 +1973,22 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
 
     return (
       <div className="space-y-3">
+        {error && (
+          <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold flex items-center justify-between gap-3 shadow-md">
+            <div className="flex items-center gap-2">
+              <span className="text-base shrink-0">⚠️</span>
+              <span>{error}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white"
+            >
+              ✕ Dismiss
+            </button>
+          </div>
+        )}
+
         <div className="p-3.5 rounded-xl bg-slate-900 border border-sky-500/30 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2">
             <span className="text-base">⚾</span>
@@ -1656,7 +2008,10 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
             )}
             <button
               type="button"
-              onClick={() => setShowBowlerPicker(false)}
+              onClick={() => {
+                setError(null);
+                setShowBowlerPicker(false);
+              }}
               className="text-xs px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
             >
               ✕ Back to Scorecard
@@ -1671,7 +2026,9 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
             try {
               await runAction(`/api/matches/${matchId}/select-bowler`, { bowler_id: id });
               setShowBowlerPicker(false);
-            } catch {}
+            } catch (err) {
+              setShowBowlerPicker(true);
+            }
           }}
           onAddNew={async (name) => {
             const newId = await addPlayer(bowlingKey, name);
@@ -1679,7 +2036,9 @@ function MatchLiveConsole({ user, matchId, onChangeStage, onMatchComplete }) {
               try {
                 await runAction(`/api/matches/${matchId}/select-bowler`, { bowler_id: newId });
                 setShowBowlerPicker(false);
-              } catch {}
+              } catch (err) {
+                setShowBowlerPicker(true);
+              }
             }
             return newId;
           }}
@@ -2920,7 +3279,7 @@ function BowlingTable({ bowlers }) {
   );
 }
 
-function FinalScoreboard({ matchId }) {
+function FinalScoreboard({ user, matchId, onBack }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
@@ -2933,17 +3292,69 @@ function FinalScoreboard({ matchId }) {
   if (error) return <div className="text-xs p-4 bg-red-500/10 text-red-400 rounded-xl">Error: {error}</div>;
   if (!data) return <div className="text-xs text-slate-400 p-6">Loading Final Scorecard...</div>;
 
+  const isCreator = isMatchCreator(data.match, user);
+  if (!isCreator) {
+    return (
+      <div className="p-8 text-center space-y-4 rounded-2xl border border-red-500/30 bg-red-500/10 max-w-md mx-auto my-8">
+        <div className="text-4xl">🔒</div>
+        <h3 className="text-base font-extrabold text-red-400">Scoreboard Access Restricted</h3>
+        <p className="text-xs text-slate-300 max-w-sm mx-auto leading-relaxed">
+          Only the creator of this scoreboard can view this scoreboard. Other users cannot access it.
+        </p>
+        {onBack && (
+          <button
+            onClick={onBack}
+            className={`px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 text-white ${BTN_TRANSITION}`}
+          >
+            ← Back to Matches
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      <div className="p-5 rounded-2xl text-center" style={cardStyle}>
+      <div className="p-5 rounded-2xl text-center space-y-2" style={cardStyle}>
         <div className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">
           {data.match.team1_name} vs {data.match.team2_name}
         </div>
-        <div className="text-lg font-black text-emerald-400 flex items-center justify-center gap-2">
+        <div className="text-lg sm:text-xl font-black text-emerald-400 flex items-center justify-center gap-2">
           <span>🏆</span>
-          <span>{data.result}</span>
+          <span>{data.result || data.match?.result || "Match completed"}</span>
         </div>
       </div>
+
+      {(data.potm_name || data.match?.potm_name) && (
+        <div
+          className="p-4 sm:p-5 rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-slate-900 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left shadow-lg shadow-amber-500/5"
+          style={cardStyle}
+        >
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-2xl shrink-0 border border-amber-500/30 shadow-md shadow-amber-500/10">
+              🏅
+            </div>
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-amber-400">
+                Player of the Match (Both Innings)
+              </div>
+              <div className="text-base sm:text-lg font-black text-amber-200">
+                {data.potm_name || data.match?.potm_name}
+              </div>
+              {(data.potm_team || data.match?.potm_team) && (
+                <div className="text-xs text-slate-400 font-medium">
+                  {data.potm_team || data.match?.potm_team}
+                </div>
+              )}
+            </div>
+          </div>
+          {(data.potm_stats || data.match?.potm_stats) && (
+            <div className="px-3.5 py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono text-xs sm:text-sm font-bold tracking-wide">
+              {data.potm_stats || data.match?.potm_stats}
+            </div>
+          )}
+        </div>
+      )}
 
       {data.innings.map((inn) => {
         const { display: inningsOversDisplay } = formatOvers(inn.overs);
