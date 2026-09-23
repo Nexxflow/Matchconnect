@@ -1,18 +1,31 @@
 // ─── API layer ──────────────────────────────────────────────────────────────
 // Reads VITE_API_URL from environment (.env / .env.production).
-// In local development (localhost / 127.0.0.1), uses local backend http://localhost:8000/api
+// Native app (Capacitor Android): always uses the deployed backend, because the
+// WebView runs on https://localhost and would otherwise be mistaken for local dev.
+// Local web development (localhost / 127.0.0.1): uses http://localhost:8000/api
 // to ensure local code changes take effect immediately without needing cloud deployment.
+const PROD_API_URL = "https://matchconnect-uvy4.onrender.com/api";
+
+const isNativeApp =
+  typeof window !== "undefined" &&
+  (!!window.Capacitor?.isNativePlatform?.() ||
+   window.location.protocol === "capacitor:");
+
 const isLocalhost =
   typeof window !== "undefined" &&
+  !isNativeApp &&
   (window.location.hostname === "localhost" ||
    window.location.hostname === "127.0.0.1" ||
    window.location.hostname.endsWith(".local"));
 
 const envApiUrl = import.meta.env.VITE_API_URL;
+
 const rawApiUrl = (
-  isLocalhost
-    ? "http://localhost:8000/api"
-    : (envApiUrl || "http://localhost:8000/api")
+  isNativeApp
+    ? (envApiUrl || PROD_API_URL)
+    : isLocalhost
+      ? "http://localhost:8000/api"
+      : (envApiUrl || "http://localhost:8000/api")
 ).replace(/\/+$/, "");
 
 export const API_BASE = rawApiUrl.endsWith("/api") ? rawApiUrl : `${rawApiUrl}/api`;
@@ -72,7 +85,7 @@ export async function apiRequest(path, { method = "GET", body, token } = {}) {
   } catch (err) {
     console.error("========================================");
     console.error("❌ API ERROR");
-    console.error("URL:", `${API_BASE}${path}`);
+    console.error("URL:", `${API_BASE}${cleanPath}`);
     console.error(err);
     console.error("========================================");
     throw err;

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { API_BASE as SHARED_API_BASE } from "../api";
 
 /* ============================================================================
    BACKEND CONTRACT (matches matchController.js / liveScoreRoutes.js)
@@ -19,19 +20,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
    GET  /api/matches/:id/scoreboard
    ============================================================================ */
 
-const isLocalHostLive =
-  typeof window !== "undefined" &&
-  (window.location.hostname === "localhost" ||
-   window.location.hostname === "127.0.0.1" ||
-   window.location.hostname.endsWith(".local"));
-
-const envLiveUrl = import.meta.env.VITE_API_URL;
-const rawLiveScoreUrl = (
-  isLocalHostLive
-    ? "http://localhost:8000/api"
-    : (envLiveUrl || "http://localhost:8000/api")
-).replace(/\/+$/, "");
-const API_BASE = rawLiveScoreUrl.endsWith("/api") ? rawLiveScoreUrl : `${rawLiveScoreUrl}/api`;
+const API_BASE = SHARED_API_BASE;
 
 async function api(path, options) {
   const cleanPath = path.startsWith("/api/")
