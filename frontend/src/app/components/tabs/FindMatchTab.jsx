@@ -13,7 +13,7 @@ import CalendarField from "../CalendarField.jsx";
 /* ============================================================================
    SHARED UI — same visual pattern as the Tournaments tab
    ============================================================================ */
-const ACCENT_BAR = "linear-gradient(90deg,#22c55e 0%,#10b981 100%)";
+const ACCENT_BAR = "linear-gradient(90deg,#22c55e 0%,#10b981 100%)"; // used by section title bars
 const BRAND_GRAD = "linear-gradient(135deg,#22c55e 0%,#14b8a6 100%)";
 const DANGER_GRAD = "linear-gradient(135deg,#ef4444 0%,#e11d48 100%)";
 
@@ -40,17 +40,24 @@ const tokens = isLight => ({
 
 function Card({ isLight, children, className = "", style = {}, accent = true }) {
   const t = tokens(isLight);
+  // accent=true -> soft green glow (no top line). accent=false -> plain surface (filter bar).
+  const glow = accent
+    ? isLight
+      ? "0 0 0 1px rgba(22,163,74,0.06), 0 10px 28px -14px rgba(22,163,74,0.35)"
+      : "0 0 0 1px rgba(34,197,94,0.05), 0 12px 34px -16px rgba(34,197,94,0.45)"
+    : isLight
+      ? "0 1px 3px rgba(15,23,42,0.06)"
+      : "0 10px 30px -18px rgba(0,0,0,0.8)";
   return (
     <div
       className={cn("relative rounded-2xl border", className)}
       style={{
         backgroundColor: t.card,
-        borderColor: t.border,
-        boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.06)" : "0 10px 30px -18px rgba(0,0,0,0.8)",
+        borderColor: accent ? (isLight ? "#bbf7d0" : "rgba(34,197,94,0.18)") : t.border,
+        boxShadow: glow,
         ...style
       }}
     >
-      {accent && <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl" style={{ background: ACCENT_BAR }} />}
       {children}
     </div>
   );
@@ -296,6 +303,16 @@ function formatTimeDisplay(timeStr) {
   return `${hour12}:${minute} ${ampm}`;
 }
 
+function prettyTime(value) {
+  if (!value) return "";
+  const m = String(value).trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!m) return String(value);
+  let h = parseInt(m[1], 10);
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  return `${h}:${m[2]} ${ampm}`;
+}
+
 /* ============================================================================
    TIME FIELD (used in the Post Challenge form)
    ============================================================================ */
@@ -517,7 +534,7 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
 
       {open && (
         <Modal isLight={isLight} onClose={closeForm}>
-          <Card isLight={isLight} className="p-5 pt-6">
+          <Card isLight={isLight} className="p-5">
             <form onSubmit={handleSubmit} className="space-y-4">
               <ModalHeader isLight={isLight} title="Post a Match Challenge" onClose={closeForm} />
 
@@ -743,7 +760,7 @@ function AcceptChallengeModal({ challenge, token, user, hasActiveAcceptedChallen
 
   return (
     <Modal isLight={isLight} onClose={onClose} maxWidth="max-w-md">
-      <Card isLight={isLight} className="p-5 pt-6">
+      <Card isLight={isLight} className="p-5">
         <form onSubmit={handleSubmit} className="space-y-4">
           <ModalHeader isLight={isLight} title={`Accept vs ${challenge.team}`} onClose={onClose} />
           <p className="text-sm" style={{ color: t.sub }}>
@@ -999,7 +1016,7 @@ function MyPostedChallengeCard({ challenge, token, onDeleted, onViewTeam, theme 
   };
 
   return (
-    <Card isLight={isLight} className="p-5 pt-6">
+    <Card isLight={isLight} className="p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2 flex-wrap min-w-0">
           <h4 className="text-xl font-bold truncate" style={{ color: t.text }}>{challenge.team_name}</h4>
@@ -1010,7 +1027,7 @@ function MyPostedChallengeCard({ challenge, token, onDeleted, onViewTeam, theme 
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-3">
         <MetaRow isLight={isLight} icon={Calendar}>{challenge.match_date}</MetaRow>
-        <MetaRow isLight={isLight} icon={Clock}>{challenge.time_slot}</MetaRow>
+        <MetaRow isLight={isLight} icon={Clock}>{prettyTime(challenge.time_slot)}</MetaRow>
       </div>
 
       <div className="flex flex-wrap gap-2 mt-3">
@@ -1144,7 +1161,7 @@ function ChallengesMap({ challenges, isLight }) {
     : [13.0827, 80.2707];
 
   return (
-    <Card isLight={isLight} className="p-5 pt-6">
+    <Card isLight={isLight} className="p-5">
       <div className="flex items-center gap-2 mb-3">
         <MapPin className="w-4 h-4" style={{ color: t.green }} />
         <span className="text-base font-bold" style={{ color: t.text }}>Where teams are playing</span>
@@ -1166,7 +1183,7 @@ function ChallengesMap({ challenges, isLight }) {
                 <Popup>
                   <div className="text-xs">
                     <div className="font-semibold">{c.team}</div>
-                    <div>{c.format} · {c.date} {c.time}</div>
+                    <div>{c.format} · {c.date} {prettyTime(c.time)}</div>
                     <div>📍 {c.ground}</div>
                   </div>
                 </Popup>
@@ -1222,6 +1239,76 @@ const FORMAT_COLORS = {
   Turf: FORMAT_COLOR_LIST[2],
   Test: FORMAT_COLOR_LIST[3]
 };
+
+/* Banner illustrations for each format (inline SVG, no image files needed) */
+function FormatArt({ kind }) {
+  const ground = <ellipse cx="100" cy="98" rx="110" ry="30" fill="#ffffff" fillOpacity="0.14" />;
+  const ball = (cx, cy, r = 8) => (
+    <g>
+      <circle cx={cx} cy={cy} r={r} fill="#dc2626" />
+      <path d={`M${cx - r * 0.55} ${cy - r * 0.8} Q${cx + r * 0.2} ${cy} ${cx - r * 0.55} ${cy + r * 0.8}`} stroke="#fff" strokeOpacity="0.8" strokeWidth="1.2" fill="none" />
+    </g>
+  );
+  const common = { viewBox: "0 0 200 90", preserveAspectRatio: "xMidYMid slice", className: "absolute inset-0 w-full h-full", "aria-hidden": true };
+
+  if (kind === "ODI") {
+    return (
+      <svg {...common}>
+        {ground}
+        <text x="16" y="46" fontSize="34" fontWeight="900" fill="#fff" fillOpacity="0.18">50</text>
+        <g transform="rotate(-38 104 52)">
+          <rect x="96" y="22" width="17" height="50" rx="7" fill="#fde68a" />
+          <rect x="101" y="6" width="7" height="20" rx="3" fill="#92400e" />
+        </g>
+        {ball(146, 60, 9)}
+        <path d="M160 52 h18 M162 60 h20 M160 68 h16" stroke="#fff" strokeOpacity="0.45" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (kind === "Turf") {
+    const v = Array.from({ length: 11 }, (_, i) => 24 + i * 15.2);
+    const h = Array.from({ length: 6 }, (_, i) => 16 + i * 11);
+    return (
+      <svg {...common}>
+        <rect x="0" y="74" width="200" height="16" fill="#fff" fillOpacity="0.16" />
+        <rect x="20" y="10" width="160" height="66" rx="6" fill="#fff" fillOpacity="0.06" stroke="#fff" strokeOpacity="0.55" strokeWidth="1.5" />
+        {v.map(x => <line key={`v${x}`} x1={x} y1="10" x2={x} y2="76" stroke="#fff" strokeOpacity="0.22" />)}
+        {h.map(y => <line key={`h${y}`} x1="20" y1={y} x2="180" y2={y} stroke="#fff" strokeOpacity="0.22" />)}
+        {ball(118, 46, 8)}
+        <path d="M84 40 h18 M80 47 h20 M84 54 h16" stroke="#fff" strokeOpacity="0.55" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (kind === "Test") {
+    return (
+      <svg {...common}>
+        {ground}
+        <text x="14" y="36" fontSize="18" fontWeight="900" fill="#fff" fillOpacity="0.2">5 DAYS</text>
+        {[86, 97, 108].map(x => <rect key={x} x={x} y="26" width="6" height="52" rx="2" fill="#fef3c7" />)}
+        <rect x="86" y="21" width="12" height="4" rx="2" fill="#fde68a" />
+        <rect x="102" y="21" width="12" height="4" rx="2" fill="#fde68a" />
+        {ball(150, 64, 9)}
+      </svg>
+    );
+  }
+
+  // T20 (default): floodlights, night game, lightning
+  return (
+    <svg {...common}>
+      {ground}
+      <rect x="90" y="68" width="20" height="30" rx="2" fill="#fff" fillOpacity="0.2" />
+      <path d="M40 18 L96 66 L72 74 Z" fill="#fff" fillOpacity="0.12" />
+      <path d="M160 18 L104 66 L128 74 Z" fill="#fff" fillOpacity="0.12" />
+      <line x1="30" y1="82" x2="30" y2="22" stroke="#fff" strokeOpacity="0.7" strokeWidth="2.5" />
+      <line x1="170" y1="82" x2="170" y2="22" stroke="#fff" strokeOpacity="0.7" strokeWidth="2.5" />
+      <rect x="19" y="11" width="22" height="12" rx="2" fill="#fff" fillOpacity="0.92" />
+      <rect x="159" y="11" width="22" height="12" rx="2" fill="#fff" fillOpacity="0.92" />
+      <path d="M106 16 L92 42 H102 L96 62 L114 34 H104 L110 16 Z" fill="#fde047" />
+    </svg>
+  );
+}
 
 /* ============================================================================
    FIND MATCH TAB
@@ -1414,7 +1501,7 @@ export default function FindMatchTab({
         }
       />
 
-      {/* FORMAT CARDS — same style as the Home stats cards */}
+      {/* FORMAT CARDS — illustrated banner + big centered count */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {FORMATS.map((f, i) => {
           const isSelected = i === selectedFormat;
@@ -1426,46 +1513,49 @@ export default function FindMatchTab({
               type="button"
               onClick={() => setSelectedFormat(i)}
               aria-pressed={isSelected}
-              className="relative overflow-hidden rounded-2xl border p-4 sm:p-5 text-left cursor-pointer transition-all duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2"
+              className="relative overflow-hidden rounded-2xl border flex flex-col text-center cursor-pointer transition-all duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2"
               style={{
                 background: isLight
-                  ? `linear-gradient(135deg, #ffffff 0%, ${c.soft} 100%)`
-                  : `linear-gradient(135deg, #0f1411 0%, ${c.tint} 100%)`,
+                  ? `linear-gradient(180deg, #ffffff 0%, ${c.soft} 100%)`
+                  : `linear-gradient(180deg, #0f1411 0%, ${c.tint} 100%)`,
                 borderColor: isSelected ? c.solid : c.border,
-                boxShadow: isSelected ? `0 0 0 1px ${c.solid}, 0 14px 34px -16px ${c.solid}` : "none"
+                boxShadow: isSelected ? `0 0 0 1px ${c.solid}, 0 16px 36px -16px ${c.solid}` : `0 10px 26px -18px ${c.solid}`
               }}
             >
-              {/* corner glow */}
-              <div
-                className="absolute -top-10 -right-10 w-32 h-32 rounded-full pointer-events-none"
-                style={{ background: `radial-gradient(circle, ${c.glow} 0%, transparent 70%)` }}
-              />
-
-              <div className="relative flex items-start justify-between gap-2">
-                <div
-                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center text-2xl"
-                  style={{ background: c.grad, boxShadow: `0 10px 22px -10px ${c.solid}` }}
-                >
-                  {f.emoji}
-                </div>
+              {/* Banner */}
+              <div className="relative h-20 sm:h-24 overflow-hidden" style={{ background: c.grad }}>
+                <FormatArt kind={f.key} />
+                <div className="absolute inset-x-0 bottom-0 h-6" style={{ background: "linear-gradient(180deg, transparent, rgba(0,0,0,0.18))" }} />
                 {isSelected && (
                   <span
-                    className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
-                    style={{ background: c.grad }}
+                    className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold"
+                    style={{ backgroundColor: "rgba(255,255,255,0.92)", color: c.solid }}
                   >
                     Selected
                   </span>
                 )}
               </div>
 
-              <div className="relative mt-4 text-3xl sm:text-4xl font-black leading-none" style={{ color: c.text }}>
-                {count}
-              </div>
-              <div className="relative mt-2 font-bold text-sm sm:text-base truncate" style={{ color: t.text }}>
-                {f.title}
-              </div>
-              <div className="relative text-xs sm:text-sm mt-0.5 line-clamp-1" style={{ color: t.sub }}>
-                {count === 1 ? "1 open challenge" : `${count} open challenges`}
+              {/* Body */}
+              <div className="relative px-3 py-4 sm:py-5 flex flex-col items-center">
+                <span
+                  className="text-5xl sm:text-6xl font-black leading-none tracking-tighter tabular-nums"
+                  style={{
+                    background: c.grad,
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    backgroundClip: "text",
+                    filter: `drop-shadow(0 4px 14px ${c.glow})`
+                  }}
+                >
+                  {count}
+                </span>
+                <span className="mt-3 font-bold text-sm sm:text-base" style={{ color: t.text }}>
+                  {f.title}
+                </span>
+                <span className="text-xs sm:text-sm mt-0.5" style={{ color: t.sub }}>
+                  {count === 1 ? "1 open challenge" : `${count} open challenges`}
+                </span>
               </div>
             </button>
           );
@@ -1603,7 +1693,7 @@ export default function FindMatchTab({
             const blocked = hasActiveOnDate(c.rawDate);
             const postedAgo = formatPostedAgo(c.postedAt);
             return (
-              <Card key={c.id} isLight={isLight} className="p-5 pt-6">
+              <Card key={c.id} isLight={isLight} className="p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2 flex-wrap min-w-0">
                     <h4 className="text-xl font-bold truncate" style={{ color: t.text }}>{c.team}</h4>
@@ -1620,7 +1710,7 @@ export default function FindMatchTab({
 
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-3">
                   <MetaRow isLight={isLight} icon={Calendar}>{c.date}</MetaRow>
-                  <MetaRow isLight={isLight} icon={Clock}>{c.time}</MetaRow>
+                  <MetaRow isLight={isLight} icon={Clock}>{prettyTime(c.time)}</MetaRow>
                   <MetaRow isLight={isLight} icon={MapPin}>{c.ground}</MetaRow>
                 </div>
 
@@ -1662,7 +1752,7 @@ export default function FindMatchTab({
       {/* DETAILS MODAL */}
       {detailsTarget && (
         <Modal isLight={isLight} onClose={() => setDetailsTarget(null)} maxWidth="max-w-md">
-          <Card isLight={isLight} className="p-5 pt-6">
+          <Card isLight={isLight} className="p-5">
             <ModalHeader isLight={isLight} title={detailsTarget.team} onClose={() => setDetailsTarget(null)} />
 
             <div className="flex flex-wrap gap-2 mt-3">
@@ -1681,7 +1771,7 @@ export default function FindMatchTab({
 
             <div className="rounded-xl p-4 border mt-4 space-y-2.5" style={{ backgroundColor: t.cardAlt, borderColor: t.border }}>
               <MetaRow isLight={isLight} icon={Calendar}>{detailsTarget.date}</MetaRow>
-              <MetaRow isLight={isLight} icon={Clock}>{detailsTarget.time}</MetaRow>
+              <MetaRow isLight={isLight} icon={Clock}>{prettyTime(detailsTarget.time)}</MetaRow>
               <MetaRow isLight={isLight} icon={MapPin}>{detailsTarget.ground}</MetaRow>
               {formatPhoneDisplay(detailsTarget.contact_no) && (
                 <div className="flex items-center gap-2 text-sm">
