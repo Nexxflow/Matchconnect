@@ -109,8 +109,14 @@ async function connectWithRetry(retries = 3, delayMs = 2000) {
           ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted BOOLEAN DEFAULT true;
           ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ DEFAULT now();
           ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ;
+
+          ALTER TABLE challenges ADD COLUMN IF NOT EXISTS slot VARCHAR(20) DEFAULT 'Morning';
+          UPDATE challenges SET slot = CASE 
+            WHEN SUBSTRING(time_slot FROM '^[0-9]+')::int >= 12 OR time_slot ILIKE '%PM%' THEN 'Afternoon' 
+            ELSE 'Morning' 
+          END WHERE slot IS NULL OR slot = '';
         `);
-        console.log("✅ challenge_acceptances, challenge_cancellations, team_reviews, umpires, and users schema ready");
+        console.log("✅ challenge_acceptances, challenge_cancellations, team_reviews, umpires, users, and challenges slot schema ready");
       } catch (tblErr) {
         console.error("❌ database tables creation error in db.js:", tblErr.message);
       }

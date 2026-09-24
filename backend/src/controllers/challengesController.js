@@ -8,6 +8,30 @@ const {
   notifyUser,
 } = require("../services/notificationService");
 
+// Helper to normalize challenge slot to "Morning" or "Afternoon" strictly from match time
+function getChallengeSlot(c = {}) {
+  if (!c) return "Morning";
+  const t = c.time_slot || c.time;
+  if (t) {
+    const s = String(t).trim();
+    const match = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    if (match) {
+      let hour = parseInt(match[1], 10);
+      const period = match[3] ? match[3].toUpperCase() : null;
+      if (period === "PM" && hour !== 12) hour += 12;
+      if (period === "AM" && hour === 12) hour = 0;
+      return hour >= 12 ? "Afternoon" : "Morning";
+    }
+  }
+  if (c.slot && typeof c.slot === "string" && c.slot.trim()) {
+    const s = c.slot.trim().toLowerCase();
+    if (s.includes("afternoon") || s.includes("pm") || s.includes("evening")) return "Afternoon";
+    if (s.includes("morning") || s.includes("am")) return "Morning";
+    return c.slot;
+  }
+  return "Morning";
+}
+
 // ============================================================
 // GET /api/challenges
 // Public list of all challenges (open/accepted/cancelled/on_hold),
@@ -131,6 +155,7 @@ const createChallenge = asyncHandler(async (req, res) => {
     overs = null,
     match_date,
     time_slot,
+    slot = null,
     ground_id = null,
     ground_name = null,
     note = null,
@@ -142,17 +167,19 @@ const createChallenge = asyncHandler(async (req, res) => {
     });
   }
 
+  const determinedSlot = getChallengeSlot({ time_slot });
+
   const { rows } = await pool.query(
     `INSERT INTO challenges
-       (team_name, contact_no, format, overs, match_date, time_slot,
+       (team_name, contact_no, format, overs, match_date, time_slot, slot,
         ground_id, ground_name, note, status, creator_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'open',$10)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'open',$11)
      RETURNING *`,
-    [team_name, contact_no, format, overs, match_date, time_slot, ground_id, ground_name, note, userId]
+    [team_name, contact_no, format, overs, match_date, time_slot, determinedSlot, ground_id, ground_name, note, userId]
   );
   const challenge = rows[0];
 
-  console.log(`🏏 [Challenge Created] Post #${challenge.id} created by User #${userId} (${team_name}). Sending broadcast notification to other users...`);
+  console.log(`🏏 [Challenge Created] Post #${challenge.id} (${determinedSlot}) created by User #${userId} (${team_name}). Sending broadcast notification to other users...`);
 
   // Broadcast web notification to ALL other users
   const oversText = overs ? ` (${overs} Overs)` : "";
@@ -160,7 +187,7 @@ const createChallenge = asyncHandler(async (req, res) => {
   notifyAllUsersExcept(
     userId,
     "New Match Challenge! 🏏",
-    `${team_name} posted a ${format}${oversText} challenge for ${match_date}${venueText}`,
+    `${team_name} posted a ${format}${oversText} challenge for ${match_date} (${determinedSlot})${venueText}`,
     { type: "new_challenge", challenge_id: String(challenge.id) },
     "challenge"
   ).catch((err) => console.error("Create challenge notification error:", err.message));
@@ -222,26 +249,37 @@ const acceptChallenge = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "You can't accept your own challenge" });
   }
 
-  // A user can only accept one challenge at a time.
+  // Conflict validation:
+  // A team cannot accept another challenge on the EXACT SAME date and slot (Morning / Afternoon).
+  // They CAN accept challenges on different dates, or in a different slot on the same date.
+  const targetDate = challenge.match_date;
+  const targetSlot = getChallengeSlot(challenge);
+
   const cleanPhone = String(contact_no || "").replace(/\D/g, "");
   const last10 = cleanPhone.slice(-10);
 
   const activeExisting = await pool.query(
-    `SELECT id, team_name, match_date, time_slot
+    `SELECT id, team_name, match_date, time_slot, slot
      FROM challenges
      WHERE status = 'accepted'
+       AND match_date::date = $4::date
+       AND LOWER(COALESCE(NULLIF(slot, ''), CASE WHEN (SUBSTRING(time_slot FROM '^[0-9]+')::int >= 12 OR time_slot ILIKE '%PM%') THEN 'Afternoon' ELSE 'Morning' END)) = LOWER($5)
        AND (
          accepted_by_user_id = $1
          OR ($2 != '' AND RIGHT(REGEXP_REPLACE(accepted_by_contact_no, '\\D', '', 'g'), 10) = $2)
          OR LOWER(TRIM(accepted_by_team_name)) = LOWER(TRIM($3))
+         OR creator_id = $1
+         OR ($2 != '' AND RIGHT(REGEXP_REPLACE(contact_no, '\\D', '', 'g'), 10) = $2)
+         OR LOWER(TRIM(team_name)) = LOWER(TRIM($3))
        )
      LIMIT 1`,
-    [userId, last10, team_name]
+    [userId, last10, team_name, targetDate, targetSlot]
   );
   if (activeExisting.rows.length > 0) {
     const existing = activeExisting.rows[0];
+    const otherSlot = targetSlot === "Morning" ? "Afternoon" : "Morning";
     return res.status(400).json({
-      error: `You already have an active accepted match challenge against ${existing.team_name} for ${existing.match_date}. You can only accept one challenge at a time. Cancel it in 'My Team' before accepting another.`
+      error: `You already have an active match challenge against ${existing.team_name} on this date (${existing.match_date}) in the ${targetSlot} slot. You can accept challenges on other dates or in the ${otherSlot} slot.`
     });
   }
 
@@ -263,13 +301,13 @@ const acceptChallenge = asyncHandler(async (req, res) => {
     [id, userId, team_name, challenge.team_name]
   ).catch(err => console.error("Could not record challenge acceptance:", err.message));
 
-  console.log(`🤝 [Challenge Accepted] Challenge #${id} accepted by User #${userId} (${team_name}). Dispatching targeted notifications to teammates and creator...`);
+  console.log(`🤝 [Challenge Accepted] Challenge #${id} (${targetSlot}) accepted by User #${userId} (${team_name}). Dispatching targeted notifications to teammates and creator...`);
 
   // 1. Notify the challenge creator who posted the challenge
   notifyUser(
     challenge.creator_id,
     "Challenge Accepted! 🏏",
-    `${team_name} accepted your challenge for ${challenge.match_date} (${challenge.time_slot})!`,
+    `${team_name} accepted your challenge for ${challenge.match_date} (${targetSlot}, ${challenge.time_slot})!`,
     { type: "challenge_accepted", challenge_id: String(id) },
     "challenge"
   ).catch((err) => console.error("Creator accept notification error:", err.message));
@@ -278,7 +316,7 @@ const acceptChallenge = asyncHandler(async (req, res) => {
   notifyTeammatesOnly(
     challenge.creator_id,
     "Our Match Challenge Accepted! 🏏",
-    `${team_name} accepted our match challenge on ${challenge.match_date} (${challenge.time_slot})!`,
+    `${team_name} accepted our match challenge on ${challenge.match_date} (${targetSlot}, ${challenge.time_slot})!`,
     { type: "team_challenge_accepted", challenge_id: String(id) },
     "challenge"
   ).catch((err) => console.error("Creator teammates notification error:", err.message));
@@ -287,7 +325,7 @@ const acceptChallenge = asyncHandler(async (req, res) => {
   notifyTeammatesOnly(
     userId,
     "Match Challenge Accepted! 🤝",
-    `Your team (${team_name}) accepted a match challenge against ${challenge.team_name} on ${challenge.match_date} (${challenge.time_slot})!`,
+    `Your team (${team_name}) accepted a match challenge against ${challenge.team_name} on ${challenge.match_date} (${targetSlot}, ${challenge.time_slot})!`,
     { type: "teammate_challenge_accepted", challenge_id: String(id) },
     "challenge"
   ).catch((err) => console.error("Accepter teammates notification error:", err.message));
@@ -374,6 +412,7 @@ const updateChallenge = asyncHandler(async (req, res) => {
     overs = null,
     match_date,
     time_slot,
+    slot = null,
     ground_id = null,
     ground_name = null,
     note = null,
@@ -385,6 +424,8 @@ const updateChallenge = asyncHandler(async (req, res) => {
     });
   }
 
+  const determinedSlot = getChallengeSlot({ time_slot });
+
   const updated = await pool.query(
     `UPDATE challenges
      SET team_name = $1,
@@ -393,12 +434,13 @@ const updateChallenge = asyncHandler(async (req, res) => {
          overs = $4,
          match_date = $5,
          time_slot = $6,
-         ground_id = $7,
-         ground_name = $8,
-         note = $9
-     WHERE id = $10
+         slot = $7,
+         ground_id = $8,
+         ground_name = $9,
+         note = $10
+     WHERE id = $11
      RETURNING *`,
-    [team_name, contact_no, format, overs, match_date, time_slot, ground_id, ground_name, note, id]
+    [team_name, contact_no, format, overs, match_date, time_slot, determinedSlot, ground_id, ground_name, note, id]
   );
 
   res.json({ ok: true, challenge: updated.rows[0] });

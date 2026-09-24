@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS challenges (
   overs INT,
   match_date DATE NOT NULL,
   time_slot VARCHAR(20) NOT NULL,
+  slot VARCHAR(20) DEFAULT 'Morning',
   ground_id UUID REFERENCES grounds(id),
   urgent BOOLEAN DEFAULT false,
   note VARCHAR(120),

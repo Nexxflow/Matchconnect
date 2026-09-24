@@ -24,12 +24,25 @@ pool.query(`
 // Helpers
 // ============================================================
 
-function checkMatchCreator(match, reqUser) {
-  if (reqUser?.id && match?.created_by && String(match.created_by) !== String(reqUser.id)) {
-    const err = new Error("Forbidden: Only the match creator can modify or resume this scoreboard");
-    err.status = 403;
+async function checkMatchCreator(match, reqUser) {
+  if (!reqUser?.id) {
+    const err = new Error("Authentication required to score or modify this match");
+    err.status = 401;
     throw err;
   }
+  if (match?.created_by && String(match.created_by) === String(reqUser.id)) return;
+  if (match?.tournament_id) {
+    try {
+      const tRes = await pool.query(`SELECT created_by FROM tournaments WHERE id = $1`, [match.tournament_id]);
+      if (tRes.rows.length > 0 && String(tRes.rows[0].created_by) === String(reqUser.id)) {
+        return;
+      }
+    } catch {}
+  }
+  if (!match?.created_by && !match?.tournament_id) return;
+  const err = new Error("Forbidden: Only the match or tournament creator can modify or resume this scoreboard");
+  err.status = 403;
+  throw err;
 }
 
 async function findOrCreateTeam(client, name) {
@@ -183,7 +196,7 @@ const listMatches = asyncHandler(async (req, res) => {
   const params = [];
   if (mineOnly && userId) {
     params.push(userId);
-    whereClause = `WHERE m.created_by = $${params.length}`;
+    whereClause = `WHERE (m.created_by = $${params.length} OR t.created_by = $${params.length})`;
   }
 
   const matchesRes = await pool.query(
@@ -191,19 +204,21 @@ const listMatches = asyncHandler(async (req, res) => {
        m.*,
        t1.name AS team1_name,
        t2.name AS team2_name,
+       t.created_by AS tournament_creator_id,
        CASE
-         WHEN m.status = 'not_started' THEN NULL
+         WHEN m.status IN ('not_started', 'scheduled') THEN NULL
          ELSE inn.summary
        END AS current_innings_summary,
        all_inn.list AS innings_list,
        CASE
-         WHEN m.status = 'not_started' THEN
+         WHEN m.status IN ('not_started', 'scheduled') THEN
            (COALESCE(sq.t1_count, 0) < 2 OR COALESCE(sq.t2_count, 0) < 2)
          ELSE false
        END AS needs_squads
      FROM matches m
      JOIN teams t1 ON t1.id = m.team1_id
      JOIN teams t2 ON t2.id = m.team2_id
+     LEFT JOIN tournaments t ON t.id = m.tournament_id
      LEFT JOIN LATERAL (
        SELECT json_build_object(
          'total_runs', i.total_runs,
@@ -252,6 +267,7 @@ const createMatch = asyncHandler(async (req, res) => {
   const {
     team1_name, team2_name, venue = null, overs_limit = 20,
     team1_players = [], team2_players = [], created_by: bodyCreatedBy,
+    tournament_id = null, round = null, match_date = null, match_time = null, status = null,
   } = req.body;
 
   if (!team1_name || !team2_name) {
@@ -267,12 +283,62 @@ const createMatch = asyncHandler(async (req, res) => {
     const team1Id = team1Res.rows[0].id;
     const team2Id = team2Res.rows[0].id;
 
+    const initialStatus = status === "scheduled" ? "scheduled" : "not_started";
     const matchRes = await client.query(
-      `INSERT INTO matches (team1_id, team2_id, venue, overs_limit, status, created_by)
-       VALUES ($1,$2,$3,$4,'not_started',$5) RETURNING id`,
-      [team1Id, team2Id, venue, overs_limit, req.user?.id || bodyCreatedBy || null]
+      `INSERT INTO matches (team1_id, team2_id, team1_name, team2_name, venue, overs_limit, status, created_by, tournament_id, round, match_date, match_time)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [
+        team1Id, team2Id, team1_name.trim(), team2_name.trim(), venue, overs_limit,
+        initialStatus, req.user?.id || bodyCreatedBy || null, tournament_id || null,
+        round || null, match_date ? new Date(match_date) : null, match_time ? String(match_time).trim() : null
+      ]
     );
     const matchId = matchRes.rows[0].id;
+
+    if (tournament_id) {
+      const tourRes = await client.query(
+        `SELECT max_teams, status FROM tournaments WHERE id = $1`,
+        [tournament_id]
+      );
+      if (tourRes.rows.length > 0) {
+        const tour = tourRes.rows[0];
+        const countRes = await client.query(
+          `SELECT COUNT(*)::int AS count FROM tournament_registrations WHERE tournament_id = $1 AND status = 'confirmed'`,
+          [tournament_id]
+        );
+        const confCount = countRes.rows[0]?.count || 0;
+        const maxTeams = tour.max_teams || 16;
+
+        if (confCount >= maxTeams) {
+          // If already full, verify both teams are already confirmed in this tournament
+          const teamCheck = await client.query(
+            `SELECT team_id FROM tournament_registrations WHERE tournament_id = $1 AND team_id IN ($2, $3) AND status = 'confirmed'`,
+            [tournament_id, team1Id, team2Id]
+          );
+          if (teamCheck.rows.length < 2) {
+            throw Object.assign(
+              new Error(`Tournament is fully confirmed (${maxTeams}/${maxTeams} teams). Matches can only be created between confirmed teams. No new teams can be approved.`),
+              { status: 400 }
+            );
+          }
+        } else {
+          await client.query(
+            `INSERT INTO tournament_registrations (tournament_id, team_id, status)
+             VALUES ($1, $2, 'confirmed'), ($1, $3, 'confirmed')
+             ON CONFLICT (tournament_id, team_id) DO UPDATE SET status = 'confirmed'`,
+            [tournament_id, team1Id, team2Id]
+          ).catch(() => {});
+
+          const newCountRes = await client.query(
+            `SELECT COUNT(*)::int AS count FROM tournament_registrations WHERE tournament_id = $1 AND status = 'confirmed'`,
+            [tournament_id]
+          );
+          if ((newCountRes.rows[0]?.count || 0) >= maxTeams && tour.status === "registering") {
+            await client.query(`UPDATE tournaments SET status = 'ongoing' WHERE id = $1`, [tournament_id]);
+          }
+        }
+      }
+    }
 
     if (team1_players.length) await createPlayers(client, team1Id, team1_players, matchId);
     if (team2_players.length) await createPlayers(client, team2Id, team2_players, matchId);
@@ -289,7 +355,7 @@ const createMatch = asyncHandler(async (req, res) => {
       ).catch(() => {});
     }
 
-    res.status(201).json({ match_id: matchId });
+    res.status(201).json({ match_id: matchId, match: matchRes.rows[0] });
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -314,7 +380,7 @@ const updateMatch = asyncHandler(async (req, res) => {
     const matchRes = await client.query(`SELECT * FROM matches WHERE id = $1 FOR UPDATE`, [matchId]);
     if (matchRes.rows.length === 0) return res.status(404).json({ error: "Match not found" });
     const match = matchRes.rows[0];
-    checkMatchCreator(match, req.user);
+    await checkMatchCreator(match, req.user);
 
     if (overs_limit != null) {
       await client.query(`UPDATE matches SET overs_limit = $1, updated_at = now() WHERE id = $2`, [Number(overs_limit), matchId]);
@@ -421,7 +487,7 @@ const recordToss = asyncHandler(async (req, res) => {
   const matchRes = await pool.query(`SELECT * FROM matches WHERE id = $1`, [matchId]);
   if (matchRes.rows.length === 0) return res.status(404).json({ error: "Match not found" });
   const match = matchRes.rows[0];
-  checkMatchCreator(match, req.user);
+  await checkMatchCreator(match, req.user);
   const { team1_id, team2_id } = match;
 
   const winnerTeamId = toss_winner_team === "team1" ? team1_id : team2_id;
@@ -508,7 +574,7 @@ const startInnings = asyncHandler(async (req, res) => {
     );
     if (matchRes.rows.length === 0) throw new Error("Match not found");
     const match = matchRes.rows[0];
-    checkMatchCreator(match, req.user);
+    await checkMatchCreator(match, req.user);
 
     const battingTeamId = batting_team === match.team1_name ? match.team1_id : match.team2_id;
     const bowlingTeamId = battingTeamId === match.team1_id ? match.team2_id : match.team1_id;
@@ -765,6 +831,8 @@ async function calculateMatchOutcomeAndPOTM(client, matchId) {
            potm_name = $2,
            potm_stats = $3,
            potm_team = $4,
+           mom = $2,
+           man_of_the_match = $2,
            status = 'completed',
            updated_at = now()
        WHERE id = $5`,
@@ -843,7 +911,7 @@ const recordBall = asyncHandler(async (req, res) => {
     const matchRes = await client.query(`SELECT * FROM matches WHERE id = $1 FOR UPDATE`, [matchId]);
     if (matchRes.rows.length === 0) throw new Error("Match not found");
     const match = matchRes.rows[0];
-    checkMatchCreator(match, req.user);
+    await checkMatchCreator(match, req.user);
 
     const inningsRes = await client.query(
       `SELECT * FROM innings WHERE match_id = $1 AND is_completed = false
@@ -927,6 +995,13 @@ const recordBall = asyncHandler(async (req, res) => {
       `UPDATE innings SET total_runs = $1, wickets = $2, overs_completed = $3 WHERE id = $4`,
       [newTotalRuns, newWickets, newOversCompleted, innings.id]
     );
+
+    if (match.status !== "completed") {
+      await client.query(
+        `UPDATE matches SET status = 'ongoing', updated_at = now() WHERE id = $1 AND status != 'completed'`,
+        [matchId]
+      );
+    }
 
     await client.query(
       `INSERT INTO batting_stats (innings_id, player_id, runs, balls_faced, fours, sixes, is_on_strike)
@@ -1091,7 +1166,7 @@ const undoBall = asyncHandler(async (req, res) => {
   try {
     const matchRes = await client.query(`SELECT * FROM matches WHERE id = $1 FOR UPDATE`, [matchId]);
     if (matchRes.rows.length === 0) throw new Error("Match not found");
-    checkMatchCreator(matchRes.rows[0], req.user);
+    await checkMatchCreator(matchRes.rows[0], req.user);
 
     const inningsRes = await client.query(
       `SELECT * FROM innings WHERE match_id = $1 ORDER BY inning_number DESC LIMIT 1 FOR UPDATE`,
@@ -1331,7 +1406,7 @@ const selectBowler = asyncHandler(async (req, res) => {
 
   const matchRes = await pool.query(`SELECT * FROM matches WHERE id = $1`, [matchId]);
   if (matchRes.rows.length === 0) return res.status(404).json({ error: "Match not found" });
-  checkMatchCreator(matchRes.rows[0], req.user);
+  await checkMatchCreator(matchRes.rows[0], req.user);
 
   const inningsRes = await pool.query(
     `SELECT id FROM innings WHERE match_id = $1 AND is_completed = false ORDER BY inning_number DESC LIMIT 1`,
@@ -1377,7 +1452,7 @@ const newBatsman = asyncHandler(async (req, res) => {
 
   const matchRes = await pool.query(`SELECT * FROM matches WHERE id = $1`, [matchId]);
   if (matchRes.rows.length === 0) return res.status(404).json({ error: "Match not found" });
-  checkMatchCreator(matchRes.rows[0], req.user);
+  await checkMatchCreator(matchRes.rows[0], req.user);
 
   const inningsRes = await pool.query(
     `SELECT id FROM innings WHERE match_id = $1 AND is_completed = false ORDER BY inning_number DESC LIMIT 1`,
@@ -1432,7 +1507,7 @@ const completeMatch = asyncHandler(async (req, res) => {
 
   const matchRes = await pool.query(`SELECT * FROM matches WHERE id = $1`, [matchId]);
   if (matchRes.rows.length === 0) return res.status(404).json({ error: "Match not found" });
-  checkMatchCreator(matchRes.rows[0], req.user);
+  await checkMatchCreator(matchRes.rows[0], req.user);
 
   await pool.query(`UPDATE innings SET is_completed = true WHERE match_id = $1`, [matchId]);
   const outcome = await calculateMatchOutcomeAndPOTM(pool, matchId);
@@ -1496,8 +1571,11 @@ const getScoreboard = asyncHandler(async (req, res) => {
   const { matchId } = req.params;
 
   const matchRes = await pool.query(
-    `SELECT m.*, t1.name AS team1_name, t2.name AS team2_name
-     FROM matches m JOIN teams t1 ON t1.id = m.team1_id JOIN teams t2 ON t2.id = m.team2_id
+    `SELECT m.*, t1.name AS team1_name, t2.name AS team2_name, t.created_by AS tournament_creator_id
+     FROM matches m
+     JOIN teams t1 ON t1.id = m.team1_id
+     JOIN teams t2 ON t2.id = m.team2_id
+     LEFT JOIN tournaments t ON t.id = m.tournament_id
      WHERE m.id = $1`,
     [matchId]
   );
@@ -1570,8 +1648,11 @@ const getScoreboard = asyncHandler(async (req, res) => {
 // ============================================================
 async function buildLiveState(matchId) {
   const matchRes = await pool.query(
-    `SELECT m.*, t1.name AS team1_name, t2.name AS team2_name
-     FROM matches m JOIN teams t1 ON t1.id = m.team1_id JOIN teams t2 ON t2.id = m.team2_id
+    `SELECT m.*, t1.name AS team1_name, t2.name AS team2_name, t.created_by AS tournament_creator_id
+     FROM matches m
+     JOIN teams t1 ON t1.id = m.team1_id
+     JOIN teams t2 ON t2.id = m.team2_id
+     LEFT JOIN tournaments t ON t.id = m.tournament_id
      WHERE m.id = $1`,
     [matchId]
   );
@@ -1952,7 +2033,7 @@ const endInnings = asyncHandler(async (req, res) => {
 
     const matchRes = await client.query(`SELECT * FROM matches WHERE id = $1 FOR UPDATE`, [matchId]);
     if (matchRes.rows.length === 0) throw new Error("Match not found");
-    checkMatchCreator(matchRes.rows[0], req.user);
+    await checkMatchCreator(matchRes.rows[0], req.user);
 
     const inningsRes = await client.query(
       `SELECT * FROM innings WHERE match_id = $1 AND is_completed = false ORDER BY inning_number DESC LIMIT 1 FOR UPDATE`,

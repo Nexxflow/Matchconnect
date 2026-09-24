@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { CalendarCheck, Users, Calendar, Megaphone, MapPin, Swords, Phone, XCircle, Trophy, Star, MessageSquare, RotateCw } from "lucide-react";
 import { apiRequest } from "../../api";
-import { C, cn, Tag, normalizePhone } from "../../utils/helpers.jsx";
+import { C, cn, Tag, normalizePhone, getChallengeSlot } from "../../utils/helpers.jsx";
 import TeamDetailsModal from "../TeamDetailsModal.jsx";
 
 // ─── Colorful accent bar ─────────────────────────────────────────────────
@@ -693,8 +693,11 @@ export default function MyTeamTab({
                       <div className="flex items-start justify-between gap-3 mb-2">
                         <div className="min-w-0">
                           <div className={cn("text-sm font-semibold truncate", isLight ? "text-slate-900" : "text-white")}>{pc.team_name}</div>
-                          <div className="text-xs mt-0.5" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
-                            {pc.match_date} · {pc.time_slot}
+                          <div className="text-xs mt-0.5 flex items-center gap-1.5 flex-wrap" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
+                            <span>{pc.match_date} · {pc.time_slot}</span>
+                            <span className="font-semibold text-[11px] px-2 py-0.2 rounded-full border" style={{ borderColor: isLight ? "#bae6fd" : "rgba(56,189,248,0.3)", color: isLight ? "#0284c7" : "#38bdf8" }}>
+                              {getChallengeSlot(pc) === "Morning" ? "🌅 Morning" : "☀️ Afternoon"}
+                            </span>
                           </div>
                         </div>
                         <Tag color="sky">{pc.status === "on_hold" ? "On Hold" : "Awaiting Opponent"}</Tag>
@@ -763,8 +766,11 @@ export default function MyTeamTab({
                         <div className="flex items-start justify-between gap-3 mb-2">
                           <div className="min-w-0">
                             <div className={cn("text-sm font-semibold truncate", isLight ? "text-slate-900" : "text-white")}>vs {opponentName}</div>
-                            <div className="text-xs mt-0.5" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
-                              {ac.match_date} · {ac.time_slot}
+                            <div className="text-xs mt-0.5 flex items-center gap-1.5 flex-wrap" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
+                              <span>{ac.match_date} · {ac.time_slot}</span>
+                              <span className="font-semibold text-[11px] px-2 py-0.2 rounded-full border" style={{ borderColor: isLight ? "#fde68a" : "rgba(245,158,11,0.3)", color: isLight ? "#d97706" : "#fbbf24" }}>
+                                {getChallengeSlot(ac) === "Morning" ? "🌅 Morning" : "☀️ Afternoon"}
+                              </span>
                             </div>
                           </div>
                           <Tag color="amber">Confirmed</Tag>

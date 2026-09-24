@@ -64,6 +64,7 @@ const app = express();
       ALTER TABLE matches ADD COLUMN IF NOT EXISTS scoreboard_name VARCHAR(255);
       ALTER TABLE matches ADD COLUMN IF NOT EXISTS round VARCHAR(100);
       ALTER TABLE matches ADD COLUMN IF NOT EXISTS match_date TIMESTAMPTZ;
+      ALTER TABLE matches ADD COLUMN IF NOT EXISTS match_time VARCHAR(50);
       CREATE INDEX IF NOT EXISTS idx_matches_tournament_id ON matches(tournament_id);
 
       ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
@@ -136,6 +137,7 @@ const app = express();
       ALTER TABLE teams ADD COLUMN IF NOT EXISTS created_by INTEGER;
       ALTER TABLE umpires ADD COLUMN IF NOT EXISTS created_by INTEGER;
       ALTER TABLE umpires ADD COLUMN IF NOT EXISTS user_id INTEGER;
+      ALTER TABLE challenges ADD COLUMN IF NOT EXISTS slot VARCHAR(20) DEFAULT 'Morning';
 
       ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;
       UPDATE users SET is_admin = true WHERE phone LIKE '%6382757532%';

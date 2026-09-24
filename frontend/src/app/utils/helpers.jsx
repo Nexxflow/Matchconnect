@@ -133,6 +133,9 @@ export function transformTournament(t) {
     max_teams: maxTeams,
     team_count: teamCount,
     spots_left: t.spots_left ?? Math.max(maxTeams - teamCount, 0),
+    pending_requests_count: Number(t.pending_requests_count || 0),
+    my_registration_status: t.my_registration_status || null,
+    my_registration_id: t.my_registration_id || null,
   };
 }
 
@@ -237,4 +240,27 @@ export function formatDateIST(dateStr) {
     year: "numeric",
     timeZone: "Asia/Kolkata"
   });
+}
+
+export function getChallengeSlot(c = {}) {
+  if (!c) return "Morning";
+  const t = c.time_slot || c.time;
+  if (t) {
+    const s = String(t).trim();
+    const match = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    if (match) {
+      let hour = parseInt(match[1], 10);
+      const period = match[3] ? match[3].toUpperCase() : null;
+      if (period === "PM" && hour !== 12) hour += 12;
+      if (period === "AM" && hour === 12) hour = 0;
+      return hour >= 12 ? "Afternoon" : "Morning";
+    }
+  }
+  if (c.slot && typeof c.slot === "string" && c.slot.trim()) {
+    const s = c.slot.trim().toLowerCase();
+    if (s.includes("afternoon") || s.includes("pm") || s.includes("evening")) return "Afternoon";
+    if (s.includes("morning") || s.includes("am")) return "Morning";
+    return c.slot;
+  }
+  return "Morning";
 }
