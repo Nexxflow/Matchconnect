@@ -82,6 +82,19 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
   const [myTeam, setMyTeam] = useState(null); // { id, name } | null, fetched from GET /teams/mine
   const [loadingTeam, setLoadingTeam] = useState(true);
 
+  const activeTeam = myTeam || (user?.team_name ? { id: user.team_id, name: user.team_name } : null) || (initialTournament?.creator_team_name ? { id: initialTournament.creator_team_id, name: initialTournament.creator_team_name } : null);
+
+  const getInitialCreatorIncluded = (tour) => {
+    if (!tour) return true;
+    if (tour.creator_included !== undefined && tour.creator_included !== null) {
+      return Boolean(tour.creator_included);
+    }
+    if (Array.isArray(tour.teams) && tour.creator_team_id) {
+      return tour.teams.some((tm) => String(tm.id) === String(tour.creator_team_id));
+    }
+    return true;
+  };
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -103,7 +116,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
   const [form, setForm] = useState({
     name: initialTournament?.name || "",
     maxTeams: initialTournament?.max_teams || 8,
-    includeOwnTeam: initialTournament ? !!initialTournament.creator_included : true,
+    includeOwnTeam: getInitialCreatorIncluded(initialTournament),
     phone: initialTournament?.phone || user?.phone || "",
     coPhone: initialTournament?.co_phone || "",
     entryFee: initialTournament?.entry_fee ?? "",
@@ -141,7 +154,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
       setForm({
         name: initialTournament.name || "",
         maxTeams: initialTournament.max_teams || 8,
-        includeOwnTeam: initialTournament.creator_included !== undefined ? !!initialTournament.creator_included : true,
+        includeOwnTeam: getInitialCreatorIncluded(initialTournament),
         phone: initialTournament.phone || user?.phone || "",
         coPhone: initialTournament.co_phone || "",
         entryFee: initialTournament.entry_fee ?? "",
@@ -174,13 +187,13 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
   }, [initialTournament, user]);
 
   useEffect(() => {
-    if (!loadingTeam && !myTeam && !user?.team_name?.trim() && !initialTournament) {
+    if (!loadingTeam && !activeTeam && !initialTournament) {
       setForm((f) => ({ ...f, includeOwnTeam: false }));
     }
-    if (user?.phone && !form.phone) {
+    if (user?.phone && !form.phone && !initialTournament?.phone) {
       setForm((f) => ({ ...f, phone: user.phone }));
     }
-  }, [loadingTeam, myTeam, initialTournament, user]);
+  }, [loadingTeam, activeTeam, initialTournament, user]);
 
   const update = (field, value) => setForm((f) => ({ ...f, [field]: value }));
   const updatePrize = (idx, field, value) =>
@@ -189,7 +202,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
   const validate = () => {
     const nameVal = user?.name?.trim() || "";
     const phoneVal = form.phone?.trim() || user?.phone?.trim() || "";
-    const teamVal = user?.team_name?.trim() || myTeam?.name?.trim() || myTeam?.team_name?.trim() || "";
+    const teamVal = user?.team_name?.trim() || activeTeam?.name?.trim() || "";
 
     const missingProfile = [];
     if (!nameVal) missingProfile.push("Name");
@@ -204,7 +217,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
     if (!form.name?.trim()) return "Tournament name is required";
     const maxTeams = parseInt(form.maxTeams, 10);
     if (!Number.isInteger(maxTeams) || maxTeams < 2) return "Number of teams must be at least 2";
-    if (form.includeOwnTeam && !myTeam && !user?.team_name?.trim() && !initialTournament) return "You don't have a team registered — turn off 'include my team', or register a team first";
+    if (form.includeOwnTeam && !activeTeam && !user?.team_name?.trim() && !initialTournament) return "You don't have a team registered — turn off 'include my team', or register a team first";
     for (let i = 0; i < prizeCount; i++) {
       if (prizes[i].money === "" || Number(prizes[i].money) < 0) {
         return `Enter a prize amount for position ${i + 1}`;
@@ -241,7 +254,8 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
           money: Number(p.money) || 0,
           trophy: !!p.trophy,
         })),
-        include_own_team: !initialTournament && !!form.includeOwnTeam,
+        include_own_team: !!form.includeOwnTeam,
+        creator_included: !!form.includeOwnTeam,
       };
 
       if (initialTournament) {
@@ -345,11 +359,11 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
           <Section icon={Users} title="Teams" theme={theme}>
             <div>
               <label className={labelClass}>Your team</label>
-              {loadingTeam ? (
+              {loadingTeam && !activeTeam ? (
                 <div className={cn(inputClass, "text-slate-400")}>Loading your team...</div>
-              ) : myTeam ? (
+              ) : activeTeam ? (
                 <div className={cn(inputClass, "flex items-center justify-between font-bold")}>
-                  <span>{myTeam.name}</span>
+                  <span>{activeTeam.name}</span>
                   <span className={cn("text-[10px] font-normal", isLight ? "text-slate-500" : "text-[#4a5a4a]")}>from your account</span>
                 </div>
               ) : (
@@ -374,7 +388,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
               <div>
                 <div className={cn("text-sm font-semibold", isLight ? "text-slate-900" : "text-white")}>Include your own team?</div>
                 <div className={cn("text-xs mt-0.5", isLight ? "text-slate-500" : "text-[#6b7a6b]")}>
-                  {!myTeam
+                  {!activeTeam
                     ? "No team on your account — this stays off"
                     : form.includeOwnTeam
                     ? `Your team takes one slot — ${remainingPreview} spot(s) left for others`
@@ -383,14 +397,14 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
               </div>
               <button
                 type="button"
-                disabled={!myTeam}
+                disabled={!activeTeam}
                 onClick={() => update("includeOwnTeam", !form.includeOwnTeam)}
                 className="shrink-0 w-11 h-6 rounded-full relative transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ backgroundColor: form.includeOwnTeam && myTeam ? "#16a34a" : (isLight ? "#cbd5e1" : "#2a2a2a") }}
+                style={{ backgroundColor: form.includeOwnTeam && activeTeam ? "#16a34a" : (isLight ? "#cbd5e1" : "#2a2a2a") }}
               >
                 <span
                   className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all shadow-xs"
-                  style={{ left: form.includeOwnTeam && myTeam ? 22 : 2 }}
+                  style={{ left: form.includeOwnTeam && activeTeam ? 22 : 2 }}
                 />
               </button>
             </div>

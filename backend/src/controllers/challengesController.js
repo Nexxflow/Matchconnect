@@ -39,6 +39,11 @@ function getChallengeSlot(c = {}) {
 // pin challenges that have a registered ground attached.
 // ============================================================
 const listChallenges = asyncHandler(async (req, res) => {
+  const userId = req.user?.id || null;
+  const userPhone = req.user?.phone || null;
+  const cleanPhone = String(userPhone || "").replace(/\D/g, "");
+  const last10 = cleanPhone ? cleanPhone.slice(-10) : null;
+
   try {
     const { rows } = await pool.query(
       `SELECT c.*, 
@@ -53,7 +58,11 @@ const listChallenges = asyncHandler(async (req, res) => {
               lr.reviewer_team_name AS latest_reviewer_team_name,
               lr.rating AS latest_review_rating,
               lr.review_text AS latest_review_text,
-              lr.created_at AS latest_review_created_at
+              lr.created_at AS latest_review_created_at,
+              COALESCE(preq.pending_requests_count, 0)::int AS pending_requests_count,
+              COALESCE(pend_reqs.list, '[]'::json) AS pending_requests,
+              my_req.status AS my_request_status,
+              my_req.id AS my_request_id
        FROM challenges c
        LEFT JOIN users u ON u.id = c.creator_id
        LEFT JOIN grounds g ON g.id = c.ground_id
@@ -85,7 +94,44 @@ const listChallenges = asyncHandler(async (req, res) => {
          ORDER BY created_at DESC
          LIMIT 1
        ) lr ON true
-       ORDER BY c.created_at DESC`
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS pending_requests_count
+         FROM challenge_requests
+         WHERE challenge_id = c.id AND LOWER(TRIM(COALESCE(status, ''))) = 'pending'
+       ) preq ON true
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(
+           json_agg(
+             json_build_object(
+               'id', cr.id,
+               'challenge_id', cr.challenge_id,
+               'user_id', cr.user_id,
+               'team_name', cr.team_name,
+               'contact_no', cr.contact_no,
+               'user_name', COALESCE(cr.user_name, u2.name, 'Captain'),
+               'village_name', COALESCE(cr.village_name, u2.village_name),
+               'message', cr.message,
+               'status', cr.status,
+               'created_at', cr.created_at
+             ) ORDER BY cr.created_at ASC
+           ),
+           '[]'::json
+         ) AS list
+         FROM challenge_requests cr
+         LEFT JOIN users u2 ON u2.id = cr.user_id
+         WHERE cr.challenge_id = c.id AND LOWER(TRIM(COALESCE(cr.status, ''))) = 'pending'
+       ) pend_reqs ON true
+       LEFT JOIN LATERAL (
+         SELECT cr.status, cr.id
+         FROM challenge_requests cr
+         WHERE cr.challenge_id = c.id
+           AND (cr.status IS NULL OR LOWER(TRIM(cr.status)) != 'withdrawn')
+           AND ($1::int IS NOT NULL AND (cr.user_id = $1 OR ($2::text IS NOT NULL AND RIGHT(REGEXP_REPLACE(cr.contact_no, '\\D', '', 'g'), 10) = $2)))
+         ORDER BY cr.created_at DESC
+         LIMIT 1
+       ) my_req ON true
+       ORDER BY c.created_at DESC`,
+      [userId, last10]
     );
 
     const challengesWithStats = rows.map(c => {
@@ -100,6 +146,10 @@ const listChallenges = asyncHandler(async (req, res) => {
 
       return {
         ...c,
+        pending_requests_count: Number(c.pending_requests_count) || 0,
+        pending_requests: Array.isArray(c.pending_requests) ? c.pending_requests : [],
+        my_request_status: c.my_request_status || null,
+        my_request_id: c.my_request_id || null,
         team_rating: overallRating,
         reliability_score: reliability,
         latest_review: (c.latest_review_text || c.latest_reviewer_name) ? {
@@ -128,6 +178,10 @@ const listChallenges = asyncHandler(async (req, res) => {
     `);
     const fallbackChallenges = fallbackRes.rows.map(c => ({
       ...c,
+      pending_requests_count: 0,
+      pending_requests: [],
+      my_request_status: null,
+      my_request_id: null,
       team_rating: 5.0,
       reliability_score: 5.0,
       reviews_count: 0,
@@ -220,15 +274,17 @@ const deleteChallenge = asyncHandler(async (req, res) => {
 });
 
 // ============================================================
-// POST /api/challenges/:id/accept
-// Body: { team_name, contact_no }
-// Called by the accepting user. Notifies the original poster.
+// POST /api/challenges/:id/request
+// Body: { team_name, contact_no, message, village_name }
+// Called by a team wanting to accept/request a challenge match.
+// Creates a pending request in challenge_requests and notifies
+// the challenge creator to review and accept/reject.
 // ============================================================
-const acceptChallenge = asyncHandler(async (req, res) => {
+const requestChallenge = asyncHandler(async (req, res) => {
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ error: "Not authenticated" });
   const { id } = req.params;
-  const { team_name, contact_no } = req.body;
+  const { team_name, contact_no, message = null, village_name = null } = req.body;
 
   if (!team_name || !contact_no) {
     return res.status(400).json({ error: "team_name and contact_no are required" });
@@ -238,26 +294,23 @@ const acceptChallenge = asyncHandler(async (req, res) => {
   if (cRes.rows.length === 0) return res.status(404).json({ error: "Challenge not found" });
   const challenge = cRes.rows[0];
 
-  if (challenge.status !== "open") {
+  if (challenge.status !== "open" && challenge.status !== "on_hold") {
     return res.status(400).json({ error: "This challenge is no longer open" });
   }
 
-  // A team cannot accept its own posted challenge. Checking creator_id is
-  // the authoritative guard here (the frontend's phone-based list filter
-  // is just a UI convenience and shouldn't be the only thing preventing this).
+  // A team cannot accept or request its own posted challenge
   if (challenge.creator_id === userId) {
-    return res.status(400).json({ error: "You can't accept your own challenge" });
+    return res.status(400).json({ error: "You cannot accept or request your own challenge" });
   }
 
-  // Conflict validation:
-  // A team cannot accept another challenge on the EXACT SAME date and slot (Morning / Afternoon).
-  // They CAN accept challenges on different dates, or in a different slot on the same date.
   const targetDate = challenge.match_date;
   const targetSlot = getChallengeSlot(challenge);
 
   const cleanPhone = String(contact_no || "").replace(/\D/g, "");
   const last10 = cleanPhone.slice(-10);
 
+  // Conflict validation:
+  // Cannot request if user already has an active confirmed match on same date & same slot
   const activeExisting = await pool.query(
     `SELECT id, team_name, match_date, time_slot, slot
      FROM challenges
@@ -279,11 +332,155 @@ const acceptChallenge = asyncHandler(async (req, res) => {
     const existing = activeExisting.rows[0];
     const otherSlot = targetSlot === "Morning" ? "Afternoon" : "Morning";
     return res.status(400).json({
-      error: `You already have an active match challenge against ${existing.team_name} on this date (${existing.match_date}) in the ${targetSlot} slot. You can accept challenges on other dates or in the ${otherSlot} slot.`
+      error: `You already have an active match challenge against ${existing.team_name} on this date (${existing.match_date}) in the ${targetSlot} slot. You can request challenges on other dates or in the ${otherSlot} slot.`
     });
   }
 
-  const updated = await pool.query(
+  const existingReq = await pool.query(
+    `SELECT id, status FROM challenge_requests
+     WHERE challenge_id = $1 AND (user_id = $2 OR ($3 != '' AND RIGHT(REGEXP_REPLACE(contact_no, '\\D', '', 'g'), 10) = $3))`,
+    [id, userId, last10]
+  );
+
+  let requestId = null;
+  const userName = req.user?.name || null;
+  const finalVillage = village_name || req.user?.village_name || null;
+
+  if (existingReq.rows.length > 0) {
+    const cur = existingReq.rows[0];
+    if (cur.status === "pending") {
+      return res.status(400).json({ error: "You already have a pending request for this match challenge. Please wait for the opponent captain to review." });
+    }
+    if (cur.status === "accepted") {
+      return res.status(400).json({ error: "Your request is already accepted and confirmed!" });
+    }
+    // Re-request if previously rejected or withdrawn
+    await pool.query(
+      `UPDATE challenge_requests
+       SET status = 'pending',
+           team_name = $1,
+           contact_no = $2,
+           user_name = $3,
+           village_name = $4,
+           message = $5,
+           created_at = now(),
+           updated_at = now()
+       WHERE id = $6`,
+      [team_name, contact_no, userName, finalVillage, message, cur.id]
+    );
+    requestId = cur.id;
+  } else {
+    const insRes = await pool.query(
+      `INSERT INTO challenge_requests (challenge_id, user_id, team_name, contact_no, user_name, village_name, message, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+       RETURNING id`,
+      [id, userId, team_name, contact_no, userName, finalVillage, message]
+    );
+    requestId = insRes.rows[0].id;
+  }
+
+  console.log(`🤝 [Challenge Request] Challenge #${id} (${targetSlot}) requested by User #${userId} (${team_name}). Sending notification to creator #${challenge.creator_id}...`);
+
+  // 1. Notify Challenge Creator
+  notifyUser(
+    challenge.creator_id,
+    "New Match Challenge Request! 🏏",
+    `Team "${team_name}" wants to accept your challenge for ${challenge.match_date} (${targetSlot}, ${challenge.time_slot})! Click to review and accept.`,
+    { type: "challenge_request", challenge_id: String(id), request_id: String(requestId) },
+    "challenge"
+  ).catch((err) => console.error("Challenge request notification error:", err.message));
+
+  // 2. Notify Requester Teammates
+  notifyTeammatesOnly(
+    userId,
+    "Match Request Sent 🤝",
+    `Your team (${team_name}) requested to play vs ${challenge.team_name} on ${challenge.match_date} (${targetSlot})! Waiting for their captain to accept.`,
+    { type: "challenge_request_sent", challenge_id: String(id) },
+    "challenge"
+  ).catch((err) => console.error("Teammates request notification error:", err.message));
+
+  res.status(201).json({
+    ok: true,
+    message: `Match request sent to ${challenge.team_name}! The captain will review and accept your request.`,
+    status: "pending",
+    request_id: requestId,
+    challenge: {
+      ...challenge,
+      my_request_status: "pending",
+      my_request_id: requestId,
+    }
+  });
+});
+
+// Alias for backwards compatibility
+const acceptChallenge = requestChallenge;
+
+// ============================================================
+// GET /api/challenges/:id/requests
+// Fetch all pending incoming requests for a challenge (creator only).
+// ============================================================
+const getChallengeRequests = asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: "Not authenticated" });
+  const { id } = req.params;
+
+  const cRes = await pool.query(`SELECT * FROM challenges WHERE id = $1`, [id]);
+  if (cRes.rows.length === 0) return res.status(404).json({ error: "Challenge not found" });
+  const challenge = cRes.rows[0];
+
+  if (challenge.creator_id !== userId) {
+    return res.status(403).json({ error: "Only the challenge creator can view incoming requests" });
+  }
+
+  const { rows } = await pool.query(
+    `SELECT cr.*, u.name AS user_name, u.phone AS user_phone, u.village_name
+     FROM challenge_requests cr
+     LEFT JOIN users u ON u.id = cr.user_id
+     WHERE cr.challenge_id = $1 AND cr.status = 'pending'
+     ORDER BY cr.created_at ASC`,
+    [id]
+  );
+
+  res.json({ requests: rows });
+});
+
+// ============================================================
+// POST /api/challenges/:id/requests/:requestId/accept
+// Called by Challenge Creator to accept an incoming team request.
+// Confirms the match, rejects other pending requests, and notifies all parties.
+// ============================================================
+const acceptChallengeRequest = asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: "Not authenticated" });
+  const { id, requestId } = req.params;
+
+  const cRes = await pool.query(`SELECT * FROM challenges WHERE id = $1`, [id]);
+  if (cRes.rows.length === 0) return res.status(404).json({ error: "Challenge not found" });
+  const challenge = cRes.rows[0];
+
+  if (challenge.creator_id !== userId) {
+    return res.status(403).json({ error: "Only the challenge creator can accept requests" });
+  }
+
+  if (challenge.status !== "open" && challenge.status !== "on_hold") {
+    return res.status(400).json({ error: "This challenge is already confirmed or closed" });
+  }
+
+  const rRes = await pool.query(`SELECT * FROM challenge_requests WHERE id = $1 AND challenge_id = $2`, [requestId, id]);
+  if (rRes.rows.length === 0) return res.status(404).json({ error: "Request not found" });
+  const request = rRes.rows[0];
+
+  if (request.status !== "pending") {
+    return res.status(400).json({ error: `This request is already ${request.status}` });
+  }
+
+  const targetSlot = getChallengeSlot(challenge);
+
+  // 1. Mark this request accepted
+  await pool.query(`UPDATE challenge_requests SET status = 'accepted', updated_at = now() WHERE id = $1`, [requestId]);
+
+  // 2. Mark challenge accepted with this team
+  const updChallenge = await pool.query(
     `UPDATE challenges
      SET status = 'accepted',
          accepted_by_team_name = $1,
@@ -291,46 +488,183 @@ const acceptChallenge = asyncHandler(async (req, res) => {
          accepted_by_user_id = $3
      WHERE id = $4
      RETURNING *`,
-    [team_name, contact_no, userId, id]
+    [request.team_name, request.contact_no, request.user_id, id]
+  );
+  const updated = updChallenge.rows[0];
+
+  // 3. Mark all other pending requests for this challenge as rejected (match is now booked)
+  const otherPendingRes = await pool.query(
+    `UPDATE challenge_requests
+     SET status = 'rejected', updated_at = now()
+     WHERE challenge_id = $1 AND id != $2 AND status = 'pending'
+     RETURNING id, user_id, team_name`,
+    [id, requestId]
   );
 
-  // Log acceptance for team statistics and reliability rating boost
+  // 4. Log acceptance for reliability and statistics
   await pool.query(
     `INSERT INTO challenge_acceptances (challenge_id, accepted_by_user_id, accepted_by_team_name, creator_team_name)
      VALUES ($1, $2, $3, $4)`,
-    [id, userId, team_name, challenge.team_name]
+    [id, request.user_id, request.team_name, challenge.team_name]
   ).catch(err => console.error("Could not record challenge acceptance:", err.message));
 
-  console.log(`🤝 [Challenge Accepted] Challenge #${id} (${targetSlot}) accepted by User #${userId} (${team_name}). Dispatching targeted notifications to teammates and creator...`);
+  console.log(`🏆 [Challenge Request Accepted] Challenge #${id} accepted for Team "${request.team_name}". Dispatching notifications...`);
 
-  // 1. Notify the challenge creator who posted the challenge
-  notifyUser(
-    challenge.creator_id,
-    "Challenge Accepted! 🏏",
-    `${team_name} accepted your challenge for ${challenge.match_date} (${targetSlot}, ${challenge.time_slot})!`,
-    { type: "challenge_accepted", challenge_id: String(id) },
-    "challenge"
-  ).catch((err) => console.error("Creator accept notification error:", err.message));
+  // 5. Notifications:
+  // (a) Notify accepted requester
+  if (request.user_id) {
+    notifyUser(
+      request.user_id,
+      "Match Confirmed! 🎉🏏",
+      `Your request to play against ${challenge.team_name} on ${challenge.match_date} (${targetSlot}, ${challenge.time_slot}) was ACCEPTED! Match is confirmed.`,
+      { type: "challenge_accepted", challenge_id: String(id) },
+      "challenge"
+    ).catch(err => console.error("Notification error:", err.message));
 
-  // 2. Notify the challenge creator's teammates
+    // (b) Notify accepted requester's teammates
+    notifyTeammatesOnly(
+      request.user_id,
+      "Match Confirmed! 🎉🏏",
+      `Our match against ${challenge.team_name} is confirmed for ${challenge.match_date} (${targetSlot}, ${challenge.time_slot})!`,
+      { type: "team_challenge_accepted", challenge_id: String(id) },
+      "challenge"
+    ).catch(err => console.error("Notification error:", err.message));
+  }
+
+  // (c) Notify challenge creator's teammates
   notifyTeammatesOnly(
     challenge.creator_id,
-    "Our Match Challenge Accepted! 🏏",
-    `${team_name} accepted our match challenge on ${challenge.match_date} (${targetSlot}, ${challenge.time_slot})!`,
+    "Our Match Confirmed! 🏏",
+    `Our match challenge against ${request.team_name} is confirmed for ${challenge.match_date} (${targetSlot}, ${challenge.time_slot})!`,
     { type: "team_challenge_accepted", challenge_id: String(id) },
     "challenge"
-  ).catch((err) => console.error("Creator teammates notification error:", err.message));
+  ).catch(err => console.error("Notification error:", err.message));
 
-  // 3. Notify the accepting team's teammates ONLY
-  notifyTeammatesOnly(
-    userId,
-    "Match Challenge Accepted! 🤝",
-    `Your team (${team_name}) accepted a match challenge against ${challenge.team_name} on ${challenge.match_date} (${targetSlot}, ${challenge.time_slot})!`,
-    { type: "teammate_challenge_accepted", challenge_id: String(id) },
+  // (d) Notify any other teams whose requests were closed
+  for (const other of otherPendingRes.rows) {
+    if (other.user_id) {
+      notifyUser(
+        other.user_id,
+        "Challenge Request Closed",
+        `The match challenge against ${challenge.team_name} for ${challenge.match_date} was booked by another team. Explore other challenges in Find Match!`,
+        { type: "challenge_request_rejected", challenge_id: String(id) },
+        "challenge"
+      ).catch(() => {});
+    }
+  }
+
+  res.json({
+    ok: true,
+    message: `Challenge confirmed with ${request.team_name}!`,
+    challenge: updated,
+  });
+});
+
+// ============================================================
+// POST /api/challenges/:id/requests/:requestId/reject
+// Called by Challenge Creator to decline an incoming team request.
+// Challenge remains open; notification dispatched to rejected user.
+// ============================================================
+const rejectChallengeRequest = asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: "Not authenticated" });
+  const { id, requestId } = req.params;
+
+  const cRes = await pool.query(`SELECT * FROM challenges WHERE id = $1`, [id]);
+  if (cRes.rows.length === 0) return res.status(404).json({ error: "Challenge not found" });
+  const challenge = cRes.rows[0];
+
+  if (challenge.creator_id !== userId) {
+    return res.status(403).json({ error: "Only the challenge creator can decline requests" });
+  }
+
+  const rRes = await pool.query(`SELECT * FROM challenge_requests WHERE id = $1 AND challenge_id = $2`, [requestId, id]);
+  if (rRes.rows.length === 0) return res.status(404).json({ error: "Request not found" });
+  const request = rRes.rows[0];
+
+  await pool.query(`UPDATE challenge_requests SET status = 'rejected', updated_at = now() WHERE id = $1`, [requestId]);
+
+  const targetSlot = getChallengeSlot(challenge);
+
+  // Notify rejected user and teammates
+  if (request.user_id) {
+    notifyUser(
+      request.user_id,
+      "Challenge Request Declined ❌",
+      `${challenge.team_name} declined your match request for ${challenge.match_date} (${targetSlot}). You can explore other challenges in Find Match.`,
+      { type: "challenge_request_rejected", challenge_id: String(id) },
+      "challenge"
+    ).catch(err => console.error("Notification error:", err.message));
+
+    notifyTeammatesOnly(
+      request.user_id,
+      "Challenge Request Declined ❌",
+      `Request to play against ${challenge.team_name} on ${challenge.match_date} was declined.`,
+      { type: "challenge_request_rejected", challenge_id: String(id) },
+      "challenge"
+    ).catch(err => console.error("Notification error:", err.message));
+  }
+
+  const pendRes = await pool.query(
+    `SELECT cr.*, u.name AS user_name, u.phone AS user_phone, u.village_name
+     FROM challenge_requests cr
+     LEFT JOIN users u ON u.id = cr.user_id
+     WHERE cr.challenge_id = $1 AND cr.status = 'pending'
+     ORDER BY cr.created_at ASC`,
+    [id]
+  );
+
+  res.json({
+    ok: true,
+    message: `Request from "${request.team_name}" declined`,
+    pending_requests: pendRes.rows,
+    pending_requests_count: pendRes.rows.length,
+  });
+});
+
+// ============================================================
+// POST /api/challenges/:id/requests/cancel
+// Called by Requester to withdraw their pending match request.
+// ============================================================
+const cancelChallengeRequest = asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: "Not authenticated" });
+  const { id } = req.params;
+
+  const cRes = await pool.query(`SELECT * FROM challenges WHERE id = $1`, [id]);
+  if (cRes.rows.length === 0) return res.status(404).json({ error: "Challenge not found" });
+  const challenge = cRes.rows[0];
+
+  const cleanPhone = String(req.user.phone || "").replace(/\D/g, "");
+  const last10 = cleanPhone.slice(-10);
+
+  const reqCheck = await pool.query(
+    `SELECT * FROM challenge_requests
+     WHERE challenge_id = $1 AND (user_id = $2 OR ($3 != '' AND RIGHT(REGEXP_REPLACE(contact_no, '\\D', '', 'g'), 10) = $3))
+       AND status = 'pending'`,
+    [id, userId, last10]
+  );
+
+  if (reqCheck.rows.length === 0) {
+    return res.status(404).json({ error: "No pending request found to cancel" });
+  }
+
+  const userReq = reqCheck.rows[0];
+  await pool.query(`UPDATE challenge_requests SET status = 'withdrawn', updated_at = now() WHERE id = $1`, [userReq.id]);
+
+  // Notify creator that request was withdrawn
+  notifyUser(
+    challenge.creator_id,
+    "Challenge Request Withdrawn",
+    `Team "${userReq.team_name}" withdrew their match request for ${challenge.match_date}.`,
+    { type: "challenge_request_cancelled", challenge_id: String(id) },
     "challenge"
-  ).catch((err) => console.error("Accepter teammates notification error:", err.message));
+  ).catch(() => {});
 
-  res.json({ ok: true, challenge: updated.rows[0] });
+  res.json({
+    ok: true,
+    message: "Match request cancelled successfully",
+  });
 });
 
 // ============================================================
@@ -376,6 +710,14 @@ const cancelChallenge = asyncHandler(async (req, res) => {
      RETURNING *`,
     [id]
   );
+
+  // Clear accepted request status so teams can re-request
+  await pool.query(
+    `UPDATE challenge_requests
+     SET status = 'withdrawn', updated_at = now()
+     WHERE challenge_id = $1 AND status = 'accepted'`,
+    [id]
+  ).catch(() => {});
 
   const creatorRes = await pool.query(`SELECT fcm_token FROM users WHERE id = $1`, [challenge.creator_id]);
   const creatorToken = creatorRes.rows[0]?.fcm_token;
@@ -453,4 +795,9 @@ module.exports = {
   deleteChallenge,
   acceptChallenge,
   cancelChallenge,
+  requestChallenge,
+  getChallengeRequests,
+  acceptChallengeRequest,
+  rejectChallengeRequest,
+  cancelChallengeRequest,
 };

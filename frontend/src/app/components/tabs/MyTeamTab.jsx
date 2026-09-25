@@ -3,6 +3,7 @@ import { CalendarCheck, Users, Calendar, Megaphone, MapPin, Swords, Phone, XCirc
 import { apiRequest } from "../../api";
 import { C, cn, Tag, normalizePhone, getChallengeSlot } from "../../utils/helpers.jsx";
 import TeamDetailsModal from "../TeamDetailsModal.jsx";
+import { ChallengeRequestsReviewModal } from "./FindMatchTab.jsx";
 
 // ─── Colorful accent bar ─────────────────────────────────────────────────
 function ColorBar({ gradient = "from-emerald-400 via-green-500 to-teal-500", className = "" }) {
@@ -118,6 +119,7 @@ export default function MyTeamTab({
   deleting,
   onOpenChat,
   challenges = [],
+  onChallengeUpdated = () => {},
   teammatePhones = [],
   teammateIds = [],
   user,
@@ -131,6 +133,7 @@ export default function MyTeamTab({
   const [teamStats, setTeamStats] = useState(null);
   const [refreshingStats, setRefreshingStats] = useState(false);
   const [viewSelfTeam, setViewSelfTeam] = useState(false);
+  const [reviewChallenge, setReviewChallenge] = useState(null);
   const [squadLoading, setSquadLoading] = useState(true);
   const [squadError, setSquadError] = useState(null);
   const [cancellingBookingId, setCancellingBookingId] = useState(null);
@@ -491,6 +494,21 @@ export default function MyTeamTab({
         />
       )}
 
+      {/* Challenge Requests Review Modal */}
+      {reviewChallenge && (
+        <ChallengeRequestsReviewModal
+          challenge={reviewChallenge}
+          isOpen={!!reviewChallenge}
+          onClose={() => setReviewChallenge(null)}
+          token={token}
+          onChallengeUpdated={updated => {
+            onChallengeUpdated?.(updated);
+            setReviewChallenge(prev => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));
+          }}
+          theme={theme}
+        />
+      )}
+
       {/* 3. The Three Tabs */}
       <div className="flex gap-2">
         {[
@@ -713,6 +731,17 @@ export default function MyTeamTab({
 
                       {pc.note && (
                         <p className="text-xs mb-2 line-clamp-2" style={{ color: isLight ? "#475569" : "#8fa08f" }}>{pc.note}</p>
+                      )}
+
+                      {Number(pc.pending_requests_count || pc.pending_requests?.length || 0) > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setReviewChallenge(pc)}
+                          className="mt-2 w-full py-2 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 text-white animate-pulse"
+                        >
+                          <span>🔔</span>
+                          <span>Review Team Match Requests ({Number(pc.pending_requests_count || pc.pending_requests?.length || 0)})</span>
+                        </button>
                       )}
                     </div>
                   ))}

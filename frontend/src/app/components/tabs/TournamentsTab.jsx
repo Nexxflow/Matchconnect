@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Award, MapPin, CalendarDays, Clock, ArrowLeftRight, Users, DollarSign, Phone, Trophy, X, Pencil, Trash2, CheckCircle, Info, Plus, Swords, FileText, Download, UploadCloud, AlertCircle, Loader2 } from "lucide-react";
+import React, { useState, useEffect, useMemo } from "react";
+import { Award, MapPin, CalendarDays, Clock, ArrowLeftRight, Users, DollarSign, Phone, Trophy, X, Pencil, Trash2, CheckCircle, Info, Plus, Swords, FileText, Download, UploadCloud, AlertCircle, Loader2, Mail } from "lucide-react";
 import { apiRequest, getStoredToken } from "../../api";
 import CreateTournamentForm from "../CreateTournamentForm";
 import { C, cn, Tag, GhostButton } from "../../utils/helpers.jsx";
@@ -1261,9 +1261,15 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
 
 function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, registered, onRegister, onUnregister, onEdit, onDelete, token, currentUser, myTeamId, teammates, canManageMatches = false, onTournamentUpdated, onNavigateToLiveScore, theme = "dark" }) {
   const isLight = theme === "light";
-  const [details, setDetails] = useState(null);
+  const [details, setDetails] = useState(t);
   const [loadingDetails, setLoadingDetails] = useState(false);
-  const [showTeams, setShowTeams] = useState(false);
+  const [showTeams, setShowTeams] = useState(true);
+
+  useEffect(() => {
+    if (t) {
+      setDetails((prev) => ({ ...(prev || {}), ...t }));
+    }
+  }, [t]);
   const [showMatches, setShowMatches] = useState(false);
   const [matches, setMatches] = useState([]);
   const [showMatchModal, setShowMatchModal] = useState(false);
@@ -1374,7 +1380,32 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
     }
   };
 
-  const pendingRequests = details?.pending_requests || [];
+  const confirmedTeams = useMemo(() => {
+    if (Array.isArray(details?.teams) && details.teams.length > 0) return details.teams;
+    if (Array.isArray(details?.confirmed_teams) && details.confirmed_teams.length > 0) return details.confirmed_teams;
+    if (Array.isArray(t?.teams) && t.teams.length > 0) return t.teams;
+    if (Array.isArray(t?.confirmed_teams) && t.confirmed_teams.length > 0) return t.confirmed_teams;
+    if (Array.isArray(details?.all_registered_teams)) {
+      return details.all_registered_teams.filter((r) => String(r.status || "").trim().toLowerCase() === "confirmed");
+    }
+    if (Array.isArray(t?.all_registered_teams)) {
+      return t.all_registered_teams.filter((r) => String(r.status || "").trim().toLowerCase() === "confirmed");
+    }
+    return [];
+  }, [details, t]);
+
+  const pendingRequests = useMemo(() => {
+    if (Array.isArray(details?.pending_requests) && details.pending_requests.length > 0) return details.pending_requests;
+    if (Array.isArray(t?.pending_requests) && t.pending_requests.length > 0) return t.pending_requests;
+    if (Array.isArray(details?.all_registered_teams)) {
+      return details.all_registered_teams.filter((r) => String(r.status || "").trim().toLowerCase() === "pending");
+    }
+    if (Array.isArray(t?.all_registered_teams)) {
+      return t.all_registered_teams.filter((r) => String(r.status || "").trim().toLowerCase() === "pending");
+    }
+    return [];
+  }, [details, t]);
+
   const myRegStatus = details?.my_registration_status || t?.my_registration_status;
   const [processingRequestId, setProcessingRequestId] = useState(null);
 
@@ -1384,6 +1415,7 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
       alert("Please log in to accept requests.");
       return;
     }
+    const teamName = reg.team_name || reg.name || "Team";
     setProcessingRequestId(reg.registration_id);
     try {
       const res = await apiRequest(`/tournaments/${t.id}/registrations/${reg.registration_id}/accept`, {
@@ -1391,21 +1423,34 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
         token: tok,
       });
       if (res) {
+        const updatedConfirmed = res.confirmed_teams || [
+          ...confirmedTeams,
+          { ...reg, status: "confirmed" },
+        ];
+        const updatedPending = res.pending_requests || pendingRequests.filter(
+          (r) => r.registration_id !== reg.registration_id
+        );
+        const updatedCount = res.team_count ?? updatedConfirmed.length;
+        const updatedSpots = res.spots_left ?? Math.max((t.max_teams || 16) - updatedCount, 0);
+
         setDetails((prev) => ({
           ...(prev || t),
-          teams: res.confirmed_teams || prev?.teams || [],
-          pending_requests: res.pending_requests || [],
-          team_count: res.team_count,
-          spots_left: res.spots_left,
+          teams: updatedConfirmed,
+          confirmed_teams: updatedConfirmed,
+          pending_requests: updatedPending,
+          pending_requests_count: updatedPending.length,
+          team_count: updatedCount,
+          spots_left: updatedSpots,
         }));
         try {
-          const fresh = await apiRequest(`/tournaments/${t.id}`);
+          const fresh = await apiRequest(`/tournaments/${t.id}`, { token: tok });
           if (fresh?.tournament) {
             setDetails(fresh.tournament);
             if (Array.isArray(fresh.tournament.matches)) setMatches(fresh.tournament.matches);
             onTournamentUpdated?.(fresh.tournament);
           }
         } catch {}
+        alert(`🎉 Success! Team "${teamName}" has been accepted and confirmed for "${t.name}"! A confirmation notification was sent to their team.`);
       }
     } catch (err) {
       alert(err.message || "Failed to accept registration request");
@@ -1415,7 +1460,8 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
   };
 
   const handleRejectRequest = async (reg) => {
-    if (!window.confirm(`Decline registration request for "${reg.team_name || reg.name}"?`)) return;
+    const teamName = reg.team_name || reg.name || "Team";
+    if (!window.confirm(`Reject registration request for "${teamName}"? The requested team will be notified that their registration was rejected.`)) return;
     const tok = token || getStoredToken();
     if (!tok) return;
     setProcessingRequestId(reg.registration_id);
@@ -1436,6 +1482,7 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
             onTournamentUpdated?.(fresh.tournament);
           }
         } catch {}
+        alert(`❌ Registration request for team "${teamName}" was rejected. Notification sent to inform their team.`);
       }
     } catch (err) {
       alert(err.message || "Failed to decline registration request");
@@ -1491,7 +1538,8 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
     (async () => {
       setLoadingDetails(true);
       try {
-        const data = await apiRequest(`/tournaments/${t.id}`);
+        const tok = token || getStoredToken();
+        const data = await apiRequest(`/tournaments/${t.id}`, { token: tok });
         if (!cancelled && data?.tournament) {
           setDetails(data.tournament);
           if (Array.isArray(data.tournament.matches)) setMatches(data.tournament.matches);
@@ -1500,7 +1548,7 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
       finally { if (!cancelled) setLoadingDetails(false); }
     })();
     return () => { cancelled = true; };
-  }, [t?.id]);
+  }, [t?.id, token]);
 
   const handleMatchSaved = async (savedMatch) => {
     if (!savedMatch) return;
@@ -1569,13 +1617,13 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
 
-  const confirmedTeams = details?.teams || [];
-  const maxTeams = t.max_teams ?? 0;
-  const teamCount = details?.team_count ?? (t.team_count ?? 0);
+  const activeTour = { ...t, ...(details || {}) };
+  const maxTeams = activeTour.max_teams || 16;
+  const teamCount = confirmedTeams.length || activeTour.team_count || 0;
   const spotsLeft = Math.max(maxTeams - teamCount, 0);
   const full = spotsLeft === 0;
-  const canRegister = t.status === "registering" && !full && !registered && !isMine;
-  const meta = statusMeta(t.status);
+  const canRegister = activeTour.status === "registering" && !full && !registered && !isMine;
+  const meta = statusMeta(activeTour.status);
 
   const dotColor = { green: "#22c55e", amber: "#f59e0b", blue: "#3b82f6", red: "#ef4444" }[meta.color];
 
@@ -1597,9 +1645,9 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
                 <span className="w-1.5 h-1.5 rounded-full bg-white/80 animate-pulse" />
                 {meta.label}
               </span>
-              {t.format && (
+              {activeTour.format && (
                 <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-gradient-to-r from-sky-400 to-blue-500 text-white shadow-sm">
-                  {t.format} Format
+                  {activeTour.format} Format
                 </span>
               )}
               {isMine && (
@@ -1609,9 +1657,9 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
               )}
             </div>
             <h2 className={cn("text-xl font-bold leading-snug truncate bg-gradient-to-r bg-clip-text text-transparent",
-              isLight ? "from-slate-900 to-slate-700" : "from-white to-slate-300")}>{t.name}</h2>
+              isLight ? "from-slate-900 to-slate-700" : "from-white to-slate-300")}>{activeTour.name}</h2>
             <div className="text-xs mt-1 flex items-center gap-1" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
-              <Trophy className="w-3 h-3 text-amber-500" /> {t.creator_team_name || "Unknown organizer"}
+              <Trophy className="w-3 h-3 text-amber-500" /> {activeTour.creator_team_name || "Unknown organizer"}
             </div>
           </div>
           <button onClick={onClose}
@@ -1629,12 +1677,12 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
             style={isLight
               ? { background: "linear-gradient(135deg, #f0fdf4 0%, #f8fafc 100%)", border: "1px solid #d1fae5" }
               : { background: "linear-gradient(135deg, rgba(16,185,129,0.06) 0%, rgba(255,255,255,0.02) 100%)", border: "1px solid #1c1f1c" }}>
-            <DetailRow icon={MapPin} label="Venue" value={t.venue || "TBD"} theme={theme} />
-            <DetailRow icon={CalendarDays} label="Starts" value={t.startDate || "TBD"} theme={theme} />
+            <DetailRow icon={MapPin} label="Venue" value={activeTour.venue || "TBD"} theme={theme} />
+            <DetailRow icon={CalendarDays} label="Starts" value={activeTour.startDate || activeTour.start_date || "TBD"} theme={theme} />
             <DetailRow icon={Users} label="Teams" value={`${teamCount} / ${maxTeams} confirmed`} theme={theme} />
-            <DetailRow icon={DollarSign} label="Entry fee" value={formatMoney(t.entry_fee)} theme={theme} />
-            <DetailRow icon={Phone} label="Contact" value={t.phone || "-"} theme={theme} />
-            <DetailRow icon={Phone} label="Co-contact" value={t.co_phone || "-"} theme={theme} />
+            <DetailRow icon={DollarSign} label="Entry fee" value={formatMoney(activeTour.entry_fee)} theme={theme} />
+            <DetailRow icon={Phone} label="Contact" value={activeTour.phone || "-"} theme={theme} />
+            <DetailRow icon={Phone} label="Co-contact" value={activeTour.co_phone || "-"} theme={theme} />
           </div>
 
           {/* INCOMING TEAM REGISTRATION REQUESTS (Visible ONLY to Tournament Creator) */}
@@ -1665,73 +1713,125 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
                   <Loader2 className="w-4 h-4 animate-spin" /> Loading team requests...
                 </div>
               ) : (
-                <div className="space-y-2 max-h-56 overflow-y-auto">
-                {pendingRequests.map((reqItem) => (
-                  <div
-                    key={reqItem.registration_id}
-                    className={cn(
-                      "flex items-center justify-between p-3 rounded-xl border transition-all gap-2",
-                      isLight
-                        ? "bg-white/95 border-amber-200 shadow-xs hover:border-amber-300"
-                        : "bg-[#181a17] border-amber-500/20 hover:border-amber-500/40"
-                    )}
-                  >
-                    <div className="min-w-0 pr-1">
-                      <div className={cn("text-xs font-black truncate flex items-center gap-1.5", isLight ? "text-slate-900" : "text-white")}>
-                        <span>{reqItem.team_name || reqItem.name}</span>
-                        {reqItem.village_name && (
-                          <span className={cn("text-[10px] font-medium", isLight ? "text-slate-500" : "text-slate-400")}>
-                            ({reqItem.village_name})
+                <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                {pendingRequests.map((reqItem) => {
+                  const phone = reqItem.registered_by_phone || "";
+                  const cleanPhone = phone.replace(/[^0-9]/g, "");
+                  const isProcessing = processingRequestId === reqItem.registration_id;
+                  const teamName = reqItem.team_name || reqItem.name || "Team";
+
+                  return (
+                    <div
+                      key={reqItem.registration_id}
+                      className={cn(
+                        "p-3 rounded-xl border transition-all space-y-2.5 shadow-xs",
+                        isLight
+                          ? "bg-white/95 border-amber-200 hover:border-amber-300"
+                          : "bg-[#181a17] border-amber-500/20 hover:border-amber-500/40"
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2 flex-wrap">
+                        <div className="min-w-0">
+                          <div className={cn("text-xs font-black truncate flex items-center gap-1.5", isLight ? "text-slate-900" : "text-white")}>
+                            <span>🏏 {teamName}</span>
+                            {reqItem.village_name && (
+                              <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded", isLight ? "bg-slate-100 text-slate-700" : "bg-white/10 text-slate-300")}>
+                                📍 {reqItem.village_name}
+                              </span>
+                            )}
+                          </div>
+                          <div className={cn("text-[10px] flex items-center gap-2 mt-0.5 flex-wrap font-medium", isLight ? "text-slate-500" : "text-slate-400")}>
+                            {reqItem.registered_at && (
+                              <span>🕒 Requested: {formatMatchDate(reqItem.registered_at)}</span>
+                            )}
+                            {reqItem.year_formed && (
+                              <span>· 🗓️ Est. {reqItem.year_formed}</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/25 shrink-0">
+                          ⏳ Pending
+                        </span>
+                      </div>
+
+                      {/* Requester details */}
+                      <div className={cn(
+                        "rounded-lg p-2 text-[11px] grid grid-cols-1 sm:grid-cols-2 gap-1.5 border",
+                        isLight ? "bg-slate-50/80 border-slate-200/70" : "bg-[#101210] border-[#222]"
+                      )}>
+                        <div className="truncate">
+                          <span className="text-[10px] font-bold text-slate-400">By: </span>
+                          <span className={cn("font-bold", isLight ? "text-slate-800" : "text-slate-200")}>
+                            {reqItem.registered_by_name || "Team Captain"}
                           </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] font-bold text-slate-400">Phone: </span>
+                          {phone ? (
+                            <div className="flex items-center gap-1">
+                              <span className={cn("font-bold", isLight ? "text-slate-800" : "text-slate-200")}>{phone}</span>
+                              <a href={`tel:${phone}`} className="text-[9px] font-bold px-1 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25">📞 Call</a>
+                              {cleanPhone && (
+                                <a href={`https://wa.me/${cleanPhone}`} target="_blank" rel="noreferrer" className="text-[9px] font-bold px-1 rounded bg-green-500/15 text-green-600 dark:text-green-400 hover:bg-green-500/25">💬 WA</a>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </div>
+
+                        {reqItem.registered_by_email && (
+                          <div className="truncate sm:col-span-2">
+                            <span className="text-[10px] font-bold text-slate-400">Email: </span>
+                            <a href={`mailto:${reqItem.registered_by_email}`} className="text-emerald-600 dark:text-emerald-400 hover:underline">
+                              ✉️ {reqItem.registered_by_email}
+                            </a>
+                          </div>
                         )}
                       </div>
-                      <div className={cn("text-[10px] flex items-center gap-2 mt-0.5 flex-wrap font-medium", isLight ? "text-slate-600" : "text-slate-400")}>
-                        {reqItem.registered_by_name && (
-                          <span>By <strong>{reqItem.registered_by_name}</strong></span>
-                        )}
-                        {reqItem.registered_by_phone && (
-                          <span>· 📞 {reqItem.registered_by_phone}</span>
-                        )}
+
+                      {/* Accept & Reject Buttons */}
+                      <div className="flex items-center gap-2 pt-0.5">
+                        <button
+                          type="button"
+                          disabled={isProcessing || full}
+                          onClick={() => handleAcceptRequest(reqItem)}
+                          className={cn(
+                            "flex-1 py-1.5 px-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 shadow-sm disabled:opacity-50",
+                            isLight
+                              ? "bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 text-white"
+                              : "bg-gradient-to-r from-emerald-400 to-green-400 hover:from-emerald-300 text-black"
+                          )}
+                          title={full ? "Tournament is full" : "Accept and confirm this team"}
+                        >
+                          {isProcessing ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <CheckCircle className="w-3.5 h-3.5" />
+                          )}
+                          <span>✓ Accept Team</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isProcessing}
+                          onClick={() => handleRejectRequest(reqItem)}
+                          className={cn(
+                            "py-1.5 px-3 rounded-lg text-xs font-bold transition-all border flex items-center justify-center gap-1 disabled:opacity-50",
+                            isLight
+                              ? "bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200"
+                              : "bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border-rose-500/25"
+                          )}
+                          title="Reject request"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>Reject</span>
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        disabled={processingRequestId === reqItem.registration_id || full}
-                        onClick={() => handleAcceptRequest(reqItem)}
-                        className={cn(
-                          "px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1 shadow-sm disabled:opacity-50",
-                          isLight
-                            ? "bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 text-white"
-                            : "bg-gradient-to-r from-emerald-400 to-green-400 hover:from-emerald-300 text-black"
-                        )}
-                        title={full ? "Tournament is full" : "Accept and add to Confirmed Teams"}
-                      >
-                        {processingRequestId === reqItem.registration_id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <CheckCircle className="w-3.5 h-3.5" />
-                        )}
-                        <span>Accept</span>
-                      </button>
-                      <button
-                        type="button"
-                        disabled={processingRequestId === reqItem.registration_id}
-                        onClick={() => handleRejectRequest(reqItem)}
-                        className={cn(
-                          "px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1 disabled:opacity-50",
-                          isLight
-                            ? "bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200"
-                            : "bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border-rose-500/25"
-                        )}
-                        title="Decline request"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                        <span>Decline</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -2385,21 +2485,21 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
             )}
           </div>
 
-          {Array.isArray(t.prizes) && t.prizes.length > 0 && (
+          {Array.isArray(activeTour.prizes) && activeTour.prizes.length > 0 && (
             <div className="space-y-2">
               <div className={cn("text-sm font-bold flex items-center gap-1.5", isLight ? "text-slate-900" : "text-white")}>
                 <Award className="w-4 h-4 text-amber-500 drop-shadow" /> Prizes
               </div>
-              <PrizesSummary prizes={t.prizes} theme={theme} />
+              <PrizesSummary prizes={activeTour.prizes} theme={theme} />
             </div>
           )}
 
-          {t.description && (
+          {activeTour.description && (
             <div className="space-y-2">
               <div className={cn("text-sm font-bold flex items-center gap-1.5", isLight ? "text-slate-900" : "text-white")}>
                 <Info className="w-4 h-4 text-emerald-600 dark:text-[#6b7a6b]" /> Description
               </div>
-              <p className={cn("text-sm leading-relaxed", isLight ? "text-slate-600" : "text-[#c8ccc8]")}>{t.description}</p>
+              <p className={cn("text-sm leading-relaxed", isLight ? "text-slate-600" : "text-[#c8ccc8]")}>{activeTour.description}</p>
             </div>
           )}
         </div>
@@ -2410,7 +2510,7 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
 
           {isCreatedUser && (
             <div className="flex gap-2">
-              <button type="button" onClick={() => { onClose(); onEdit?.(t); }}
+              <button type="button" onClick={() => { onClose(); onEdit?.(activeTour); }}
                 className={cn("px-3 py-2 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors border shadow-sm",
                   isLight ? "bg-gradient-to-r from-slate-100 to-slate-50 hover:from-slate-200 hover:to-slate-100 text-slate-800 border-slate-200" : "bg-[#1c1f1c] hover:bg-[#252825] text-white border-[#2a2a2a]")}>
                 <Pencil className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> Edit
@@ -2580,7 +2680,709 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
   );
 }
 
-function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegister, onUnregister, onView, onEdit, onDelete, token, theme = "dark" }) {
+function TournamentRequestsReviewModal({
+  tournament,
+  isOpen,
+  onClose,
+  token,
+  onTournamentUpdated,
+  theme = "dark"
+}) {
+  const isLight = theme === "light";
+  const [details, setDetails] = useState(tournament);
+  const [loading, setLoading] = useState(false);
+  const [processingId, setProcessingId] = useState(null);
+  const [removingTeamId, setRemovingTeamId] = useState(null);
+  const [actionFeedback, setActionFeedback] = useState(null);
+
+  const tId = tournament?.id;
+
+  useEffect(() => {
+    if (tournament) {
+      setDetails((prev) => ({ ...(prev || {}), ...tournament }));
+    }
+  }, [tournament]);
+
+  const loadRequests = async () => {
+    if (!tId) return;
+    setLoading(true);
+    try {
+      const tok = token || getStoredToken();
+      const data = await apiRequest(`/tournaments/${tId}`, { token: tok });
+      if (data?.tournament) {
+        setDetails(data.tournament);
+        onTournamentUpdated?.(data.tournament);
+      }
+    } catch (err) {
+      console.error("Failed to load tournament requests:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && tId) {
+      loadRequests();
+      setActionFeedback(null);
+    }
+  }, [isOpen, tId]);
+
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
+
+  const pendingRequests = useMemo(() => {
+    if (Array.isArray(details?.pending_requests) && details.pending_requests.length > 0) {
+      return details.pending_requests;
+    }
+    if (Array.isArray(tournament?.pending_requests) && tournament.pending_requests.length > 0) {
+      return tournament.pending_requests;
+    }
+    if (Array.isArray(details?.all_registered_teams)) {
+      return details.all_registered_teams.filter(
+        (r) => String(r.status || "").trim().toLowerCase() === "pending"
+      );
+    }
+    if (Array.isArray(tournament?.all_registered_teams)) {
+      return tournament.all_registered_teams.filter(
+        (r) => String(r.status || "").trim().toLowerCase() === "pending"
+      );
+    }
+    return [];
+  }, [details, tournament]);
+
+  const confirmedTeams = useMemo(() => {
+    if (Array.isArray(details?.teams) && details.teams.length > 0) {
+      return details.teams;
+    }
+    if (Array.isArray(details?.confirmed_teams) && details.confirmed_teams.length > 0) {
+      return details.confirmed_teams;
+    }
+    if (Array.isArray(tournament?.teams) && tournament.teams.length > 0) {
+      return tournament.teams;
+    }
+    if (Array.isArray(tournament?.confirmed_teams) && tournament.confirmed_teams.length > 0) {
+      return tournament.confirmed_teams;
+    }
+    if (Array.isArray(details?.all_registered_teams)) {
+      return details.all_registered_teams.filter(
+        (r) => String(r.status || "").trim().toLowerCase() === "confirmed"
+      );
+    }
+    if (Array.isArray(tournament?.all_registered_teams)) {
+      return tournament.all_registered_teams.filter(
+        (r) => String(r.status || "").trim().toLowerCase() === "confirmed"
+      );
+    }
+    return [];
+  }, [details, tournament]);
+
+  const maxTeams = details?.max_teams || tournament?.max_teams || 16;
+  const confirmedCount = confirmedTeams.length || details?.team_count || tournament?.team_count || 0;
+  const spotsLeft = Math.max(maxTeams - confirmedCount, 0);
+  const isFull = spotsLeft === 0;
+
+  if (!isOpen || !tournament) return null;
+
+  const handleAccept = async (reqItem) => {
+    const tok = token || getStoredToken();
+    if (!tok) {
+      setActionFeedback({ type: "error", message: "Please log in to accept requests." });
+      return;
+    }
+    const teamName = reqItem.team_name || reqItem.name || "Team";
+    setProcessingId(reqItem.registration_id);
+    setActionFeedback(null);
+    try {
+      const res = await apiRequest(`/tournaments/${tId}/registrations/${reqItem.registration_id}/accept`, {
+        method: "POST",
+        token: tok,
+      });
+      if (res) {
+        const updatedConfirmed = res.confirmed_teams || [
+          ...confirmedTeams,
+          { ...reqItem, status: "confirmed" },
+        ];
+        const updatedPending = res.pending_requests || pendingRequests.filter(
+          (r) => r.registration_id !== reqItem.registration_id
+        );
+        const updatedCount = res.team_count ?? updatedConfirmed.length;
+        const updatedSpots = res.spots_left ?? Math.max(maxTeams - updatedCount, 0);
+
+        setDetails((prev) => ({
+          ...(prev || tournament),
+          teams: updatedConfirmed,
+          confirmed_teams: updatedConfirmed,
+          pending_requests: updatedPending,
+          pending_requests_count: updatedPending.length,
+          team_count: updatedCount,
+          spots_left: updatedSpots,
+        }));
+
+        const updatedTour = {
+          ...tournament,
+          teams: updatedConfirmed,
+          confirmed_teams: updatedConfirmed,
+          pending_requests: updatedPending,
+          team_count: updatedCount,
+          spots_left: updatedSpots,
+          pending_requests_count: updatedPending.length,
+        };
+        onTournamentUpdated?.(updatedTour);
+        setActionFeedback({
+          type: "success",
+          message: `Team "${teamName}" accepted and confirmed for the tournament! Confirmation notification sent to the team.`,
+        });
+      }
+    } catch (err) {
+      setActionFeedback({
+        type: "error",
+        message: err.message || `Failed to accept registration for "${teamName}"`,
+      });
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleReject = async (reqItem) => {
+    const teamName = reqItem.team_name || reqItem.name || "Team";
+    if (!window.confirm(`Reject registration request for "${teamName}"? The requested team will be notified that their registration was rejected.`)) {
+      return;
+    }
+    const tok = token || getStoredToken();
+    if (!tok) return;
+    setProcessingId(reqItem.registration_id);
+    setActionFeedback(null);
+    try {
+      const res = await apiRequest(`/tournaments/${tId}/registrations/${reqItem.registration_id}/reject`, {
+        method: "POST",
+        token: tok,
+      });
+      if (res) {
+        const updatedPending = res.pending_requests || pendingRequests.filter(
+          (r) => r.registration_id !== reqItem.registration_id
+        );
+        setDetails((prev) => ({
+          ...(prev || tournament),
+          pending_requests: updatedPending,
+          pending_requests_count: updatedPending.length,
+          team_count: res.team_count ?? prev?.team_count ?? tournament.team_count,
+          spots_left: res.spots_left ?? prev?.spots_left ?? tournament.spots_left,
+        }));
+        const updatedTour = {
+          ...tournament,
+          pending_requests: updatedPending,
+          pending_requests_count: updatedPending.length,
+        };
+        onTournamentUpdated?.(updatedTour);
+        setActionFeedback({
+          type: "info",
+          message: `Registration request for "${teamName}" has been rejected. Notification sent to the requested team.`,
+        });
+      }
+    } catch (err) {
+      setActionFeedback({
+        type: "error",
+        message: err.message || `Failed to reject registration for "${teamName}"`,
+      });
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleRemoveConfirmed = async (teamId, teamName) => {
+    if (!window.confirm(`Are you sure you want to remove "${teamName}" from confirmed teams?`)) return;
+    const tok = token || getStoredToken();
+    if (!tok) return;
+    setRemovingTeamId(teamId);
+    setActionFeedback(null);
+    try {
+      const res = await apiRequest(`/tournaments/${tId}/teams/${teamId}`, {
+        method: "DELETE",
+        token: tok,
+      });
+      if (res) {
+        const updatedConfirmed = res.teams || confirmedTeams.filter((t) => t.id !== teamId);
+        const updatedCount = res.team_count ?? updatedConfirmed.length;
+        const updatedSpots = res.spots_left ?? Math.max(maxTeams - updatedCount, 0);
+
+        setDetails((prev) => ({
+          ...(prev || tournament),
+          teams: updatedConfirmed,
+          confirmed_teams: updatedConfirmed,
+          team_count: updatedCount,
+          spots_left: updatedSpots,
+        }));
+
+        onTournamentUpdated?.({
+          ...tournament,
+          teams: updatedConfirmed,
+          confirmed_teams: updatedConfirmed,
+          team_count: updatedCount,
+          spots_left: updatedSpots,
+        });
+
+        setActionFeedback({
+          type: "info",
+          message: `Team "${teamName}" removed from confirmed teams.`,
+        });
+      }
+    } catch (err) {
+      setActionFeedback({
+        type: "error",
+        message: err.message || `Failed to remove "${teamName}"`,
+      });
+    } finally {
+      setRemovingTeamId(null);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4 animate-[fadeIn_.15s_ease-out]"
+      style={{ backgroundColor: isLight ? "rgba(15,23,42,0.6)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(5px)" }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-xl max-h-[90vh] flex flex-col rounded-3xl relative overflow-hidden shadow-2xl transition-all"
+        style={
+          isLight
+            ? { backgroundColor: "#ffffff", border: "1px solid #fde68a", boxShadow: "0 25px 70px -15px rgba(245,158,11,0.25)" }
+            : { backgroundColor: "#111311", border: "1px solid #332a18", boxShadow: "0 25px 70px -15px rgba(0,0,0,0.85)" }
+        }
+        onClick={(e) => e.stopPropagation()}
+      >
+        <ColorBar gradient="from-amber-400 via-orange-500 to-amber-600" />
+
+        {/* Modal Header */}
+        <div
+          className={cn(
+            "px-6 pt-5 pb-4 flex items-start justify-between gap-3 border-b shrink-0",
+            isLight
+              ? "bg-gradient-to-r from-amber-50/80 via-orange-50/40 to-yellow-50/60 border-amber-200"
+              : "bg-gradient-to-r from-amber-950/30 via-[#181611] to-[#121411] border-[#292215]"
+          )}
+        >
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <span className="text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-sm flex items-center gap-1">
+                <span>🔔</span>
+                <span>Team Requests ({pendingRequests.length})</span>
+              </span>
+              <span
+                className={cn(
+                  "text-[11px] font-bold px-2.5 py-0.5 rounded-full border",
+                  isLight
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                    : "bg-emerald-500/10 text-emerald-300 border-emerald-500/25"
+                )}
+              >
+                👥 {confirmedCount} / {maxTeams} confirmed ({spotsLeft} spot{spotsLeft === 1 ? "" : "s"} left)
+              </span>
+            </div>
+            <h3
+              className={cn(
+                "text-lg font-black truncate leading-snug",
+                isLight ? "text-slate-900" : "text-white"
+              )}
+            >
+              {tournament.name}
+            </h3>
+            <p className="text-xs mt-0.5 font-medium" style={{ color: isLight ? "#64748b" : "#8c998c" }}>
+              Review incoming registration requests and view confirmed teams
+            </p>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:scale-105"
+            style={{ color: isLight ? "#64748b" : "#8c998c" }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = isLight ? "#f1f5f9" : "#1f221f")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+            aria-label="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Action Feedback Alert */}
+        {actionFeedback && (
+          <div
+            className={cn(
+              "px-5 py-3 text-xs font-bold flex items-center justify-between gap-3 border-b animate-[fadeIn_.2s_ease-out]",
+              actionFeedback.type === "success"
+                ? (isLight ? "bg-emerald-50 text-emerald-900 border-emerald-200" : "bg-emerald-950/40 text-emerald-300 border-emerald-500/30")
+                : actionFeedback.type === "info"
+                ? (isLight ? "bg-amber-50 text-amber-900 border-amber-200" : "bg-amber-950/40 text-amber-300 border-amber-500/30")
+                : (isLight ? "bg-rose-50 text-rose-900 border-rose-200" : "bg-rose-950/40 text-rose-300 border-rose-500/30")
+            )}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              {actionFeedback.type === "success" ? (
+                <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+              ) : actionFeedback.type === "info" ? (
+                <Info className="w-4 h-4 text-amber-500 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+              )}
+              <span className="truncate">{actionFeedback.message}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActionFeedback(null)}
+              className="text-xs opacity-75 hover:opacity-100 shrink-0 font-extrabold"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* Tournament Full Alert */}
+        {isFull && pendingRequests.length > 0 && (
+          <div
+            className={cn(
+              "px-5 py-2.5 text-xs font-semibold flex items-center gap-2 border-b",
+              isLight ? "bg-orange-50 text-orange-950 border-orange-200" : "bg-orange-950/30 text-orange-300 border-orange-500/25"
+            )}
+          >
+            <AlertCircle className="w-4 h-4 text-orange-500 shrink-0" />
+            <span>
+              Tournament is fully confirmed ({maxTeams}/{maxTeams} teams). You can still review requests or decline them.
+            </span>
+          </div>
+        )}
+
+        {/* Modal Scrollable Body: Incoming Requests + Confirmed Teams */}
+        <div className="p-5 sm:p-6 space-y-6 overflow-y-auto flex-1">
+          {/* SECTION 1: INCOMING REGISTRATION REQUESTS */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                <h4 className={cn("text-sm font-extrabold uppercase tracking-wide", isLight ? "text-slate-900" : "text-white")}>
+                  Incoming Registration Requests ({pendingRequests.length})
+                </h4>
+              </div>
+              <span className={cn(
+                "text-[10px] font-extrabold px-2 py-0.5 rounded-full border",
+                pendingRequests.length > 0
+                  ? (isLight ? "bg-amber-100 text-amber-800 border-amber-300" : "bg-amber-500/15 text-amber-300 border-amber-500/30")
+                  : (isLight ? "bg-slate-100 text-slate-600 border-slate-200" : "bg-white/5 text-slate-400 border-white/10")
+              )}>
+                {pendingRequests.length > 0 ? "Action Required" : "Up to date"}
+              </span>
+            </div>
+
+            {loading && pendingRequests.length === 0 ? (
+              <div className="flex items-center justify-center py-6 gap-2 text-xs font-bold text-amber-600 dark:text-amber-400">
+                <Loader2 className="w-4 h-4 animate-spin" /> Checking incoming requests...
+              </div>
+            ) : pendingRequests.length === 0 ? (
+              <div
+                className={cn(
+                  "rounded-2xl p-5 text-center border space-y-2",
+                  isLight ? "bg-slate-50/80 border-slate-200" : "bg-[#151715] border-[#252825]"
+                )}
+              >
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center mx-auto text-white shadow-sm">
+                  <CheckCircle className="w-5 h-5" />
+                </div>
+                <h5 className={cn("text-xs font-bold", isLight ? "text-slate-800" : "text-white")}>
+                  No Pending Requests
+                </h5>
+                <p className="text-[11px] max-w-sm mx-auto leading-relaxed" style={{ color: isLight ? "#64748b" : "#8c998c" }}>
+                  All incoming team registration requests for this tournament have been reviewed. When another team requests to join, you will see it here.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3.5">
+                {pendingRequests.map((reqItem) => {
+                  const teamName = reqItem.team_name || reqItem.name || "Cricket Team";
+                  const phone = reqItem.registered_by_phone || "";
+                  const cleanPhone = phone.replace(/[^0-9]/g, "");
+                  const isProcessing = processingId === reqItem.registration_id;
+
+                  return (
+                    <div
+                      key={reqItem.registration_id}
+                      className={cn(
+                        "rounded-2xl p-4 border transition-all duration-200 shadow-md relative overflow-hidden",
+                        isLight
+                          ? "bg-gradient-to-br from-white via-amber-50/20 to-orange-50/20 border-amber-200 hover:border-amber-300"
+                          : "bg-gradient-to-br from-[#161815] via-[#1a1814] to-[#141614] border-amber-500/25 hover:border-amber-500/40"
+                      )}
+                    >
+                      {/* Top Row: Team Name & Status Badge */}
+                      <div className="flex items-start justify-between gap-3 mb-2.5">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h5
+                              className={cn(
+                                "text-sm font-black truncate flex items-center gap-1.5",
+                                isLight ? "text-slate-900" : "text-white"
+                              )}
+                            >
+                              <span>🏏 {teamName}</span>
+                            </h5>
+                            {reqItem.village_name && (
+                              <span
+                                className={cn(
+                                  "text-[10px] font-semibold px-2 py-0.5 rounded-md",
+                                  isLight ? "bg-slate-100 text-slate-700" : "bg-white/10 text-slate-300"
+                                )}
+                              >
+                                📍 {reqItem.village_name}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] mt-1 flex items-center gap-2 flex-wrap" style={{ color: isLight ? "#64748b" : "#8c998c" }}>
+                            {reqItem.registered_at && (
+                              <span>🕒 Requested: {formatMatchDate(reqItem.registered_at)}</span>
+                            )}
+                            {reqItem.year_formed && <span>· 🗓️ Est. {reqItem.year_formed}</span>}
+                          </div>
+                        </div>
+
+                        <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/30 flex items-center gap-1 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                          Pending Review
+                        </span>
+                      </div>
+
+                      {/* Requester Contact Grid */}
+                      <div
+                        className={cn(
+                          "rounded-xl p-3 mb-3.5 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs border",
+                          isLight ? "bg-white/80 border-slate-200/80" : "bg-[#0f110f]/80 border-[#222]"
+                        )}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Requested By:</span>
+                          <span className={cn("font-bold truncate", isLight ? "text-slate-900" : "text-white")}>
+                            👤 {reqItem.registered_by_name || "Team Captain"}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Phone:</span>
+                          {phone ? (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={cn("font-bold", isLight ? "text-slate-900" : "text-white")}>{phone}</span>
+                              <a
+                                href={`tel:${phone}`}
+                                className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25 transition-colors"
+                                title="Call Phone Number"
+                              >
+                                📞 Call
+                              </a>
+                              {cleanPhone && (
+                                <a
+                                  href={`https://wa.me/${cleanPhone}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-500/15 text-green-600 dark:text-green-400 hover:bg-green-500/25 transition-colors"
+                                  title="Chat on WhatsApp"
+                                >
+                                  💬 WhatsApp
+                                </a>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </div>
+
+                        {reqItem.registered_by_email && (
+                          <div className="flex items-center gap-2 sm:col-span-2 truncate">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Email:</span>
+                            <a
+                              href={`mailto:${reqItem.registered_by_email}`}
+                              className="font-medium text-emerald-600 dark:text-emerald-400 hover:underline truncate"
+                            >
+                              ✉️ {reqItem.registered_by_email}
+                            </a>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Bottom Action Buttons: Accept / Reject */}
+                      <div className="flex items-center gap-2.5 pt-1">
+                        <button
+                          type="button"
+                          disabled={isProcessing || isFull}
+                          onClick={() => handleAccept(reqItem)}
+                          className={cn(
+                            "flex-1 py-2 px-3.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50 cursor-pointer",
+                            isLight
+                              ? "bg-gradient-to-r from-emerald-500 via-green-600 to-emerald-600 hover:from-emerald-600 hover:to-green-700 text-white shadow-emerald-500/25"
+                              : "bg-gradient-to-r from-emerald-400 via-green-400 to-teal-400 hover:from-emerald-300 text-black shadow-emerald-500/25"
+                          )}
+                          title={isFull ? "Tournament is fully confirmed" : "Accept and confirm this team"}
+                        >
+                          {isProcessing ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <CheckCircle className="w-4 h-4" />
+                          )}
+                          <span>{isProcessing ? "Processing..." : "✓ Accept & Confirm Team"}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isProcessing}
+                          onClick={() => handleReject(reqItem)}
+                          className={cn(
+                            "py-2 px-3.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer shrink-0",
+                            isLight
+                              ? "bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-300 shadow-xs"
+                              : "bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border-rose-500/30"
+                          )}
+                          title="Decline this registration request"
+                        >
+                          {isProcessing ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <X className="w-4 h-4" />
+                          )}
+                          <span>Reject</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* SECTION 2: CONFIRMED TEAMS LIST */}
+          <section className="space-y-3 pt-2 border-t" style={{ borderColor: isLight ? "#f1f5f9" : "#222" }}>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                <h4 className={cn("text-sm font-extrabold uppercase tracking-wide", isLight ? "text-slate-900" : "text-white")}>
+                  Confirmed Teams ({confirmedTeams.length} / {maxTeams})
+                </h4>
+              </div>
+              <span className={cn(
+                "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border",
+                isFull
+                  ? (isLight ? "bg-amber-100 text-amber-900 border-amber-300" : "bg-amber-500/20 text-amber-300 border-amber-500/35")
+                  : (isLight ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-emerald-500/15 text-emerald-300 border-emerald-500/30")
+              )}>
+                {isFull ? "Tournament Full" : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`}
+              </span>
+            </div>
+
+            {confirmedTeams.length === 0 ? (
+              <div
+                className={cn(
+                  "rounded-2xl p-4 text-center border space-y-1.5",
+                  isLight ? "bg-emerald-50/40 border-emerald-200/80" : "bg-emerald-950/15 border-emerald-500/20"
+                )}
+              >
+                <p className={cn("text-xs font-bold", isLight ? "text-emerald-900" : "text-emerald-300")}>
+                  No Teams Confirmed Yet
+                </p>
+                <p className="text-[11px]" style={{ color: isLight ? "#64748b" : "#8c998c" }}>
+                  Review and click "Accept & Confirm Team" on the incoming requests above to confirm teams.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {confirmedTeams.map((team, idx) => {
+                  const teamName = team.team_name || team.name || "Cricket Team";
+                  const isRemoving = removingTeamId === (team.id || team.registration_id);
+
+                  return (
+                    <div
+                      key={team.id || team.registration_id || idx}
+                      className={cn(
+                        "flex items-center justify-between py-2.5 px-3.5 rounded-xl border transition-all shadow-xs",
+                        isLight
+                          ? "bg-white border-slate-200 hover:border-emerald-300"
+                          : "bg-[#141614] border-[#222] hover:border-emerald-500/30"
+                      )}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span
+                          className={cn(
+                            "text-[10px] font-mono font-bold w-5 h-5 rounded-md flex items-center justify-center shrink-0",
+                            isLight ? "bg-emerald-100 text-emerald-800" : "bg-emerald-500/20 text-emerald-300"
+                          )}
+                        >
+                          {idx + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <span className={cn("text-xs font-bold truncate block", isLight ? "text-slate-900" : "text-white")}>
+                            🏏 {teamName}
+                          </span>
+                          {team.village_name && (
+                            <span className="text-[10px] text-slate-400 block truncate">
+                              📍 {team.village_name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-xs">
+                          Confirmed
+                        </span>
+                        <button
+                          type="button"
+                          disabled={isRemoving}
+                          onClick={() => handleRemoveConfirmed(team.id || team.registration_id, teamName)}
+                          title="Remove from confirmed teams"
+                          className={cn(
+                            "p-1.5 rounded-lg transition-colors text-slate-400 hover:text-red-500 hover:bg-red-500/10 cursor-pointer disabled:opacity-50"
+                          )}
+                        >
+                          {isRemoving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </div>
+
+        {/* Modal Footer */}
+        <div
+          className={cn(
+            "px-6 py-3.5 border-t flex items-center justify-between gap-3 shrink-0 text-xs",
+            isLight ? "bg-slate-50 border-slate-200" : "bg-[#0f110f] border-[#222]"
+          )}
+        >
+          <span style={{ color: isLight ? "#64748b" : "#8c998c" }}>
+            {pendingRequests.length} pending request{pendingRequests.length === 1 ? "" : "s"} · {confirmedTeams.length} confirmed team{confirmedTeams.length === 1 ? "" : "s"}
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            className={cn(
+              "px-4 py-1.5 rounded-xl font-bold transition-all border cursor-pointer",
+              isLight
+                ? "bg-white hover:bg-slate-100 text-slate-800 border-slate-300"
+                : "bg-[#181a18] hover:bg-[#222622] text-white border-[#333]"
+            )}
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegister, onUnregister, onView, onReviewRequests, onEdit, onDelete, token, theme = "dark" }) {
   const isLight = theme === "light";
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -2648,8 +3450,12 @@ function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegis
         {(isOrganizer || (isMine && roleLabel === "Organizing")) && Number(t.pending_requests_count || 0) > 0 && (
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); onView(); }}
-            className="text-[11px] font-extrabold px-3 py-1 rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white shadow-md flex items-center gap-1.5 animate-pulse cursor-pointer hover:scale-102 transition-all"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onReviewRequests) onReviewRequests(t);
+              else onView();
+            }}
+            className="text-[11px] font-extrabold px-3 py-1 rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white shadow-md flex items-center gap-1.5 animate-pulse cursor-pointer hover:scale-105 active:scale-95 transition-all"
             title="Click to view and review incoming team registration requests"
           >
             <span>🔔</span>
@@ -2658,39 +3464,6 @@ function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegis
         )}
       </div>
 
-      {/* PROMINENT INCOMING REQUESTS BANNER ON TOURNAMENT CARD FOR CREATOR */}
-      {(isOrganizer || (isMine && roleLabel === "Organizing")) && Number(t.pending_requests_count || 0) > 0 && (
-        <div
-          onClick={(e) => { e.stopPropagation(); onView(); }}
-          className={cn(
-            "mb-3.5 p-3 rounded-xl border flex items-center justify-between gap-2.5 cursor-pointer transition-all hover:scale-[1.01] shadow-sm group",
-            isLight
-              ? "bg-gradient-to-r from-amber-50 via-orange-50/70 to-yellow-50 border-amber-300 text-amber-950 hover:border-amber-400"
-              : "bg-gradient-to-r from-amber-950/40 via-orange-950/25 to-[#1c1812] border-amber-500/40 text-amber-200 hover:border-amber-500/60"
-          )}
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="relative flex h-3 w-3 shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
-            </span>
-            <div className="min-w-0">
-              <div className="text-xs font-black truncate flex items-center gap-1.5">
-                <span>🔔 {t.pending_requests_count} Team Registration Request{Number(t.pending_requests_count) > 1 ? "s" : ""}</span>
-              </div>
-              <p className={cn("text-[11px] truncate font-medium", isLight ? "text-amber-900/80" : "text-amber-300/80")}>
-                Awaiting your approval to confirm spots in this tournament
-              </p>
-            </div>
-          </div>
-          <span className={cn(
-            "text-[11px] font-black px-3 py-1.5 rounded-lg shrink-0 text-white shadow-xs transition-transform group-hover:scale-105",
-            isLight ? "bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700" : "bg-gradient-to-r from-amber-500 to-orange-500 text-black font-extrabold hover:from-amber-400 hover:to-orange-400"
-          )}>
-            Review & Accept →
-          </span>
-        </div>
-      )}
 
       <div className="flex flex-wrap gap-2">
         {isMine ? (
@@ -2823,6 +3596,7 @@ export default function TournamentsTab({ registeredIds = [], onRegister, onUnreg
   const [viewingId, setViewingId] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingTournament, setEditingTournament] = useState(null);
+  const [reviewingTournament, setReviewingTournament] = useState(null);
 
   useEffect(() => {
     if (autoOpenCreate) { setShowCreateForm(true); onAutoOpenHandled?.(); }
@@ -2851,13 +3625,6 @@ export default function TournamentsTab({ registeredIds = [], onRegister, onUnreg
   const otherTournaments = allTournaments.filter((t) => !isMine(t));
   const viewingTournament = allTournaments.find((t) => t.id === viewingId) || null;
 
-  const organizedTournamentsWithPending = allTournaments.filter(
-    (t) => organizerCheck(t) && Number(t.pending_requests_count || 0) > 0
-  );
-  const totalPendingRequests = organizedTournamentsWithPending.reduce(
-    (sum, t) => sum + Number(t.pending_requests_count || 0),
-    0
-  );
 
   useEffect(() => {
     const handleSync = async () => {
@@ -2904,60 +3671,6 @@ export default function TournamentsTab({ registeredIds = [], onRegister, onUnreg
         </button>
       </div>
 
-      {/* TOP NOTIFICATION BANNER FOR INCOMING REQUESTS ACROSS ORGANIZED TOURNAMENTS */}
-      {totalPendingRequests > 0 && (
-        <div
-          className={cn(
-            "p-4 rounded-2xl border shadow-lg relative overflow-hidden animate-[fadeIn_.25s_ease-out]",
-            isLight
-              ? "bg-gradient-to-r from-amber-50 via-orange-50/80 to-yellow-50/90 border-amber-300 shadow-amber-500/10"
-              : "bg-gradient-to-r from-amber-950/60 via-[#1f1911] to-[#14120e] border-amber-500/40 shadow-amber-950/40"
-          )}
-        >
-          <ColorBar gradient="from-amber-400 via-orange-500 to-yellow-500" />
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div className="flex items-start gap-3.5 min-w-0">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-orange-500/30 text-lg">
-                🔔
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className={cn("text-sm font-black tracking-tight", isLight ? "text-amber-950" : "text-amber-200")}>
-                    Incoming Team Registration Requests ({totalPendingRequests})
-                  </h3>
-                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-xs animate-pulse">
-                    Action Required
-                  </span>
-                </div>
-                <p className={cn("text-xs mt-1 leading-relaxed", isLight ? "text-amber-900/80" : "text-amber-300/80")}>
-                  Teams have submitted requests to join your tournament(s). They are not confirmed until you accept them.
-                </p>
-                <div className="flex items-center gap-2 mt-3 flex-wrap">
-                  {organizedTournamentsWithPending.map((tour) => (
-                    <button
-                      key={tour.id}
-                      type="button"
-                      onClick={() => setViewingId(tour.id)}
-                      className={cn(
-                        "px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-xs border hover:scale-[1.02]",
-                        isLight
-                          ? "bg-white hover:bg-amber-100/80 text-amber-950 border-amber-300"
-                          : "bg-[#252019] hover:bg-[#322a20] text-amber-100 border-amber-500/30"
-                      )}
-                    >
-                      <span className="font-extrabold">🏆 {tour.name}</span>
-                      <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-300 font-black text-[10px]">
-                        {tour.pending_requests_count} pending request{Number(tour.pending_requests_count) > 1 ? "s" : ""}
-                      </span>
-                      <span className="text-amber-500 font-bold">Review →</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {myTournaments.length > 0 && (
         <section>
@@ -2976,7 +3689,7 @@ export default function TournamentsTab({ registeredIds = [], onRegister, onUnreg
               <TournamentCard key={t.id} t={t} isMine isOrganizer={organizerCheck(t)}
                 roleLabel={getRoleLabel(t) || "Registered"}
                 registered={registeredIds.includes(t.id) || t.my_registration_status === "confirmed"} onRegister={onRegister} onUnregister={onUnregister}
-                onView={() => setViewingId(t.id)} onEdit={(item) => setEditingTournament(item)}
+                onView={() => setViewingId(t.id)} onReviewRequests={(item) => setReviewingTournament(item)} onEdit={(item) => setEditingTournament(item)}
                 onDelete={(id) => onTournamentDeleted?.(id)} token={token} theme={theme} />
             ))}
           </div>
@@ -3009,7 +3722,7 @@ export default function TournamentsTab({ registeredIds = [], onRegister, onUnreg
               <TournamentCard key={t.id} t={t} isMine={false} isOrganizer={organizerCheck(t)}
                 roleLabel={getRoleLabel(t)}
                 registered={registeredIds.includes(t.id) || t.my_registration_status === "confirmed"} onRegister={onRegister} onUnregister={onUnregister}
-                onView={() => setViewingId(t.id)} onEdit={(item) => setEditingTournament(item)}
+                onView={() => setViewingId(t.id)} onReviewRequests={(item) => setReviewingTournament(item)} onEdit={(item) => setEditingTournament(item)}
                 onDelete={(id) => onTournamentDeleted?.(id)} token={token} theme={theme} />
             ))}
           </div>
@@ -3027,6 +3740,20 @@ export default function TournamentsTab({ registeredIds = [], onRegister, onUnreg
           onTournamentUpdated={onTournamentUpdated} onNavigateToLiveScore={onNavigateToLiveScore} theme={theme} />
       )}
 
+      {reviewingTournament && (
+        <TournamentRequestsReviewModal
+          tournament={reviewingTournament}
+          isOpen={Boolean(reviewingTournament)}
+          onClose={() => setReviewingTournament(null)}
+          token={token}
+          onTournamentUpdated={(updated) => {
+            onTournamentUpdated?.(updated);
+            setReviewingTournament((prev) => (prev && prev.id === updated.id ? { ...prev, ...updated } : null));
+          }}
+          theme={theme}
+        />
+      )}
+
       {showCreateForm && (
         <CreateTournamentForm token={token} user={currentUser} tournaments={allTournaments}
           onClose={() => setShowCreateForm(false)} onCreated={handleCreated} theme={theme} />
@@ -3035,7 +3762,13 @@ export default function TournamentsTab({ registeredIds = [], onRegister, onUnreg
       {editingTournament && (
         <CreateTournamentForm token={token} user={currentUser} tournaments={allTournaments}
           initialTournament={editingTournament} onClose={() => setEditingTournament(null)} theme={theme}
-          onUpdated={(updated) => { onTournamentUpdated?.(updated); setEditingTournament(null); }}
+          onUpdated={(updated) => {
+            onTournamentUpdated?.(updated);
+            if (reviewingTournament && reviewingTournament.id === updated.id) {
+              setReviewingTournament((prev) => ({ ...prev, ...updated }));
+            }
+            setEditingTournament(null);
+          }}
           onDeleted={(id) => { onTournamentDeleted?.(id); setEditingTournament(null); }} />
       )}
     </div>

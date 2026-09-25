@@ -78,18 +78,22 @@ const app = express();
       ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS created_by INTEGER;
       ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS creator_included BOOLEAN DEFAULT true;
 
+      ALTER TABLE tournament_registrations ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'confirmed';
+      ALTER TABLE tournament_registrations ADD COLUMN IF NOT EXISTS registered_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      UPDATE tournament_registrations SET status = 'confirmed' WHERE status IS NULL;
+
       -- Auto-confirm any existing match teams in tournament_registrations
       INSERT INTO tournament_registrations (tournament_id, team_id, status)
       SELECT DISTINCT m.tournament_id, m.team1_id, 'confirmed'
       FROM matches m
       WHERE m.tournament_id IS NOT NULL AND m.team1_id IS NOT NULL
-      ON CONFLICT (tournament_id, team_id) DO UPDATE SET status = 'confirmed';
+      ON CONFLICT (tournament_id, team_id) DO NOTHING;
 
       INSERT INTO tournament_registrations (tournament_id, team_id, status)
       SELECT DISTINCT m.tournament_id, m.team2_id, 'confirmed'
       FROM matches m
       WHERE m.tournament_id IS NOT NULL AND m.team2_id IS NOT NULL
-      ON CONFLICT (tournament_id, team_id) DO UPDATE SET status = 'confirmed';
+      ON CONFLICT (tournament_id, team_id) DO NOTHING;
 
       CREATE TABLE IF NOT EXISTS in_app_notifications (
         id SERIAL PRIMARY KEY,
@@ -140,7 +144,25 @@ const app = express();
       ALTER TABLE challenges ADD COLUMN IF NOT EXISTS slot VARCHAR(20) DEFAULT 'Morning';
 
       ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;
       UPDATE users SET is_admin = true WHERE phone LIKE '%6382757532%';
+
+      CREATE TABLE IF NOT EXISTS challenge_requests (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        challenge_id UUID REFERENCES challenges(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        team_name VARCHAR(150) NOT NULL,
+        contact_no VARCHAR(50) NOT NULL,
+        user_name VARCHAR(150),
+        village_name VARCHAR(150),
+        message TEXT,
+        status VARCHAR(30) DEFAULT 'pending',
+        created_at TIMESTAMPTZ DEFAULT now(),
+        updated_at TIMESTAMPTZ DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_challenge_requests_challenge ON challenge_requests(challenge_id);
+      CREATE INDEX IF NOT EXISTS idx_challenge_requests_user ON challenge_requests(user_id);
+      CREATE INDEX IF NOT EXISTS idx_challenge_requests_status ON challenge_requests(status);
     `);
     console.log("✅ Database schema auto-patch completed");
     

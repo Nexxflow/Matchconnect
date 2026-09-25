@@ -15,7 +15,7 @@ const listTournaments = asyncHandler(async (req, res) => {
     } catch {}
   }
 
-  const { rows } = await pool.query(
+   const { rows } = await pool.query(
     `SELECT
        t.*,
        ct.name AS creator_team_name,
@@ -25,19 +25,21 @@ const listTournaments = asyncHandler(async (req, res) => {
        COALESCE(mt.matches_count, 0)::int AS matches_count,
        COALESCE(mt.completed_count, 0)::int AS completed_count,
        my_reg.status AS my_registration_status,
-       my_reg.id AS my_registration_id
+       my_reg.id AS my_registration_id,
+       COALESCE(conf_teams.list, '[]'::json) AS teams,
+       COALESCE(pend_requests.list, '[]'::json) AS pending_requests
      FROM tournaments t
      LEFT JOIN teams ct ON ct.id = t.creator_team_id
      LEFT JOIN (
        SELECT tournament_id, COUNT(*) AS team_count
        FROM tournament_registrations
-       WHERE status = 'confirmed'
+       WHERE LOWER(TRIM(COALESCE(status, 'confirmed'))) = 'confirmed'
        GROUP BY tournament_id
      ) reg ON reg.tournament_id = t.id
      LEFT JOIN (
        SELECT tournament_id, COUNT(*)::int AS pending_requests_count
        FROM tournament_registrations
-       WHERE status = 'pending'
+       WHERE LOWER(TRIM(COALESCE(status, ''))) = 'pending'
        GROUP BY tournament_id
      ) p_reg ON p_reg.tournament_id = t.id
      LEFT JOIN (
@@ -49,10 +51,56 @@ const listTournaments = asyncHandler(async (req, res) => {
        GROUP BY tournament_id
      ) mt ON mt.tournament_id = t.id
      LEFT JOIN LATERAL (
+       SELECT COALESCE(
+         json_agg(
+           json_build_object(
+             'id', COALESCE(tm.id, r.team_id),
+             'name', COALESCE(tm.name, u.team_name, 'Team'),
+             'team_name', COALESCE(tm.name, u.team_name, 'Team'),
+             'village_name', COALESCE(tm.village_name, u.village_name),
+             'year_formed', COALESCE(tm.year_formed, u.team_year),
+             'status', COALESCE(r.status, 'confirmed'),
+             'registered_at', r.registered_at
+           ) ORDER BY r.registered_at ASC
+         ),
+         '[]'::json
+       ) AS list
+       FROM tournament_registrations r
+       LEFT JOIN teams tm ON tm.id = r.team_id
+       LEFT JOIN users u ON u.id = r.registered_by
+       WHERE r.tournament_id = t.id AND LOWER(TRIM(COALESCE(r.status, 'confirmed'))) = 'confirmed'
+     ) conf_teams ON true
+     LEFT JOIN LATERAL (
+       SELECT COALESCE(
+         json_agg(
+           json_build_object(
+             'registration_id', r.id,
+             'id', COALESCE(tm.id, r.team_id),
+             'name', COALESCE(tm.name, u.team_name, 'Team'),
+             'team_name', COALESCE(tm.name, u.team_name, 'Team'),
+             'village_name', COALESCE(tm.village_name, u.village_name),
+             'year_formed', COALESCE(tm.year_formed, u.team_year),
+             'status', r.status,
+             'registered_at', r.registered_at,
+             'registered_by', r.registered_by,
+             'registered_by_name', u.name,
+             'registered_by_phone', u.phone,
+             'registered_by_email', u.email,
+             'registered_by_avatar', NULL::text
+           ) ORDER BY r.registered_at ASC
+         ),
+         '[]'::json
+       ) AS list
+       FROM tournament_registrations r
+       LEFT JOIN teams tm ON tm.id = r.team_id
+       LEFT JOIN users u ON u.id = r.registered_by
+       WHERE r.tournament_id = t.id AND LOWER(TRIM(COALESCE(r.status, ''))) = 'pending'
+     ) pend_requests ON true
+     LEFT JOIN LATERAL (
        SELECT r.status, r.id
        FROM tournament_registrations r
        WHERE r.tournament_id = t.id
-         AND r.status != 'withdrawn'
+         AND (r.status IS NULL OR LOWER(TRIM(r.status)) != 'withdrawn')
          AND ($1::int IS NOT NULL AND (r.registered_by = $1 OR ($2::uuid IS NOT NULL AND r.team_id = $2)))
        LIMIT 1
      ) my_reg ON true
@@ -91,12 +139,7 @@ async function ensureTournamentTeam(tournamentId, teamName, userId = null) {
       );
 
       if (regRes.rows.length > 0) {
-        if (regRes.rows[0].status !== "confirmed") {
-          await pool.query(
-            `UPDATE tournament_registrations SET status = 'confirmed' WHERE tournament_id = $1 AND team_id = $2`,
-            [tournamentId, teamId]
-          );
-        }
+        // Leave existing status as-is (do NOT auto-confirm pending requests)
       } else {
         // Only insert new team registration if tournament is not yet fully confirmed!
         const tourRes = await pool.query(
@@ -115,7 +158,7 @@ async function ensureTournamentTeam(tournamentId, teamName, userId = null) {
             `INSERT INTO tournament_registrations (tournament_id, team_id, registered_by, status)
              VALUES ($1, $2, $3, 'confirmed')
              ON CONFLICT (tournament_id, team_id)
-             DO UPDATE SET status = 'confirmed'`,
+             DO NOTHING`,
             [tournamentId, teamId, userId]
           );
 
@@ -162,13 +205,23 @@ const getTournament = asyncHandler(async (req, res) => {
   }
 
   const allRegs = await pool.query(
-    `SELECT tm.id, tm.name, tm.village_name, tm.year_formed,
-            r.id AS registration_id, r.status, r.registered_at, r.registered_by,
-            u.name AS registered_by_name, u.phone AS registered_by_phone, u.avatar AS registered_by_avatar
+    `SELECT COALESCE(tm.id, r.team_id) AS id,
+            COALESCE(tm.name, u.team_name, 'Team') AS name,
+            COALESCE(tm.name, u.team_name, 'Team') AS team_name,
+            COALESCE(tm.village_name, u.village_name) AS village_name,
+            COALESCE(tm.year_formed, u.team_year) AS year_formed,
+            r.id AS registration_id,
+            COALESCE(r.status, 'confirmed') AS status,
+            r.registered_at,
+            r.registered_by,
+            u.name AS registered_by_name,
+            u.phone AS registered_by_phone,
+            u.email AS registered_by_email,
+            NULL::text AS registered_by_avatar
      FROM tournament_registrations r
-     JOIN teams tm ON tm.id = r.team_id
+     LEFT JOIN teams tm ON tm.id = r.team_id
      LEFT JOIN users u ON u.id = r.registered_by
-     WHERE r.tournament_id = $1 AND r.status != 'withdrawn'
+     WHERE r.tournament_id = $1 AND (r.status IS NULL OR LOWER(TRIM(r.status)) != 'withdrawn')
      ORDER BY r.registered_at ASC`,
     [id]
   );
@@ -228,8 +281,12 @@ const getTournament = asyncHandler(async (req, res) => {
     (m) => m.status && m.status.toLowerCase() === "completed"
   ).length;
 
-  const confirmedTeams = allRegs.rows.filter((r) => r.status === "confirmed");
-  const pendingRequests = allRegs.rows.filter((r) => r.status === "pending");
+  const confirmedTeams = allRegs.rows.filter(
+    (r) => String(r.status || "").trim().toLowerCase() === "confirmed"
+  );
+  const pendingRequests = allRegs.rows.filter(
+    (r) => String(r.status || "").trim().toLowerCase() === "pending"
+  );
   const confirmedCount = confirmedTeams.length;
 
   const canManage = Boolean(
@@ -258,7 +315,8 @@ const getTournament = asyncHandler(async (req, res) => {
       team_count: confirmedCount,
       spots_left: Math.max(tournament.max_teams - confirmedCount, 0),
       teams: confirmedTeams,
-      pending_requests: canManage ? pendingRequests : [],
+      confirmed_teams: confirmedTeams,
+      pending_requests: pendingRequests,
       pending_requests_count: pendingRequests.length,
       my_registration_status: myRegistration ? myRegistration.status : null,
       my_registration_id: myRegistration ? myRegistration.registration_id : null,
@@ -458,13 +516,31 @@ const createTournament = asyncHandler(async (req, res) => {
       "tournament"
     ).catch((err) => console.error("Tournament notification error:", err.message));
 
+    const initialConfirmedTeams = (include_own_team && myTeam?.id) ? [{
+      id: myTeam.id,
+      name: myTeam.name || teamName || "Team",
+      team_name: myTeam.name || teamName || "Team",
+      village_name: user?.village_name || null,
+      year_formed: user?.team_year || new Date().getFullYear(),
+      status: "confirmed",
+      registered_by: req.user.id,
+      registered_by_name: user?.name || null,
+      registered_by_phone: user?.phone || null,
+    }] : [];
+
     const team_count = include_own_team ? 1 : 0;
     res.status(201).json({
       tournament: {
         ...tournament,
         creator_team_name: teamName,
+        creator_included: include_own_team,
         team_count,
         spots_left: Math.max(tournament.max_teams - team_count, 0),
+        teams: initialConfirmedTeams,
+        confirmed_teams: initialConfirmedTeams,
+        pending_requests: [],
+        pending_requests_count: 0,
+        my_registration_status: include_own_team ? "confirmed" : null,
       },
     });
   } catch (err) {
@@ -911,8 +987,10 @@ const acceptTournamentRegistration = asyncHandler(async (req, res) => {
   }
 
   const regRes = await pool.query(
-    `SELECT r.*, tm.name AS team_name FROM tournament_registrations r
-     JOIN teams tm ON tm.id = r.team_id
+    `SELECT r.*, COALESCE(tm.name, u.team_name, 'Team') AS team_name 
+     FROM tournament_registrations r
+     LEFT JOIN teams tm ON tm.id = r.team_id
+     LEFT JOIN users u ON u.id = r.registered_by
      WHERE r.id = $1 AND r.tournament_id = $2`,
     [registrationId, id]
   );
@@ -931,11 +1009,19 @@ const acceptTournamentRegistration = asyncHandler(async (req, res) => {
     await pool.query(`UPDATE tournaments SET status = 'ongoing' WHERE id = $1`, [id]);
   }
 
-  // Notify team registrant that their request was accepted
+  // Notify team registrant and their teammates that their request was accepted
   if (reg.registered_by) {
     notifyUser(
       reg.registered_by,
-      "Tournament Request Accepted! 🎉",
+      "Tournament Registration Confirmed! 🏆",
+      `Your team "${reg.team_name}" has been confirmed for "${tournament.name}"!`,
+      { type: "tournament_registration_accepted", tournament_id: String(id) },
+      "tournament"
+    ).catch(() => {});
+
+    notifyTeammatesOnly(
+      reg.registered_by,
+      "Tournament Registration Confirmed! 🏆",
       `Your team "${reg.team_name}" has been confirmed for "${tournament.name}"!`,
       { type: "tournament_registration_accepted", tournament_id: String(id) },
       "tournament"
@@ -943,23 +1029,35 @@ const acceptTournamentRegistration = asyncHandler(async (req, res) => {
   }
 
   const allRegs = await pool.query(
-    `SELECT tm.id, tm.name, tm.village_name, tm.year_formed,
-            r.id AS registration_id, r.status, r.registered_at, r.registered_by,
-            u.name AS registered_by_name, u.phone AS registered_by_phone, u.avatar AS registered_by_avatar
+    `SELECT COALESCE(tm.id, r.team_id) AS id,
+            COALESCE(tm.name, u.team_name, 'Team') AS name,
+            COALESCE(tm.name, u.team_name, 'Team') AS team_name,
+            COALESCE(tm.village_name, u.village_name) AS village_name,
+            COALESCE(tm.year_formed, u.team_year) AS year_formed,
+            r.id AS registration_id,
+            COALESCE(r.status, 'confirmed') AS status,
+            r.registered_at,
+            r.registered_by,
+            u.name AS registered_by_name,
+            u.phone AS registered_by_phone,
+            u.email AS registered_by_email,
+            NULL::text AS registered_by_avatar
      FROM tournament_registrations r
-     JOIN teams tm ON tm.id = r.team_id
+     LEFT JOIN teams tm ON tm.id = r.team_id
      LEFT JOIN users u ON u.id = r.registered_by
-     WHERE r.tournament_id = $1 AND r.status != 'withdrawn'
+     WHERE r.tournament_id = $1 AND (r.status IS NULL OR LOWER(TRIM(r.status)) != 'withdrawn')
      ORDER BY r.registered_at ASC`,
     [id]
   );
-  const confirmedTeams = allRegs.rows.filter((r) => r.status === "confirmed");
-  const pendingRequests = allRegs.rows.filter((r) => r.status === "pending");
+  const confirmedTeams = allRegs.rows.filter((r) => String(r.status || "").trim().toLowerCase() === "confirmed");
+  const pendingRequests = allRegs.rows.filter((r) => String(r.status || "").trim().toLowerCase() === "pending");
 
   res.json({
     message: `Team "${reg.team_name}" confirmed for the tournament!`,
+    teams: confirmedTeams,
     confirmed_teams: confirmedTeams,
     pending_requests: pendingRequests,
+    pending_requests_count: pendingRequests.length,
     team_count: confirmedTeams.length,
     spots_left: Math.max(maxTeams - confirmedTeams.length, 0),
     is_full: confirmedTeams.length >= maxTeams,
@@ -985,8 +1083,10 @@ const rejectTournamentRegistration = asyncHandler(async (req, res) => {
   }
 
   const regRes = await pool.query(
-    `SELECT r.*, tm.name AS team_name FROM tournament_registrations r
-     JOIN teams tm ON tm.id = r.team_id
+    `SELECT r.*, COALESCE(tm.name, u.team_name, 'Team') AS team_name 
+     FROM tournament_registrations r
+     LEFT JOIN teams tm ON tm.id = r.team_id
+     LEFT JOIN users u ON u.id = r.registered_by
      WHERE r.id = $1 AND r.tournament_id = $2`,
     [registrationId, id]
   );
@@ -1000,35 +1100,55 @@ const rejectTournamentRegistration = asyncHandler(async (req, res) => {
     [registrationId]
   );
 
-  // Notify team registrant that their request was declined
+  // Notify team registrant and their teammates that their request was rejected
   if (reg.registered_by) {
     notifyUser(
       reg.registered_by,
-      "Tournament Request Update",
-      `Your request to join "${tournament.name}" was declined.`,
+      "Tournament Registration Rejected ❌",
+      `Your registration request for "${reg.team_name}" to join "${tournament.name}" was rejected.`,
+      { type: "tournament_registration_rejected", tournament_id: String(id) },
+      "tournament"
+    ).catch(() => {});
+
+    notifyTeammatesOnly(
+      reg.registered_by,
+      "Tournament Registration Rejected ❌",
+      `Your registration request for "${reg.team_name}" to join "${tournament.name}" was rejected.`,
       { type: "tournament_registration_rejected", tournament_id: String(id) },
       "tournament"
     ).catch(() => {});
   }
 
   const allRegs = await pool.query(
-    `SELECT tm.id, tm.name, tm.village_name, tm.year_formed,
-            r.id AS registration_id, r.status, r.registered_at, r.registered_by,
-            u.name AS registered_by_name, u.phone AS registered_by_phone, u.avatar AS registered_by_avatar
+    `SELECT COALESCE(tm.id, r.team_id) AS id,
+            COALESCE(tm.name, u.team_name, 'Team') AS name,
+            COALESCE(tm.name, u.team_name, 'Team') AS team_name,
+            COALESCE(tm.village_name, u.village_name) AS village_name,
+            COALESCE(tm.year_formed, u.team_year) AS year_formed,
+            r.id AS registration_id,
+            COALESCE(r.status, 'confirmed') AS status,
+            r.registered_at,
+            r.registered_by,
+            u.name AS registered_by_name,
+            u.phone AS registered_by_phone,
+            u.email AS registered_by_email,
+            NULL::text AS registered_by_avatar
      FROM tournament_registrations r
-     JOIN teams tm ON tm.id = r.team_id
+     LEFT JOIN teams tm ON tm.id = r.team_id
      LEFT JOIN users u ON u.id = r.registered_by
-     WHERE r.tournament_id = $1 AND r.status != 'withdrawn'
+     WHERE r.tournament_id = $1 AND (r.status IS NULL OR LOWER(TRIM(r.status)) != 'withdrawn')
      ORDER BY r.registered_at ASC`,
     [id]
   );
-  const confirmedTeams = allRegs.rows.filter((r) => r.status === "confirmed");
-  const pendingRequests = allRegs.rows.filter((r) => r.status === "pending");
+  const confirmedTeams = allRegs.rows.filter((r) => String(r.status || "").trim().toLowerCase() === "confirmed");
+  const pendingRequests = allRegs.rows.filter((r) => String(r.status || "").trim().toLowerCase() === "pending");
 
   res.json({
-    message: `Request for team "${reg.team_name}" was declined`,
+    message: `Request for team "${reg.team_name}" was rejected`,
+    teams: confirmedTeams,
     confirmed_teams: confirmedTeams,
     pending_requests: pendingRequests,
+    pending_requests_count: pendingRequests.length,
     team_count: confirmedTeams.length,
     spots_left: Math.max((tournament.max_teams || 16) - confirmedTeams.length, 0),
   });
@@ -1060,25 +1180,19 @@ const updateTournament = asyncHandler(async (req, res) => {
     entry_fee = 0,
     description = null,
     prizes = [],
+    include_own_team,
+    creator_included,
   } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ error: "Tournament name is required" });
   }
-  if (!Number.isInteger(max_teams) || max_teams < 2) {
+  const parsedMaxTeams = Number(max_teams);
+  if (!Number.isInteger(parsedMaxTeams) || parsedMaxTeams < 2) {
     return res.status(400).json({ error: "Number of teams must be an integer of at least 2" });
   }
   if (!req.user?.id) {
     return res.status(401).json({ error: "You must be logged in to update a tournament" });
-  }
-
-  const existing = await pool.query(`SELECT * FROM tournaments WHERE id = $1`, [id]);
-  if (existing.rows.length === 0) return res.status(404).json({ error: "Tournament not found" });
-
-  // Only the specific user who created/published the tournament can edit it.
-  const isCreator = String(existing.rows[0].created_by) === String(req.user.id);
-  if (!isCreator) {
-    return res.status(403).json({ error: "Only the user who created this tournament can edit it" });
   }
 
   if (!Array.isArray(prizes) || prizes.length < 1 || prizes.length > 3) {
@@ -1096,60 +1210,247 @@ const updateTournament = asyncHandler(async (req, res) => {
     }
   }
 
-  let updatedRes;
-  const updateQuery = `UPDATE tournaments
-     SET name = $1,
-         format = $2,
-         venue = $3,
-         start_date = $4,
-         max_teams = $5,
-         phone = $6,
-         co_phone = $7,
-         entry_fee = $8,
-         description = $9,
-         prizes = $10::jsonb,
-         updated_at = now()
-     WHERE id = $11
-     RETURNING *`;
-  const updateParams = [
-    name.trim(),
-    format,
-    venue,
-    start_date,
-    max_teams,
-    phone,
-    co_phone,
-    entry_fee,
-    description,
-    JSON.stringify(prizes),
-    id,
-  ];
-
+  const client = await pool.connect();
   try {
-    updatedRes = await pool.query(updateQuery, updateParams);
-  } catch (err) {
-    if (err.code === "42703") {
-      // Missing column (e.g. updated_at); ensure column exists and retry
-      await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()`);
-      updatedRes = await pool.query(updateQuery, updateParams);
-    } else {
-      throw err;
+    await client.query("BEGIN");
+
+    const existingRes = await client.query(`SELECT * FROM tournaments WHERE id = $1 FOR UPDATE`, [id]);
+    if (existingRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Tournament not found" });
     }
+    const existing = existingRes.rows[0];
+
+    // Only the specific user who created/published the tournament can edit it.
+    const isCreator = !existing.created_by || String(existing.created_by) === String(req.user.id);
+    if (!isCreator) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ error: "Only the user who created this tournament can edit it" });
+    }
+
+    // Determine whether creator's own team should be included
+    const shouldIncludeOwnTeam = (include_own_team !== undefined)
+      ? Boolean(include_own_team)
+      : (creator_included !== undefined
+          ? Boolean(creator_included)
+          : Boolean(existing.creator_included));
+
+    // Resolve creator's team
+    const userRes = await client.query(
+      `SELECT id, name, team_name, village_name, team_year, team_id FROM users WHERE id = $1`,
+      [req.user.id]
+    );
+    const user = userRes.rows[0];
+
+    let myTeam = null;
+    let creatorTeamId = existing.creator_team_id || user?.team_id || null;
+    if (creatorTeamId) {
+      const teamRes = await client.query(`SELECT id, name FROM teams WHERE id = $1`, [creatorTeamId]);
+      myTeam = teamRes.rows[0] || null;
+    }
+
+    // Fallback: match team by name if team_id didn't resolve
+    if (!myTeam && (user?.team_name?.trim() || user?.name?.trim())) {
+      const tName = user?.team_name?.trim() || `${user?.name?.trim() || "Organizer"}'s XI`;
+      const teamByNameRes = await client.query(
+        `SELECT id, name FROM teams WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
+        [tName]
+      );
+      myTeam = teamByNameRes.rows[0] || null;
+
+      if (!myTeam) {
+        const village = user?.village_name?.trim() || null;
+        const year = user?.team_year ? Number(user.team_year) : new Date().getFullYear();
+        const insRes = await client.query(
+          `INSERT INTO teams (name, village_name, year_formed, created_by)
+           VALUES ($1, $2, $3, $4)
+           RETURNING id, name`,
+          [tName, village, year, req.user.id]
+        );
+        myTeam = insRes.rows[0] || null;
+      }
+
+      if (myTeam && !user?.team_id) {
+        await client.query(
+          `UPDATE users SET team_id = $1 WHERE id = $2 AND team_id IS NULL`,
+          [myTeam.id, req.user.id]
+        );
+      }
+    }
+
+    if (myTeam?.id) {
+      creatorTeamId = myTeam.id;
+    }
+
+    if (shouldIncludeOwnTeam) {
+      if (creatorTeamId) {
+        // Ensure the creator's team is confirmed in tournament_registrations
+        const regCheck = await client.query(
+          `SELECT id, status FROM tournament_registrations WHERE tournament_id = $1 AND team_id = $2`,
+          [id, creatorTeamId]
+        );
+        if (regCheck.rows.length > 0) {
+          await client.query(
+            `UPDATE tournament_registrations
+             SET status = 'confirmed', registered_by = $1, registered_at = COALESCE(registered_at, now())
+             WHERE tournament_id = $2 AND team_id = $3`,
+            [req.user.id, id, creatorTeamId]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO tournament_registrations (tournament_id, team_id, registered_by, status, registered_at)
+             VALUES ($1, $2, $3, 'confirmed', now())
+             ON CONFLICT (tournament_id, team_id)
+             DO UPDATE SET status = 'confirmed', registered_by = EXCLUDED.registered_by`,
+            [id, creatorTeamId, req.user.id]
+          );
+        }
+      }
+    } else {
+      // Creator is NOT included: mark creator team's registration as withdrawn
+      if (creatorTeamId) {
+        await client.query(
+          `UPDATE tournament_registrations
+           SET status = 'withdrawn'
+           WHERE tournament_id = $1 AND team_id = $2`,
+          [id, creatorTeamId]
+        );
+      }
+      await client.query(
+        `UPDATE tournament_registrations
+         SET status = 'withdrawn'
+         WHERE tournament_id = $1 AND registered_by = $2 AND status = 'confirmed'`,
+        [id, req.user.id]
+      );
+    }
+
+    const updateQuery = `UPDATE tournaments
+       SET name = $1,
+           format = COALESCE($2, format, 'T20'),
+           venue = $3,
+           start_date = $4,
+           max_teams = $5,
+           phone = $6,
+           co_phone = $7,
+           entry_fee = $8,
+           description = $9,
+           prizes = $10::jsonb,
+           creator_included = $11,
+           creator_team_id = COALESCE($12, creator_team_id),
+           updated_at = now()
+       WHERE id = $13
+       RETURNING *`;
+    const updateParams = [
+      name.trim(),
+      format || existing.format || "T20",
+      venue !== undefined ? (venue?.trim() || null) : existing.venue,
+      start_date !== undefined ? start_date : existing.start_date,
+      parsedMaxTeams,
+      phone !== undefined ? (phone?.trim() || null) : existing.phone,
+      co_phone !== undefined ? (co_phone?.trim() || null) : existing.co_phone,
+      Number(entry_fee) || 0,
+      description !== undefined ? (description?.trim() || null) : existing.description,
+      JSON.stringify(prizes),
+      shouldIncludeOwnTeam,
+      shouldIncludeOwnTeam ? (creatorTeamId || existing.creator_team_id) : existing.creator_team_id,
+      id,
+    ];
+
+    let updatedRes;
+    try {
+      updatedRes = await client.query(updateQuery, updateParams);
+    } catch (err) {
+      if (err.code === "42703") {
+        await client.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()`);
+        await client.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS creator_included BOOLEAN DEFAULT true`);
+        await client.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS creator_team_id UUID REFERENCES teams(id)`);
+        updatedRes = await client.query(updateQuery, updateParams);
+      } else {
+        throw err;
+      }
+    }
+
+    const countRes = await client.query(
+      `SELECT COUNT(*)::int AS count FROM tournament_registrations WHERE tournament_id = $1 AND status = 'confirmed'`,
+      [id]
+    );
+    const confirmedCount = countRes.rows[0]?.count || 0;
+
+    if (confirmedCount >= parsedMaxTeams && updatedRes.rows[0].status === "registering") {
+      await client.query(`UPDATE tournaments SET status = 'ongoing' WHERE id = $1`, [id]);
+      updatedRes.rows[0].status = "ongoing";
+    } else if (confirmedCount < parsedMaxTeams && updatedRes.rows[0].status === "ongoing") {
+      const matchCheck = await client.query(
+        `SELECT COUNT(*)::int AS count FROM matches WHERE tournament_id = $1 AND status = 'completed'`,
+        [id]
+      );
+      if ((matchCheck.rows[0]?.count || 0) === 0) {
+        await client.query(`UPDATE tournaments SET status = 'registering' WHERE id = $1`, [id]);
+        updatedRes.rows[0].status = "registering";
+      }
+    }
+
+    await client.query("COMMIT");
+
+    // Fetch full confirmed teams and pending requests
+    const allRegs = await pool.query(
+      `SELECT COALESCE(tm.id, r.team_id) AS id,
+              COALESCE(tm.name, u.team_name, 'Team') AS name,
+              COALESCE(tm.name, u.team_name, 'Team') AS team_name,
+              COALESCE(tm.village_name, u.village_name) AS village_name,
+              COALESCE(tm.year_formed, u.team_year) AS year_formed,
+              r.id AS registration_id,
+              COALESCE(r.status, 'confirmed') AS status,
+              r.registered_at,
+              r.registered_by,
+              u.name AS registered_by_name,
+              u.phone AS registered_by_phone,
+              u.email AS registered_by_email,
+              NULL::text AS registered_by_avatar
+       FROM tournament_registrations r
+       LEFT JOIN teams tm ON tm.id = r.team_id
+       LEFT JOIN users u ON u.id = r.registered_by
+       WHERE r.tournament_id = $1 AND (r.status IS NULL OR LOWER(TRIM(r.status)) != 'withdrawn')
+       ORDER BY r.registered_at ASC`,
+      [id]
+    );
+
+    const confirmedTeams = allRegs.rows.filter(
+      (r) => String(r.status || "").trim().toLowerCase() === "confirmed"
+    );
+    const pendingRequests = allRegs.rows.filter(
+      (r) => String(r.status || "").trim().toLowerCase() === "pending"
+    );
+
+    const creatorTeamRes = updatedRes.rows[0].creator_team_id
+      ? await pool.query(`SELECT name FROM teams WHERE id = $1`, [updatedRes.rows[0].creator_team_id])
+      : { rows: [] };
+    const creatorTeamName = creatorTeamRes.rows[0]?.name || myTeam?.name || user?.team_name || null;
+
+    res.json({
+      message: "Tournament updated successfully",
+      tournament: {
+        ...updatedRes.rows[0],
+        creator_team_name: creatorTeamName,
+        creator_included: shouldIncludeOwnTeam,
+        team_count: confirmedTeams.length,
+        spots_left: Math.max(updatedRes.rows[0].max_teams - confirmedTeams.length, 0),
+        teams: confirmedTeams,
+        confirmed_teams: confirmedTeams,
+        pending_requests: pendingRequests,
+        pending_requests_count: pendingRequests.length,
+        my_registration_status: shouldIncludeOwnTeam ? "confirmed" : null,
+        all_registered_teams: allRegs.rows,
+        can_manage: true,
+      },
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    throw err;
+  } finally {
+    client.release();
   }
-
-  const team_count_res = await pool.query(
-    `SELECT COUNT(*)::int AS count FROM tournament_registrations WHERE tournament_id = $1 AND status = 'confirmed'`,
-    [id]
-  );
-  const team_count = team_count_res.rows[0]?.count || 0;
-
-  res.json({
-    tournament: {
-      ...updatedRes.rows[0],
-      team_count,
-      spots_left: Math.max(updatedRes.rows[0].max_teams - team_count, 0),
-    },
-  });
 });
 
 const deleteTournament = asyncHandler(async (req, res) => {

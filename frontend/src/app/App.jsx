@@ -57,6 +57,14 @@ function normalizeChallenge(c) {
     rating: c.team_rating != null ? Number(c.team_rating) : (c.rating ? Number(c.rating) : 5.0),
     reliabilityScore: c.reliability_score != null ? Number(c.reliability_score) : 5.0,
     reviewsCount: Number(c.reviews_count) || 0,
+    pending_requests_count: Number(c.pending_requests_count) || (Array.isArray(c.pending_requests) ? c.pending_requests.length : 0),
+    pending_requests: Array.isArray(c.pending_requests) ? c.pending_requests : [],
+    pendingRequestsCount: Number(c.pending_requests_count) || (Array.isArray(c.pending_requests) ? c.pending_requests.length : 0),
+    pendingRequests: Array.isArray(c.pending_requests) ? c.pending_requests : [],
+    my_request_status: c.my_request_status || null,
+    myRequestStatus: c.my_request_status || null,
+    my_request_id: c.my_request_id || null,
+    myRequestId: c.my_request_id || null,
     latestReview: c.latest_review || (c.latest_review_text ? {
       reviewer_name: c.latest_reviewer_name || "Cricket Player",
       reviewer_team_name: c.latest_reviewer_team_name || null,
@@ -218,7 +226,7 @@ export default function App() {
       const [groundsRes, umpiresRes, tournamentsRes, challengesRes] = await Promise.all([
         apiRequest("/grounds"),
         apiRequest("/umpires"),
-        apiRequest("/tournaments"),
+        apiRequest("/tournaments", { token }),
         apiRequest("/challenges", { token })
       ]);
       setGrounds(groundsRes.grounds.map(transformGround));
@@ -521,7 +529,7 @@ export default function App() {
         setPushNotifications((prev) => [newNotif, ...prev]);
 
         // Automatically update challenges and reviews if feedback or challenge notification arrives
-        if (type === "team_feedback" || type === "new_challenge" || type === "challenge_accepted" || type === "challenge_cancelled") {
+        if (type === "team_feedback" || type.includes("challenge") || type.includes("tournament")) {
           refreshChallenges();
         }
 
@@ -803,8 +811,17 @@ export default function App() {
   };
   const handleTournamentUpdated = (raw) => {
     const t = transformTournament(raw);
+    if (!t) return;
     setTournaments(prev => prev.map(item => item.id === t.id ? { ...item, ...t } : item));
+    if (raw?.creator_included && raw?.id) {
+      setRegisteredIds(prev => (prev.includes(raw.id) ? prev : [...prev, raw.id]));
+    } else if (raw?.creator_included === false && raw?.id) {
+      setRegisteredIds(prev => prev.filter(item => item !== raw.id));
+    }
     refreshTournaments();
+    if (auth?.token) {
+      loadMyTeamAndRegistrations(auth.token);
+    }
   };
   const handleTournamentDeleted = (id) => {
     setTournaments(prev => prev.filter(item => item.id !== id));
@@ -949,6 +966,7 @@ export default function App() {
         cancelling={cancellingChallenge}
         onOpenChat={setChatChallenge}
         challenges={challenges}
+        onChallengeUpdated={handleChallengeUpdated}
         teammatePhones={teammates.phones}
         teammateIds={teammates.ids}
         user={auth.user}

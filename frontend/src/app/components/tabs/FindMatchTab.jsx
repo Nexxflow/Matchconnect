@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Plus, X, Calendar, Clock, Search, ChevronDown, MapPin, Phone, XCircle, AlertCircle, Users, Star, RotateCcw, Zap, Edit } from "lucide-react";
+import { Plus, X, Calendar, Clock, Search, ChevronDown, MapPin, Phone, XCircle, AlertCircle, Users, Star, RotateCcw, Zap, Edit, CheckCircle, Loader2, Info } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -1068,12 +1068,13 @@ function EditChallengeModal({ challenge, token, user, grounds = [], onUpdated, o
 }
 
 /* ============================================================================
-   ACCEPT CHALLENGE MODAL
+   REQUEST TO PLAY / ACCEPT CHALLENGE MODAL
    ============================================================================ */
 function AcceptChallengeModal({ challenge, token, user, hasActiveConflict, onClose, onAccepted, theme }) {
   const isLight = detectLight(theme);
   const t = tokens(isLight);
   const [teamName, setTeamName] = useState(user?.team_name || "");
+  const [message, setMessage] = useState("");
   const contact = user?.phone || "";
   const normalizedContact = normalizePhone(contact);
   const [submitting, setSubmitting] = useState(false);
@@ -1088,7 +1089,7 @@ function AcceptChallengeModal({ challenge, token, user, hasActiveConflict, onClo
     e.preventDefault();
     if (hasActiveConflict && hasActiveConflict(challenge.rawDate, challenge.slot)) {
       const other = challenge.slot === "Morning" ? "Afternoon" : "Morning";
-      return setError(`You already have an active match on this date (${challenge.date}) in the ${challenge.slot} slot. You can accept matches on other dates or in the ${other} slot.`);
+      return setError(`You already have an active match on this date (${challenge.date}) in the ${challenge.slot} slot. You can request matches on other dates or in the ${other} slot.`);
     }
     const missing = [];
     if (!user?.name?.trim()) missing.push("Name");
@@ -1101,19 +1102,25 @@ function AcceptChallengeModal({ challenge, token, user, hasActiveConflict, onClo
       return setError(msg);
     }
 
-    if (!token) return setError("You need to be logged in to accept a challenge.");
+    if (!token) return setError("You need to be logged in to send a match request.");
 
     setSubmitting(true);
     setError(null);
     try {
-      const res = await apiRequest(`/challenges/${challenge.id}/accept`, {
+      const res = await apiRequest(`/challenges/${challenge.id}/request`, {
         method: "POST",
         token,
-        body: { team_name: teamName.trim(), contact_no: contact.trim() }
+        body: {
+          team_name: teamName.trim(),
+          contact_no: contact.trim(),
+          message: message.trim() || null,
+          village_name: user?.village_name || null,
+        }
       });
+      alert(res.message || `Match request sent to ${challenge.team}! The team captain will review and accept your request.`);
       onAccepted(res.challenge);
     } catch (err) {
-      setError(err.message || "Could not accept challenge. It may no longer be open.");
+      setError(err.message || "Could not send match request. It may no longer be open.");
     } finally {
       setSubmitting(false);
     }
@@ -1123,9 +1130,9 @@ function AcceptChallengeModal({ challenge, token, user, hasActiveConflict, onClo
     <Modal isLight={isLight} onClose={onClose} maxWidth="max-w-md">
       <Card isLight={isLight} className="p-5">
         <form onSubmit={handleSubmit} className="space-y-4">
-          <ModalHeader isLight={isLight} title={`Accept vs ${challenge.team}`} onClose={onClose} />
+          <ModalHeader isLight={isLight} title={`Request Match vs ${challenge.team}`} onClose={onClose} />
           <p className="text-sm" style={{ color: t.sub }}>
-            {challenge.team} will get your team name and number so both captains can lock in the details.
+            {challenge.team}'s captain will review your match request. Once accepted, your match will be locked in!
           </p>
           <div className="rounded-xl p-3 border text-xs space-y-1" style={{ backgroundColor: t.cardAlt, borderColor: t.border }}>
             <div className="font-semibold" style={{ color: t.text }}>Challenge Schedule:</div>
@@ -1137,6 +1144,7 @@ function AcceptChallengeModal({ challenge, token, user, hasActiveConflict, onClo
               </span>
               <span>·</span>
               <span>⏰ {prettyTime(challenge.time)}</span>
+              {challenge.ground && <span>· 📍 {challenge.ground}</span>}
             </div>
           </div>
           <div>
@@ -1158,7 +1166,18 @@ function AcceptChallengeModal({ challenge, token, user, hasActiveConflict, onClo
               className="w-full rounded-xl px-3 py-2.5 text-sm cursor-not-allowed opacity-80"
               style={fieldStyle(isLight)}
             />
-            <p className="text-xs mt-1" style={{ color: t.faint }}>Wrong number? Update it in your profile.</p>
+            <p className="text-xs mt-1" style={{ color: t.faint }}>Shared with opponent captain so they can call or WhatsApp you.</p>
+          </div>
+          <div>
+            <Label isLight={isLight}>Message / Notes for Opponent Captain (Optional)</Label>
+            <textarea
+              value={message}
+              onChange={e => setMessage(e.target.value)}
+              placeholder="e.g. Ready with 11 players, looking for a friendly match!"
+              rows={2}
+              className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none resize-none"
+              style={fieldStyle(isLight)}
+            />
           </div>
           {error && (
             <div className="text-xs rounded-xl p-3 font-medium border" style={{ backgroundColor: t.redSoft, borderColor: t.redBorder, color: t.red }}>
@@ -1170,10 +1189,358 @@ function AcceptChallengeModal({ challenge, token, user, hasActiveConflict, onClo
               Cancel
             </OutlineButton>
             <PrimaryButton type="submit" disabled={submitting || !contact} className="flex-1">
-              {submitting ? "Accepting..." : "Confirm & Accept"}
+              {submitting ? "Sending Request..." : "Send Match Request"}
             </PrimaryButton>
           </div>
         </form>
+      </Card>
+    </Modal>
+  );
+}
+
+/* ============================================================================
+   CHALLENGE REQUESTS REVIEW MODAL (for Challenge Creator)
+   ============================================================================ */
+export function ChallengeRequestsReviewModal({ challenge, isOpen, onClose, token, onChallengeUpdated, theme }) {
+  if (!isOpen || !challenge) return null;
+  const isLight = detectLight(theme);
+  const t = tokens(isLight);
+
+  const initialRequests = challenge.pending_requests || challenge.pendingRequests || [];
+  const [requests, setRequests] = useState(initialRequests);
+  const [loading, setLoading] = useState(false);
+  const [processingId, setProcessingId] = useState(null);
+  const [actionFeedback, setActionFeedback] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchRequests = async () => {
+      if (!token || !challenge?.id) return;
+      setLoading(true);
+      try {
+        const res = await apiRequest(`/challenges/${challenge.id}/requests`, { token });
+        if (!cancelled && res?.requests) {
+          setRequests(res.requests);
+        }
+      } catch (err) {
+        console.warn("Could not fetch challenge requests:", err.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    fetchRequests();
+    return () => { cancelled = true; };
+  }, [challenge?.id, token]);
+
+  const handleAccept = async (reqItem) => {
+    setProcessingId(reqItem.id);
+    setActionFeedback(null);
+    try {
+      const res = await apiRequest(`/challenges/${challenge.id}/requests/${reqItem.id}/accept`, {
+        method: "POST",
+        token,
+      });
+      if (res?.challenge) {
+        setActionFeedback({
+          type: "success",
+          message: `Match confirmed against Team "${reqItem.team_name}"!`,
+        });
+        onChallengeUpdated?.(res.challenge);
+        setTimeout(() => {
+          onClose();
+        }, 1200);
+      }
+    } catch (err) {
+      setActionFeedback({
+        type: "error",
+        message: err.message || "Failed to accept request",
+      });
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleReject = async (reqItem) => {
+    setProcessingId(reqItem.id);
+    setActionFeedback(null);
+    try {
+      const res = await apiRequest(`/challenges/${challenge.id}/requests/${reqItem.id}/reject`, {
+        method: "POST",
+        token,
+      });
+      const updated = requests.filter(r => r.id !== reqItem.id);
+      setRequests(updated);
+      setActionFeedback({
+        type: "info",
+        message: `Request from Team "${reqItem.team_name}" declined.`,
+      });
+      onChallengeUpdated?.({
+        ...challenge,
+        pending_requests: updated,
+        pending_requests_count: updated.length,
+      });
+    } catch (err) {
+      setActionFeedback({
+        type: "error",
+        message: err.message || "Failed to decline request",
+      });
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  return (
+    <Modal isLight={isLight} onClose={onClose} maxWidth="max-w-xl">
+      <Card isLight={isLight} className="p-0 overflow-hidden flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div
+          className={cn(
+            "px-6 pt-5 pb-4 flex items-start justify-between gap-3 border-b shrink-0",
+            isLight
+              ? "bg-gradient-to-r from-amber-50/90 via-orange-50/50 to-yellow-50/60 border-amber-200"
+              : "bg-gradient-to-r from-amber-950/40 via-[#181611] to-[#121411] border-[#292215]"
+          )}
+        >
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <span className="text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-sm flex items-center gap-1">
+                <span>🔔</span>
+                <span>Team Match Requests ({requests.length})</span>
+              </span>
+              <span
+                className={cn(
+                  "text-[11px] font-bold px-2 py-0.5 rounded-full border",
+                  isLight ? "bg-amber-100 text-amber-900 border-amber-300" : "bg-amber-500/20 text-amber-300 border-amber-500/35"
+                )}
+              >
+                Needs Your Approval
+              </span>
+            </div>
+            <h3 className={cn("text-lg font-black truncate leading-snug", isLight ? "text-slate-900" : "text-white")}>
+              {challenge.team_name || challenge.team || "Your Challenge"}
+            </h3>
+            <div className="flex items-center gap-2 text-xs mt-0.5 flex-wrap" style={{ color: t.sub }}>
+              <span>📅 {challenge.date || challenge.match_date}</span>
+              <span>·</span>
+              <span className="font-bold" style={{ color: t.green }}>
+                {challenge.slot === "Morning" ? "🌅 Morning" : "☀️ Afternoon"}
+              </span>
+              <span>·</span>
+              <span>⏰ {prettyTime(challenge.time_slot || challenge.time)}</span>
+              {(challenge.ground_name || challenge.ground) && <span>· 📍 {challenge.ground_name || challenge.ground}</span>}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:scale-105 cursor-pointer"
+            style={{ color: isLight ? "#64748b" : "#8c998c" }}
+            aria-label="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Feedback Alert */}
+        {actionFeedback && (
+          <div
+            className={cn(
+              "px-5 py-3 text-xs font-bold flex items-center justify-between gap-3 border-b animate-[fadeIn_.2s_ease-out]",
+              actionFeedback.type === "success"
+                ? (isLight ? "bg-emerald-50 text-emerald-900 border-emerald-200" : "bg-emerald-950/40 text-emerald-300 border-emerald-500/30")
+                : actionFeedback.type === "info"
+                ? (isLight ? "bg-amber-50 text-amber-900 border-amber-200" : "bg-amber-950/40 text-amber-300 border-amber-500/30")
+                : (isLight ? "bg-rose-50 text-rose-900 border-rose-200" : "bg-rose-950/40 text-rose-300 border-rose-500/30")
+            )}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              {actionFeedback.type === "success" ? (
+                <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+              ) : actionFeedback.type === "info" ? (
+                <Info className="w-4 h-4 text-amber-500 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+              )}
+              <span className="truncate">{actionFeedback.message}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActionFeedback(null)}
+              className="text-xs opacity-75 hover:opacity-100 shrink-0 font-extrabold cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* Content list */}
+        <div className="p-5 overflow-y-auto space-y-3.5 flex-1">
+          {loading && requests.length === 0 ? (
+            <div className="flex items-center justify-center p-8 gap-2 text-xs font-bold text-amber-600 dark:text-amber-400">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading match requests...
+            </div>
+          ) : requests.length === 0 ? (
+            <div
+              className={cn(
+                "rounded-2xl p-8 text-center border space-y-1.5",
+                isLight ? "bg-slate-50 border-slate-200" : "bg-[#141614] border-[#222]"
+              )}
+            >
+              <div className="text-3xl mb-1">🏏</div>
+              <p className={cn("text-sm font-bold", isLight ? "text-slate-800" : "text-white")}>
+                No Pending Match Requests
+              </p>
+              <p className="text-xs max-w-sm mx-auto" style={{ color: t.sub }}>
+                When other teams send a request to play vs your challenge, their details and captain contact will appear here for review.
+              </p>
+            </div>
+          ) : (
+            requests.map((reqItem) => {
+              const phone = reqItem.contact_no || reqItem.user_phone || "";
+              const cleanPhone = phone.replace(/\D/g, "");
+              const isProcessing = processingId === reqItem.id;
+              const teamName = reqItem.team_name || "Opponent Team";
+
+              return (
+                <div
+                  key={reqItem.id}
+                  className={cn(
+                    "p-4 rounded-2xl border transition-all space-y-3 shadow-xs",
+                    isLight
+                      ? "bg-white border-amber-200 hover:border-amber-300"
+                      : "bg-[#151715] border-amber-500/25 hover:border-amber-500/40"
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div className="min-w-0">
+                      <div className={cn("text-base font-black truncate flex items-center gap-2", isLight ? "text-slate-900" : "text-white")}>
+                        <span>🏏 {teamName}</span>
+                        {reqItem.village_name && (
+                          <span
+                            className={cn(
+                              "text-[10px] font-semibold px-2 py-0.5 rounded-full border",
+                              isLight ? "bg-slate-100 text-slate-700 border-slate-200" : "bg-white/10 text-slate-300 border-white/10"
+                            )}
+                          >
+                            📍 {reqItem.village_name}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] flex items-center gap-2 mt-0.5 flex-wrap font-medium" style={{ color: t.sub }}>
+                        {reqItem.created_at && (
+                          <span>🕒 Requested: {formatDateIST(reqItem.created_at)}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/25 shrink-0">
+                      ⏳ Pending Approval
+                    </span>
+                  </div>
+
+                  {/* Requester Contact details */}
+                  <div
+                    className={cn(
+                      "rounded-xl p-2.5 text-xs grid grid-cols-1 sm:grid-cols-2 gap-2 border",
+                      isLight ? "bg-slate-50 border-slate-200" : "bg-[#101210] border-[#222]"
+                    )}
+                  >
+                    <div className="truncate">
+                      <span className="text-[11px] font-bold" style={{ color: t.faint }}>Captain: </span>
+                      <span className={cn("font-bold", isLight ? "text-slate-800" : "text-slate-200")}>
+                        {reqItem.user_name || "Team Captain"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11px] font-bold" style={{ color: t.faint }}>Phone: </span>
+                      {phone ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className={cn("font-bold font-mono", isLight ? "text-slate-800" : "text-slate-200")}>
+                            {phone}
+                          </span>
+                          <a
+                            href={`tel:${phone}`}
+                            className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25"
+                          >
+                            📞 Call
+                          </a>
+                          {cleanPhone && (
+                            <a
+                              href={`https://wa.me/${cleanPhone}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-500/15 text-green-600 dark:text-green-400 hover:bg-green-500/25"
+                            >
+                              💬 WA
+                            </a>
+                          )}
+                        </div>
+                      ) : (
+                        <span style={{ color: t.faint }}>-</span>
+                      )}
+                    </div>
+
+                    {reqItem.message && (
+                      <div className="sm:col-span-2 pt-1 border-t text-xs italic" style={{ color: t.sub, borderColor: t.border }}>
+                        "{reqItem.message}"
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Accept and Reject Buttons */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      disabled={isProcessing}
+                      onClick={() => handleAccept(reqItem)}
+                      className={cn(
+                        "flex-1 py-2 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50 cursor-pointer",
+                        isLight
+                          ? "bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 text-white"
+                          : "bg-gradient-to-r from-emerald-400 to-green-400 hover:from-emerald-300 text-black"
+                      )}
+                      title="Confirm this match challenge"
+                    >
+                      {isProcessing ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <CheckCircle className="w-3.5 h-3.5" />
+                      )}
+                      <span>✓ Accept & Confirm Match</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isProcessing}
+                      onClick={() => handleReject(reqItem)}
+                      className={cn(
+                        "py-2 px-4 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer",
+                        isLight
+                          ? "bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200"
+                          : "bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border-rose-500/25"
+                      )}
+                      title="Decline request"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>Reject</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Footer */}
+        <div
+          className={cn(
+            "px-6 py-3.5 flex justify-end border-t shrink-0",
+            isLight ? "bg-slate-50 border-slate-200" : "bg-[#111311] border-[#1f221f]"
+          )}
+        >
+          <OutlineButton isLight={isLight} type="button" onClick={onClose} className="px-5 py-2">
+            Close
+          </OutlineButton>
+        </div>
       </Card>
     </Modal>
   );
@@ -1367,7 +1734,7 @@ const formatReviewDate = ts => {
 /* ============================================================================
    YOUR POSTED CHALLENGE CARD
    ============================================================================ */
-function MyPostedChallengeCard({ challenge, token, user, onDeleted, onEdit, onViewTeam, theme }) {
+function MyPostedChallengeCard({ challenge, token, user, onDeleted, onEdit, onViewTeam, onReviewRequests, theme }) {
   const isLight = detectLight(theme);
   const t = tokens(isLight);
   const [deleting, setDeleting] = useState(false);
@@ -1375,6 +1742,7 @@ function MyPostedChallengeCard({ challenge, token, user, onDeleted, onEdit, onVi
   const [confirming, setConfirming] = useState(false);
 
   const isCreator = !user || !challenge.creator_id || challenge.creator_id === user?.id;
+  const pendingCount = Number(challenge.pending_requests_count || challenge.pending_requests?.length || challenge.pendingRequestsCount || 0);
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -1396,6 +1764,17 @@ function MyPostedChallengeCard({ challenge, token, user, onDeleted, onEdit, onVi
         <div className="flex items-center gap-2 flex-wrap min-w-0">
           <h4 className="text-xl font-bold truncate" style={{ color: t.text }}>{challenge.team_name}</h4>
           <StatusBadge>Posted by you</StatusBadge>
+          {isCreator && pendingCount > 0 && (
+            <button
+              type="button"
+              onClick={() => onReviewRequests?.(challenge)}
+              className="text-[11px] font-extrabold px-3 py-1 rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white shadow-md flex items-center gap-1.5 animate-pulse cursor-pointer hover:scale-105 active:scale-95 transition-all"
+              title="Click to view and review incoming match requests"
+            >
+              <span>🔔</span>
+              <span>{pendingCount} Team Request{pendingCount > 1 ? "s" : ""} - Review</span>
+            </button>
+          )}
         </div>
         <StatusBadge>{challenge.status === "on_hold" ? "On Hold" : "Open"}</StatusBadge>
       </div>
@@ -1442,6 +1821,15 @@ function MyPostedChallengeCard({ challenge, token, user, onDeleted, onEdit, onVi
       )}
 
       <div className="flex flex-col sm:flex-row gap-2 mt-4">
+        {isCreator && pendingCount > 0 && (
+          <button
+            type="button"
+            onClick={() => onReviewRequests?.(challenge)}
+            className="flex-1 py-2.5 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 text-white"
+          >
+            <span>🔔 Review Requests ({pendingCount})</span>
+          </button>
+        )}
         {isCreator && onEdit && (
           <OutlineButton isLight={isLight} type="button" onClick={() => onEdit(challenge)} className="flex-1">
             <Edit className="w-4 h-4" /> Edit
@@ -1485,6 +1873,7 @@ function normalizeChallenge(c) {
   return {
     id: c.id,
     team: c.team_name,
+    team_name: c.team_name,
     contact_no: c.contact_no,
     postedBy: c.posted_by_name || c.creator_name || null,
     creator_id: c.creator_id,
@@ -1492,15 +1881,26 @@ function normalizeChallenge(c) {
     format: c.format,
     date: formatDateIST(c.match_date),
     rawDate: c.match_date,
+    match_date: c.match_date,
     time: c.time_slot,
+    time_slot: c.time_slot,
     slot,
     ground: c.ground_name || (c.ground_id ? "Ground booked" : "Not booked yet"),
+    ground_name: c.ground_name,
     groundLat: c.ground_lat != null ? Number(c.ground_lat) : null,
     groundLng: c.ground_lng != null ? Number(c.ground_lng) : null,
     note: c.note || "",
     urgent: !!c.urgent,
     rating: c.team_rating != null ? Number(c.team_rating) : c.rating ? Number(c.rating) : 5.0,
     reviewsCount: Number(c.reviews_count) || 0,
+    pending_requests_count: Number(c.pending_requests_count) || (Array.isArray(c.pending_requests) ? c.pending_requests.length : 0),
+    pending_requests: Array.isArray(c.pending_requests) ? c.pending_requests : [],
+    pendingRequestsCount: Number(c.pending_requests_count) || (Array.isArray(c.pending_requests) ? c.pending_requests.length : 0),
+    pendingRequests: Array.isArray(c.pending_requests) ? c.pending_requests : [],
+    my_request_status: c.my_request_status || null,
+    myRequestStatus: c.my_request_status || null,
+    my_request_id: c.my_request_id || null,
+    myRequestId: c.my_request_id || null,
     latestReview:
       c.latest_review ||
       (c.latest_review_text
@@ -1728,6 +2128,25 @@ export default function FindMatchTab({
   const [detailsTarget, setDetailsTarget] = useState(null);
   const [viewTeamTarget, setViewTeamTarget] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
+  const [reviewTarget, setReviewTarget] = useState(null);
+
+  const handleCancelRequest = async (target) => {
+    if (!token || !target) return;
+    const opponent = target.team || target.team_name || "opponent team";
+    if (!window.confirm(`Cancel your match request to play vs ${opponent}?`)) return;
+    try {
+      await apiRequest(`/challenges/${target.id}/requests/cancel`, { method: "POST", token });
+      onChallengeUpdated?.({
+        ...target,
+        my_request_status: null,
+        myRequestStatus: null,
+        my_request_id: null,
+      });
+      alert(`Match request to ${opponent} cancelled.`);
+    } catch (err) {
+      alert(err.message || "Failed to cancel match request.");
+    }
+  };
 
   const effectiveGrounds = grounds && grounds.length > 0 ? grounds : GROUNDS;
 
@@ -2075,6 +2494,7 @@ export default function FindMatchTab({
                 onDeleted={onChallengeDeleted}
                 onEdit={() => setEditTarget(ch)}
                 onViewTeam={c => setViewTeamTarget(c)}
+                onReviewRequests={c => setReviewTarget(c)}
               />
             ))}
           </div>
@@ -2158,16 +2578,45 @@ export default function FindMatchTab({
                 )}
 
                 <div className="flex flex-col sm:flex-row gap-2 mt-4">
-                  <SoftButton
-                    isLight={isLight}
-                    type="button"
-                    disabled={blocked}
-                    onClick={() => setAcceptTarget(c)}
-                    className="flex-1"
-                    title={blocked ? `You already have an accepted challenge on this date in the ${c.slot} slot` : "Accept this challenge"}
-                  >
-                    {blocked ? `Slot Booked (${c.slot})` : "Accept Challenge"}
-                  </SoftButton>
+                  {(c.my_request_status === "pending" || c.myRequestStatus === "pending") ? (
+                    <div className="flex-1 flex gap-2">
+                      <span
+                        className={cn(
+                          "flex-1 py-2.5 px-3 rounded-xl text-xs font-bold text-center flex items-center justify-center gap-1.5 border shadow-xs",
+                          isLight
+                            ? "bg-amber-50 border-amber-300 text-amber-800"
+                            : "bg-amber-500/15 border-amber-500/30 text-amber-300"
+                        )}
+                      >
+                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                        Request Pending Approval
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCancelRequest(c)}
+                        className={cn(
+                          "px-3 py-2 rounded-xl text-xs font-bold transition-colors border shadow-xs cursor-pointer",
+                          isLight
+                            ? "bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-200"
+                            : "bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 border-rose-500/25"
+                        )}
+                        title="Cancel match request"
+                      >
+                        Cancel Request
+                      </button>
+                    </div>
+                  ) : (
+                    <SoftButton
+                      isLight={isLight}
+                      type="button"
+                      disabled={blocked}
+                      onClick={() => setAcceptTarget(c)}
+                      className="flex-1"
+                      title={blocked ? `You already have an accepted challenge on this date in the ${c.slot} slot` : "Send request to play this challenge"}
+                    >
+                      {blocked ? `Slot Booked (${c.slot})` : "Request to Play"}
+                    </SoftButton>
+                  )}
                   <OutlineButton isLight={isLight} type="button" onClick={() => setDetailsTarget(c)} className="flex-1">
                     View Details
                   </OutlineButton>
@@ -2245,6 +2694,36 @@ export default function FindMatchTab({
                 >
                   <Edit className="w-4 h-4" /> Edit Challenge
                 </OutlineButton>
+              ) : (detailsTarget.my_request_status === "pending" || detailsTarget.myRequestStatus === "pending") ? (
+                <div className="flex-1 flex gap-2">
+                  <span
+                    className={cn(
+                      "flex-1 py-2 px-3 rounded-xl text-xs font-bold text-center flex items-center justify-center gap-1.5 border shadow-xs",
+                      isLight
+                        ? "bg-amber-50 border-amber-300 text-amber-800"
+                        : "bg-amber-500/15 border-amber-500/30 text-amber-300"
+                    )}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    Request Pending Approval
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleCancelRequest(detailsTarget);
+                      setDetailsTarget(null);
+                    }}
+                    className={cn(
+                      "px-3 py-2 rounded-xl text-xs font-bold transition-colors border shadow-xs cursor-pointer",
+                      isLight
+                        ? "bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-200"
+                        : "bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 border-rose-500/25"
+                    )}
+                    title="Cancel match request"
+                  >
+                    Cancel Request
+                  </button>
+                </div>
               ) : (
                 <SoftButton
                   isLight={isLight}
@@ -2258,12 +2737,12 @@ export default function FindMatchTab({
                   title={
                     hasActiveConflict(detailsTarget.rawDate, detailsTarget.slot)
                       ? `You already have an accepted challenge on this date in the ${detailsTarget.slot} slot`
-                      : "Accept this challenge"
+                      : "Send request to play this challenge"
                   }
                 >
                   {hasActiveConflict(detailsTarget.rawDate, detailsTarget.slot)
                     ? `Slot Booked (${detailsTarget.slot})`
-                    : "Accept Challenge"}
+                    : "Request to Play"}
                 </SoftButton>
               )}
               <OutlineButton isLight={isLight} type="button" onClick={() => setViewTeamTarget(detailsTarget)} className="flex-1">
@@ -2286,7 +2765,21 @@ export default function FindMatchTab({
           onClose={() => setAcceptTarget(null)}
           onAccepted={updated => {
             setAcceptTarget(null);
-            onChallengeAccepted(updated);
+            onChallengeUpdated?.(updated);
+          }}
+          theme={theme}
+        />
+      )}
+
+      {reviewTarget && (
+        <ChallengeRequestsReviewModal
+          challenge={reviewTarget}
+          isOpen={!!reviewTarget}
+          onClose={() => setReviewTarget(null)}
+          token={token}
+          onChallengeUpdated={updated => {
+            onChallengeUpdated?.(updated);
+            setReviewTarget(prev => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));
           }}
           theme={theme}
         />
