@@ -359,6 +359,21 @@ export default function MyTeamTab({
     ? acceptedChallenges
     : (acceptedChallenge ? [acceptedChallenge] : []);
 
+  const hasActiveConflict = (targetDate, targetSlot) => {
+    if (!targetDate) return false;
+    const targetSlotNorm = (targetSlot || "Morning").toLowerCase();
+    return acceptedChallengesFinal.some(c => {
+      const da = new Date(c.match_date);
+      const db = new Date(targetDate);
+      const sameDay = isNaN(da.getTime()) || isNaN(db.getTime())
+        ? String(c.match_date).slice(0, 10) === String(targetDate).slice(0, 10)
+        : da.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) === db.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+      if (!sameDay) return false;
+      const cSlot = (c.slot || getChallengeSlot(c)).toLowerCase();
+      return cSlot === targetSlotNorm;
+    });
+  };
+
   const scheduleCount = postedChallenges.length + acceptedChallengesFinal.length + registeredTournaments.length;
 
   return (
@@ -501,6 +516,7 @@ export default function MyTeamTab({
           isOpen={!!reviewChallenge}
           onClose={() => setReviewChallenge(null)}
           token={token}
+          hasActiveConflict={hasActiveConflict}
           onChallengeUpdated={updated => {
             onChallengeUpdated?.(updated);
             setReviewChallenge(prev => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));

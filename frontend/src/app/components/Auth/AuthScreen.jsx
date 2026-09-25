@@ -1,6 +1,7 @@
 import React, { useState, useEffect, createContext, useContext } from "react";
-import { Eye, EyeOff, Mail, Lock, User, Phone, MapPin, Shield, Calendar, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User, Phone, MapPin, Shield, Calendar, ArrowLeft, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { apiRequest } from "../../api";
+import { cn } from "../../utils/helpers.jsx";
 import TermsModal from "../TermsModal";
 
 const AuthThemeContext = createContext("dark");
@@ -11,17 +12,15 @@ function Field({ icon: Icon, ...props }) {
   const isLight = theme === "light";
   return (
     <div className="relative">
-      <Icon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: isLight ? "#94a3b8" : "#4a5a4a" }} />
+      <Icon className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none transition-colors" style={{ color: isLight ? "#94a3b8" : "#556b55" }} />
       <input
         {...props}
-        className="w-full pl-10 pr-3 py-2.5 rounded-xl text-sm outline-none transition-colors"
-        style={{
-          backgroundColor: isLight ? "#ffffff" : "#1a1a1a",
-          border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
-          color: isLight ? "#0f172a" : "#f0f2f0"
-        }}
-        onFocus={e => (e.target.style.borderColor = isLight ? "#16a34a" : "#22c55e")}
-        onBlur={e => (e.target.style.borderColor = isLight ? "#cbd5e1" : "#2a2a2a")}
+        className={cn(
+          "w-full pl-10 pr-3 py-2.5 rounded-xl text-xs sm:text-sm outline-none transition-all border font-medium",
+          isLight
+            ? "bg-slate-50 text-slate-900 border-slate-200 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/25"
+            : "bg-[#141714] text-white border-[#272b27] focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/25"
+        )}
       />
     </div>
   );
@@ -33,26 +32,24 @@ function PasswordField({ value, onChange, placeholder = "Password" }) {
   const [show, setShow] = useState(false);
   return (
     <div className="relative">
-      <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: isLight ? "#94a3b8" : "#4a5a4a" }} />
+      <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none transition-colors" style={{ color: isLight ? "#94a3b8" : "#556b55" }} />
       <input
         type={show ? "text" : "password"}
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className="w-full pl-10 pr-10 py-2.5 rounded-xl text-sm outline-none transition-colors"
-        style={{
-          backgroundColor: isLight ? "#ffffff" : "#1a1a1a",
-          border: `1px solid ${isLight ? "#cbd5e1" : "#2a2a2a"}`,
-          color: isLight ? "#0f172a" : "#f0f2f0"
-        }}
-        onFocus={e => (e.target.style.borderColor = isLight ? "#16a34a" : "#22c55e")}
-        onBlur={e => (e.target.style.borderColor = isLight ? "#cbd5e1" : "#2a2a2a")}
+        className={cn(
+          "w-full pl-10 pr-10 py-2.5 rounded-xl text-xs sm:text-sm outline-none transition-all border font-medium",
+          isLight
+            ? "bg-slate-50 text-slate-900 border-slate-200 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/25"
+            : "bg-[#141714] text-white border-[#272b27] focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/25"
+        )}
       />
       <button
         type="button"
         onClick={() => setShow(s => !s)}
-        className="absolute right-3 top-1/2 -translate-y-1/2"
-        style={{ color: isLight ? "#94a3b8" : "#4a5a4a" }}
+        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors"
+        style={{ color: isLight ? "#94a3b8" : "#6b7a6b" }}
         tabIndex={-1}
       >
         {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -93,21 +90,19 @@ function SubmitButton({ children, loading, disabled }) {
     <button
       type="submit"
       disabled={isDisabled}
-      className="w-full py-3 rounded-xl font-bold text-sm transition-all shadow-sm cursor-pointer"
-      style={
-        isDisabled
-          ? {
-              backgroundColor: isLight ? "#f1f5f9" : "#1e211e",
-              color: isLight ? "#94a3b8" : "#3a3a3a",
-              cursor: "not-allowed"
-            }
-          : {
-              backgroundColor: isLight ? "#16a34a" : "#22c55e",
-              color: isLight ? "#ffffff" : "#000"
-            }
-      }
+      className={cn(
+        "w-full py-2.5 sm:py-3 rounded-xl font-bold text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed",
+        isLight
+          ? "bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white shadow-emerald-500/25"
+          : "bg-gradient-to-r from-emerald-400 via-teal-400 to-green-400 hover:from-emerald-300 hover:to-teal-300 text-black font-extrabold shadow-emerald-500/25"
+      )}
     >
-      {loading ? "Please wait..." : children}
+      {loading ? (
+        <>
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span>Please wait...</span>
+        </>
+      ) : children}
     </button>
   );
 }
@@ -505,9 +500,10 @@ export default function AuthScreen({ onAuthSuccess, initialMode = "login", theme
             <span className="font-bold text-lg tracking-tight" style={{ color: theme === "light" ? "#0f172a" : "#ffffff" }}>MatchConnect</span>
           </div>
 
-          <div className="rounded-2xl p-6 sm:p-7 shadow-xl transition-all" style={{ backgroundColor: theme === "light" ? "#ffffff" : "#151715", border: `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}` }}>
-            <h1 className="text-lg font-bold mb-1" style={{ color: theme === "light" ? "#0f172a" : "#ffffff" }}>{title}</h1>
-            {subtitle && <p className="text-xs mb-5" style={{ color: theme === "light" ? "#64748b" : "#6b7a6b" }}>{subtitle}</p>}
+          <div className="rounded-3xl p-6 sm:p-7 shadow-2xl relative overflow-hidden transition-all border" style={{ backgroundColor: theme === "light" ? "#ffffff" : "#111411", borderColor: theme === "light" ? "#e2e8f0" : "rgba(255,255,255,0.12)" }}>
+            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-600 rounded-t-3xl" />
+            <h1 className="text-xl font-black tracking-tight mb-1" style={{ color: theme === "light" ? "#0f172a" : "#ffffff" }}>{title}</h1>
+            {subtitle && <p className="text-xs mb-5 font-medium leading-relaxed" style={{ color: theme === "light" ? "#64748b" : "#7a8a7a" }}>{subtitle}</p>}
             {mode !== "forgot" && mode !== "reset" && !subtitle && <div className="mb-5" />}
 
             {mode === "login" && <LoginForm onAuthSuccess={onAuthSuccess} onSwitch={handleSwitch} notice={notice} />}

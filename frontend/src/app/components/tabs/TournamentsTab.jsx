@@ -52,6 +52,55 @@ function ColorBar({ gradient = "from-emerald-400 via-green-500 to-teal-500" }) {
   return <div className={cn("absolute top-0 left-0 right-0 h-1 bg-gradient-to-r rounded-t-2xl", gradient)} />;
 }
 
+function ModalHeader({ isLight, icon: Icon, title, subtitle, badge, onClose }) {
+  return (
+    <div className={cn("flex items-start justify-between gap-3 pb-3 border-b", isLight ? "border-slate-100" : "border-[#1f221f]")}>
+      <div className="flex items-start gap-3 min-w-0">
+        {Icon && (
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-white shrink-0 shadow-lg shadow-emerald-500/25">
+            <Icon className="w-5 h-5" />
+          </div>
+        )}
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className={cn("text-base sm:text-lg font-black tracking-tight", isLight ? "text-slate-900" : "text-white")}>
+              {title}
+            </h3>
+            {badge && (
+              <span className={cn(
+                "text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border",
+                badge.color === "sky"
+                  ? (isLight ? "bg-sky-50 text-sky-700 border-sky-200" : "bg-sky-500/10 text-sky-400 border-sky-500/25")
+                  : (isLight ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-emerald-500/10 text-emerald-400 border-emerald-500/25")
+              )}>
+                {badge.label}
+              </span>
+            )}
+          </div>
+          {subtitle && (
+            <p className={cn("text-xs font-medium mt-0.5 truncate", isLight ? "text-slate-500" : "text-[#7a8a7a]")}>
+              {subtitle}
+            </p>
+          )}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onClose}
+        className={cn(
+          "w-8 h-8 rounded-full flex items-center justify-center transition-all shrink-0 border",
+          isLight
+            ? "border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+            : "border-[#2a2a2a] text-[#809080] hover:text-white hover:bg-[#1a1f1a]"
+        )}
+        aria-label="Close"
+      >
+        <X className="w-4 h-4 transition-transform duration-200 hover:rotate-90" />
+      </button>
+    </div>
+  );
+}
+
 function TeamsRemainingBadge({ spotsLeft, maxTeams }) {
   const isFull = spotsLeft === 0;
   const isLow = spotsLeft > 0 && spotsLeft <= 3;
@@ -143,8 +192,8 @@ function StartTournamentMatchModal({
   const [error, setError] = useState("");
 
   const fieldClass = isLight
-    ? "w-full p-2.5 rounded-xl bg-slate-50 text-slate-900 border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:bg-white focus:outline-none transition-all"
-    : "w-full p-2.5 rounded-xl bg-[#161816] text-white border border-[#2a2a2a] focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition-all";
+    ? "w-full p-2.5 rounded-xl bg-slate-50 text-slate-900 border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/25 focus:bg-white focus:outline-none transition-all text-xs"
+    : "w-full p-2.5 rounded-xl bg-[#131613] text-white border border-[#2a2a2a] focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/25 focus:outline-none transition-all text-xs";
 
   const labelStyle = { color: isLight ? "#475569" : "#a0aba0" };
 
@@ -229,38 +278,26 @@ function StartTournamentMatchModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-[fadeIn_.15s_ease-out]"
-      style={{ backgroundColor: isLight ? "rgba(15,23,42,0.6)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)" }}
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl p-6 space-y-4 relative"
+        className="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 space-y-4 relative shadow-2xl animate-in zoom-in-95 duration-200 border"
         style={isLight
-          ? { backgroundColor: "#ffffff", border: "1px solid #e2e8f0", boxShadow: "0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(16,185,129,0.08)" }
-          : { backgroundColor: "#0d0f0d", border: "1px solid #2a2a2a", boxShadow: "0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(16,185,129,0.08)" }}
+          ? { backgroundColor: "#ffffff", borderColor: "#e2e8f0" }
+          : { backgroundColor: "#0d120e", borderColor: "rgba(255,255,255,0.12)" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <ColorBar gradient="from-emerald-400 via-teal-500 to-cyan-500" />
-        <div className={cn("flex items-center justify-between pb-3 border-b", isLight ? "border-slate-100" : "border-[#1f221f]")}>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/25">
-              <Swords className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <h3 className={cn("text-lg font-bold leading-tight", isLight ? "text-slate-900" : "text-white")}>
-                {matchesCount === 0 ? "Start Match 1 (Live e-Scoring)" : `Start Match #${matchesCount + 1} (Live e-Scoring)`}
-              </h3>
-              <p className="text-[11px]" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
-                Tournament: {tournament?.name}
-              </p>
-            </div>
-          </div>
-          <button type="button" onClick={onClose}
-            className={cn("w-7 h-7 rounded-full flex items-center justify-center transition-colors",
-              isLight ? "text-slate-500 hover:text-slate-900 hover:bg-slate-100" : "text-[#6b7a6b] hover:text-white hover:bg-[#1c1f1c]")}>
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-600 rounded-t-3xl z-10 pointer-events-none" />
+
+        <ModalHeader
+          isLight={isLight}
+          icon={Swords}
+          title={matchesCount === 0 ? "Start Match 1" : `Start Match #${matchesCount + 1}`}
+          subtitle={`Tournament: ${tournament?.name || ""}`}
+          badge={{ label: "Live e-Scoring", color: "emerald" }}
+          onClose={onClose}
+        />
 
         {error && (
           <div className={cn("p-3 rounded-xl text-xs flex items-center gap-2 border",
@@ -510,8 +547,8 @@ function ScheduleTournamentMatchModal({
   const [error, setError] = useState("");
 
   const fieldClass = isLight
-    ? "w-full p-2.5 rounded-xl bg-slate-50 text-slate-900 border border-slate-300 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:bg-white focus:outline-none transition-all text-xs"
-    : "w-full p-2.5 rounded-xl bg-[#161816] text-white border border-[#2a2a2a] focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition-all text-xs";
+    ? "w-full p-2.5 rounded-xl bg-slate-50 text-slate-900 border border-slate-200 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/25 focus:bg-white focus:outline-none transition-all text-xs"
+    : "w-full p-2.5 rounded-xl bg-[#131613] text-white border border-[#2a2a2a] focus:border-sky-500 focus:ring-2 focus:ring-sky-500/25 focus:outline-none transition-all text-xs";
 
   const labelStyle = { color: isLight ? "#475569" : "#a0aba0" };
 
@@ -646,38 +683,26 @@ function ScheduleTournamentMatchModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-[fadeIn_.15s_ease-out]"
-      style={{ backgroundColor: isLight ? "rgba(15,23,42,0.6)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)" }}
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl p-6 space-y-4 relative"
+        className="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 space-y-4 relative shadow-2xl animate-in zoom-in-95 duration-200 border"
         style={isLight
-          ? { backgroundColor: "#ffffff", border: "1px solid #e2e8f0", boxShadow: "0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(14,165,233,0.1)" }
-          : { backgroundColor: "#0d0f0d", border: "1px solid #2a2a2a", boxShadow: "0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(14,165,233,0.1)" }}
+          ? { backgroundColor: "#ffffff", borderColor: "#e2e8f0" }
+          : { backgroundColor: "#0d120e", borderColor: "rgba(255,255,255,0.12)" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <ColorBar gradient="from-sky-400 via-blue-500 to-indigo-500" />
-        <div className={cn("flex items-center justify-between pb-3 border-b", isLight ? "border-slate-100" : "border-[#1f221f]")}>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center shadow-lg shadow-sky-500/25">
-              <CalendarDays className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <h3 className={cn("text-lg font-bold leading-tight", isLight ? "text-slate-900" : "text-white")}>
-                Schedule Tournament Match
-              </h3>
-              <p className="text-[11px]" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
-                Tournament: {tournament?.name}
-              </p>
-            </div>
-          </div>
-          <button type="button" onClick={onClose}
-            className={cn("w-7 h-7 rounded-full flex items-center justify-center transition-colors",
-              isLight ? "text-slate-500 hover:text-slate-900 hover:bg-slate-100" : "text-[#6b7a6b] hover:text-white hover:bg-[#1c1f1c]")}>
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-sky-400 via-blue-500 to-indigo-500 rounded-t-3xl z-10 pointer-events-none" />
+
+        <ModalHeader
+          isLight={isLight}
+          icon={CalendarDays}
+          title="Schedule Tournament Match"
+          subtitle={`Tournament: ${tournament?.name || ""}`}
+          badge={{ label: "Fixtures", color: "sky" }}
+          onClose={onClose}
+        />
 
         {error && (
           <div className={cn("p-3 rounded-xl text-xs flex items-center gap-2 border",
@@ -996,8 +1021,8 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
   const [error, setError] = useState("");
 
   const fieldClass = isLight
-    ? "w-full p-2.5 rounded-xl bg-slate-50 text-slate-900 border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:bg-white focus:outline-none transition-all"
-    : "w-full p-2.5 rounded-xl bg-[#161816] text-white border border-[#2a2a2a] focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition-all";
+    ? "w-full p-2.5 rounded-xl bg-slate-50 text-slate-900 border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/25 focus:bg-white focus:outline-none transition-all text-xs"
+    : "w-full p-2.5 rounded-xl bg-[#131613] text-white border border-[#2a2a2a] focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/25 focus:outline-none transition-all text-xs";
 
   const labelStyle = { color: isLight ? "#475569" : "#a0aba0" };
 
@@ -1093,33 +1118,26 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-[fadeIn_.15s_ease-out]"
-      style={{ backgroundColor: isLight ? "rgba(15,23,42,0.6)" : "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)" }}
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl p-6 space-y-4 relative"
+        className="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 space-y-4 relative shadow-2xl animate-in zoom-in-95 duration-200 border"
         style={isLight
-          ? { backgroundColor: "#ffffff", border: "1px solid #e2e8f0", boxShadow: "0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(16,185,129,0.08)" }
-          : { backgroundColor: "#0d0f0d", border: "1px solid #2a2a2a", boxShadow: "0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(16,185,129,0.08)" }}
+          ? { backgroundColor: "#ffffff", borderColor: "#e2e8f0" }
+          : { backgroundColor: "#0d120e", borderColor: "rgba(255,255,255,0.12)" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <ColorBar gradient="from-emerald-400 via-teal-500 to-cyan-500" />
-        <div className={cn("flex items-center justify-between pb-3 border-b", isLight ? "border-slate-100" : "border-[#1f221f]")}>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/25">
-              <Swords className="w-4 h-4 text-white" />
-            </div>
-            <h3 className={cn("text-lg font-bold", isLight ? "text-slate-900" : "text-white")}>
-              {match ? "Edit Tournament Match" : "Add Tournament Match"}
-            </h3>
-          </div>
-          <button type="button" onClick={onClose}
-            className={cn("w-7 h-7 rounded-full flex items-center justify-center transition-colors",
-              isLight ? "text-slate-500 hover:text-slate-900 hover:bg-slate-100" : "text-[#6b7a6b] hover:text-white hover:bg-[#1c1f1c]")}>
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 rounded-t-3xl z-10 pointer-events-none" />
+
+        <ModalHeader
+          isLight={isLight}
+          icon={Swords}
+          title={match ? "Edit Tournament Match" : "Add Tournament Match"}
+          subtitle={`Tournament: ${tournament?.name || ""}`}
+          badge={{ label: match ? "Edit" : "New Match", color: "emerald" }}
+          onClose={onClose}
+        />
 
         {error && (
           <div className={cn("p-3 rounded-xl text-xs flex items-center gap-2 border",
@@ -1250,7 +1268,11 @@ function TournamentMatchModal({ isOpen, onClose, tournament, match, confirmedTea
             <button type="submit" disabled={saving}
               className={cn("flex-1 py-2.5 rounded-xl font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-2 text-white shadow-lg",
                 isLight ? "bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 shadow-emerald-500/25" : "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black shadow-emerald-500/25")}>
-              {saving ? "Saving..." : match ? "Update Match" : "Add Match"}
+              {saving ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>
+              ) : (
+                match ? "Update Match" : "Add Match"
+              )}
             </button>
           </div>
         </form>
@@ -2604,21 +2626,20 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
       />
 
       {matchToDelete && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 animate-[fadeIn_.15s_ease-out]"
-          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.6)" : "rgba(0,0,0,0.8)", backdropFilter: "blur(4px)" }}
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
           onClick={() => !deletingMatch && setMatchToDelete(null)}>
-          <div className="w-full max-w-sm rounded-2xl p-5 space-y-4 relative"
+          <div className="w-full max-w-sm rounded-3xl p-5 space-y-4 relative shadow-2xl animate-in zoom-in-95 duration-200 border overflow-hidden"
             style={isLight
-              ? { backgroundColor: "#ffffff", border: "1px solid #fee2e2", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }
-              : { backgroundColor: "#0d0f0d", border: "1px solid #3a1a1a", boxShadow: "0 20px 60px rgba(0,0,0,0.6)" }}
+              ? { backgroundColor: "#ffffff", borderColor: "#fee2e2" }
+              : { backgroundColor: "#0d100d", borderColor: "rgba(239,68,68,0.25)" }}
             onClick={(e) => e.stopPropagation()}>
-            <ColorBar gradient="from-rose-400 via-red-500 to-orange-500" />
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-400 to-red-500 flex items-center justify-center text-white shrink-0 mt-0.5 shadow-lg shadow-rose-500/30">
+            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-rose-500 via-red-500 to-amber-500 rounded-t-3xl" />
+            <div className="flex items-start gap-3 pt-1">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center text-white shrink-0 mt-0.5 shadow-lg shadow-rose-500/30">
                 <Trash2 className="w-5 h-5" />
               </div>
               <div className="min-w-0">
-                <h4 className={cn("text-sm font-bold", isLight ? "text-slate-900" : "text-white")}>Delete Match?</h4>
+                <h4 className={cn("text-base font-black tracking-tight", isLight ? "text-slate-900" : "text-white")}>Delete Match?</h4>
                 <p className={cn("text-xs mt-1 leading-relaxed", isLight ? "text-slate-600" : "text-slate-400")}>
                   Are you sure you want to delete <span className={cn("font-bold", isLight ? "text-slate-900" : "text-white")}>{matchToDelete.team1_name || "Team 1"} vs {matchToDelete.team2_name || "Team 2"}</span>? This action cannot be undone.
                 </p>
@@ -2641,21 +2662,20 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
       )}
 
       {showDeleteTournamentConfirm && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 animate-[fadeIn_.15s_ease-out]"
-          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.6)" : "rgba(0,0,0,0.8)", backdropFilter: "blur(4px)" }}
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
           onClick={() => !deletingTournament && setShowDeleteTournamentConfirm(false)}>
-          <div className="w-full max-w-sm rounded-2xl p-5 space-y-4 relative"
+          <div className="w-full max-w-sm rounded-3xl p-5 space-y-4 relative shadow-2xl animate-in zoom-in-95 duration-200 border overflow-hidden"
             style={isLight
-              ? { backgroundColor: "#ffffff", border: "1px solid #fee2e2", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }
-              : { backgroundColor: "#0d0f0d", border: "1px solid #3a1a1a", boxShadow: "0 20px 60px rgba(0,0,0,0.6)" }}
+              ? { backgroundColor: "#ffffff", borderColor: "#fee2e2" }
+              : { backgroundColor: "#0d100d", borderColor: "rgba(239,68,68,0.25)" }}
             onClick={(e) => e.stopPropagation()}>
-            <ColorBar gradient="from-rose-400 via-red-500 to-orange-500" />
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-400 to-red-500 flex items-center justify-center text-white shrink-0 mt-0.5 shadow-lg shadow-rose-500/30">
+            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-rose-500 via-red-500 to-amber-500 rounded-t-3xl" />
+            <div className="flex items-start gap-3 pt-1">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center text-white shrink-0 mt-0.5 shadow-lg shadow-rose-500/30">
                 <Trash2 className="w-5 h-5" />
               </div>
               <div className="min-w-0">
-                <h4 className={cn("text-sm font-bold", isLight ? "text-slate-900" : "text-white")}>Delete Tournament?</h4>
+                <h4 className={cn("text-base font-black tracking-tight", isLight ? "text-slate-900" : "text-white")}>Delete Tournament?</h4>
                 <p className={cn("text-xs mt-1 leading-relaxed", isLight ? "text-slate-600" : "text-slate-400")}>
                   Are you sure you want to delete <span className={cn("font-bold", isLight ? "text-slate-900" : "text-white")}>{t.name}</span>? This will permanently delete all its matches and registrations.
                 </p>

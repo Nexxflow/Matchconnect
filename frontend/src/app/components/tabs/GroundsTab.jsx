@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Search, ChevronDown, MapPin, Star, Plus, X, Map, Pencil, Trash2, ExternalLink, Hash, RotateCcw, IndianRupee, Clock } from "lucide-react";
+import { Search, ChevronDown, MapPin, Star, Plus, X, Map, Pencil, Trash2, ExternalLink, Hash, RotateCcw, IndianRupee, Clock, Loader2 } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -216,14 +216,21 @@ function Modal({ isLight, onClose, children, maxWidth = "max-w-lg" }) {
   if (typeof document === "undefined") return null;
   return createPortal(
     <div
-      className="fixed inset-0 z-[2000] flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ backgroundColor: t.overlay, backdropFilter: "blur(6px)" }}
+      className="fixed inset-0 z-[2000] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className={cn("w-full max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl", maxWidth)}
+        className={cn(
+          "w-full max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl relative shadow-2xl animate-in zoom-in-95 duration-200 border",
+          maxWidth
+        )}
+        style={{
+          borderColor: isLight ? "#e2e8f0" : "rgba(255,255,255,0.12)",
+          backgroundColor: t.card
+        }}
         onClick={e => e.stopPropagation()}
       >
+        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-600 rounded-t-3xl z-10 pointer-events-none" />
         {children}
       </div>
     </div>,
@@ -231,17 +238,58 @@ function Modal({ isLight, onClose, children, maxWidth = "max-w-lg" }) {
   );
 }
 
-function ModalHeader({ isLight, title, onClose }) {
+function ModalHeader({ isLight, icon: Icon, title, subtitle, badge, onClose }) {
   const t = tokens(isLight);
   return (
-    <div className="flex items-center justify-between gap-3 pb-3 mb-1 border-b" style={{ borderColor: t.border }}>
-      <h3 className="text-base font-bold" style={{ color: t.text }}>{title}</h3>
+    <div className="flex items-start justify-between gap-3 pb-3.5 mb-3 border-b" style={{ borderColor: t.border }}>
+      <div className="flex items-center gap-3 min-w-0">
+        {Icon && (
+          <div
+            className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border shadow-xs"
+            style={{
+              backgroundColor: isLight ? "#ecfdf5" : "rgba(34,197,94,0.12)",
+              borderColor: isLight ? "#a7f3d0" : "rgba(34,197,94,0.28)",
+              color: isLight ? "#16a34a" : "#4ade80"
+            }}
+          >
+            <Icon className="w-5 h-5" />
+          </div>
+        )}
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-base sm:text-lg font-black tracking-tight" style={{ color: t.text }}>
+              {title}
+            </h3>
+            {badge && (
+              <span
+                className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border shrink-0"
+                style={{
+                  backgroundColor: isLight ? "#ecfdf5" : "rgba(34,197,94,0.15)",
+                  borderColor: isLight ? "#bbf7d0" : "rgba(34,197,94,0.3)",
+                  color: isLight ? "#15803d" : "#4ade80"
+                }}
+              >
+                {badge}
+              </span>
+            )}
+          </div>
+          {subtitle && (
+            <p className="text-xs truncate mt-0.5" style={{ color: t.sub }}>
+              {subtitle}
+            </p>
+          )}
+        </div>
+      </div>
       <button
         type="button"
         onClick={onClose}
         aria-label="Close"
-        className="w-8 h-8 rounded-full flex items-center justify-center border cursor-pointer"
-        style={{ borderColor: t.border, color: t.sub }}
+        className="w-8 h-8 rounded-full flex items-center justify-center border cursor-pointer transition-all duration-200 hover:rotate-90 hover:scale-105 active:scale-95 shrink-0"
+        style={{
+          backgroundColor: isLight ? "#f8fafc" : "rgba(255,255,255,0.06)",
+          borderColor: t.border,
+          color: t.sub
+        }}
       >
         <X className="w-4 h-4" />
       </button>
@@ -460,68 +508,93 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
   const previewUrl = buildGroundMapsEmbedUrl({ area: form.area, googleMapsUrl: form.google_maps_url });
 
   const formElement = (
-    <Card isLight={isLight} className="p-5 pt-6">
+    <Card isLight={isLight} className="p-5 sm:p-6 border-0 shadow-none bg-transparent">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <ModalHeader isLight={isLight} title={editing ? "Edit Ground" : "Register a Ground"} onClose={closeForm} />
+        <ModalHeader
+          isLight={isLight}
+          icon={MapPin}
+          title={editing ? "Edit Ground" : "Register a Ground"}
+          subtitle={editing ? "Update venue information, pricing, or map location" : "Add your cricket venue to the MatchConnect community directory"}
+          badge="Cricket Venue"
+          onClose={closeForm}
+        />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
           <div className="sm:col-span-2">
-            <Label isLight={isLight}>Ground name</Label>
+            <Label isLight={isLight}>Ground name *</Label>
             <input
               value={form.name}
               onChange={e => update("name", e.target.value)}
-              className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              className="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/25 transition-all"
               style={fieldStyle(isLight)}
-              placeholder="Green Park Cricket Ground"
+              placeholder="e.g. Green Park Cricket Ground"
             />
           </div>
           <div className="sm:col-span-2">
-            <Label isLight={isLight}>Location / Area</Label>
+            <Label isLight={isLight}>Location / Area *</Label>
             <input
               value={form.area}
               onChange={e => update("area", e.target.value)}
-              className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              className="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/25 transition-all"
               style={fieldStyle(isLight)}
-              placeholder="Thailapuram, Vanur"
+              placeholder="e.g. Thailapuram, Vanur, Chennai"
             />
           </div>
           <div>
-            <Label isLight={isLight}>Price per hour (₹)</Label>
+            <Label isLight={isLight}>Price per hour (₹) *</Label>
             <input
               type="number"
               min="1"
               value={form.price_per_hour}
               onChange={e => update("price_per_hour", e.target.value)}
-              className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              className="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/25 transition-all"
               style={fieldStyle(isLight)}
               placeholder="1200"
             />
           </div>
           <div>
-            <Label isLight={isLight}>Google Maps link</Label>
+            <Label isLight={isLight}>Google Maps link (optional)</Label>
             <input
               value={form.google_maps_url}
               onChange={e => update("google_maps_url", e.target.value)}
-              className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              className="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/25 transition-all"
               style={fieldStyle(isLight)}
-              placeholder="https://www.google.com/maps/..."
+              placeholder="https://maps.app.goo.gl/..."
             />
           </div>
+
           <div className="sm:col-span-2">
-            <Label isLight={isLight}>Availability</Label>
-            <div className="relative">
-              <select
-                value={form.availability_mode}
-                onChange={e => update("availability_mode", e.target.value)}
-                className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none cursor-pointer"
-                style={fieldStyle(isLight)}
+            <Label isLight={isLight}>Availability Schedule</Label>
+            <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl border" style={{ backgroundColor: isLight ? "#f1f5f9" : "#0d130e", borderColor: t.border }}>
+              <button
+                type="button"
+                onClick={() => update("availability_mode", "always")}
+                className={cn(
+                  "py-2 px-3 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5",
+                  form.availability_mode !== "scheduled"
+                    ? "bg-emerald-500 text-white shadow-xs"
+                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                )}
               >
-                <option value="always">Always available</option>
-                <option value="scheduled">Available on a date/time</option>
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: t.sub }} />
+                <span>⚡</span>
+                <span>Always Available</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => update("availability_mode", "scheduled")}
+                className={cn(
+                  "py-2 px-3 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5",
+                  form.availability_mode === "scheduled"
+                    ? "bg-emerald-500 text-white shadow-xs"
+                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                )}
+              >
+                <span>📅</span>
+                <span>Specific Date / Time</span>
+              </button>
             </div>
           </div>
+
           {form.availability_mode === "scheduled" && (
             <>
               <div>
@@ -540,7 +613,7 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
                   type="time"
                   value={form.available_time}
                   onChange={e => update("available_time", e.target.value)}
-                  className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+                  className="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/25 transition-all"
                   style={fieldStyle(isLight)}
                 />
               </div>
@@ -548,22 +621,22 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
           )}
         </div>
 
-        <div className="rounded-xl overflow-hidden border" style={{ borderColor: t.border }}>
-          <div className="flex items-center gap-2 px-3 py-2 border-b" style={{ borderColor: t.border, backgroundColor: t.cardAlt }}>
+        <div className="rounded-2xl overflow-hidden border" style={{ borderColor: t.border }}>
+          <div className="flex items-center gap-2 px-3.5 py-2.5 border-b" style={{ borderColor: t.border, backgroundColor: t.cardAlt }}>
             <Map className="w-4 h-4" style={{ color: t.green }} />
-            <span className="text-xs font-bold" style={{ color: t.text }}>Map preview</span>
+            <span className="text-xs font-bold" style={{ color: t.text }}>Google Maps Location Preview</span>
           </div>
           {previewUrl ? (
             <iframe
               title="Ground map preview"
               src={previewUrl}
-              className="w-full h-48"
+              className="w-full h-44"
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
             />
           ) : (
-            <div className="px-3 py-8 text-center text-xs" style={{ color: t.sub }}>
-              Add a location to preview the ground on Google Maps.
+            <div className="px-3 py-6 text-center text-xs" style={{ color: t.sub }}>
+              Enter an area or map link above to see the live location preview.
             </div>
           )}
         </div>
@@ -574,7 +647,7 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
           </div>
         )}
 
-        <div className="flex flex-col sm:flex-row gap-2 pt-1">
+        <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
           <OutlineButton isLight={isLight} type="button" onClick={closeForm} className="flex-1">
             Cancel
           </OutlineButton>
@@ -584,7 +657,17 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
             </OutlineButton>
           )}
           <PrimaryButton type="submit" disabled={submitting} className="flex-1">
-            {submitting ? (editing ? "Saving..." : "Registering...") : editing ? "Save Changes" : "Register Ground"}
+            {submitting ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>{editing ? "Saving..." : "Registering..."}</span>
+              </span>
+            ) : (
+              <span className="flex items-center justify-center gap-1.5">
+                <MapPin className="w-4 h-4" />
+                <span>{editing ? "Save Changes" : "Register Ground"}</span>
+              </span>
+            )}
           </PrimaryButton>
         </div>
       </form>

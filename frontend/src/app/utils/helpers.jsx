@@ -257,10 +257,17 @@ export function formatDateIST(dateStr) {
 
 export function getChallengeSlot(c = {}) {
   if (!c) return "Morning";
+  if (c.slot && typeof c.slot === "string" && c.slot.trim()) {
+    const s = c.slot.trim().toLowerCase();
+    if (s.includes("afternoon") || s.includes("pm") || s.includes("evening")) return "Afternoon";
+    if (s.includes("morning") || s.includes("am")) return "Morning";
+  }
   const t = c.time_slot || c.time;
   if (t) {
-    const s = String(t).trim();
-    const match = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    const s = String(t).trim().toLowerCase();
+    if (s.includes("afternoon") || s.includes("evening")) return "Afternoon";
+    if (s.includes("morning")) return "Morning";
+    const match = s.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?/i);
     if (match) {
       let hour = parseInt(match[1], 10);
       const period = match[3] ? match[3].toUpperCase() : null;
@@ -268,12 +275,19 @@ export function getChallengeSlot(c = {}) {
       if (period === "AM" && hour === 12) hour = 0;
       return hour >= 12 ? "Afternoon" : "Morning";
     }
-  }
-  if (c.slot && typeof c.slot === "string" && c.slot.trim()) {
-    const s = c.slot.trim().toLowerCase();
-    if (s.includes("afternoon") || s.includes("pm") || s.includes("evening")) return "Afternoon";
-    if (s.includes("morning") || s.includes("am")) return "Morning";
-    return c.slot;
+    const shortMatch = s.match(/^(\d{1,2})\s*(am|pm)/i);
+    if (shortMatch) {
+      let hour = parseInt(shortMatch[1], 10);
+      const period = shortMatch[2].toUpperCase();
+      if (period === "PM" && hour !== 12) hour += 12;
+      if (period === "AM" && hour === 12) hour = 0;
+      return hour >= 12 ? "Afternoon" : "Morning";
+    }
+    const numOnly = s.match(/^(\d{1,2})$/);
+    if (numOnly) {
+      const hour = parseInt(numOnly[1], 10);
+      return hour >= 12 ? "Afternoon" : "Morning";
+    }
   }
   return "Morning";
 }

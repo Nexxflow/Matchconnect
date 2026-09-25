@@ -625,6 +625,12 @@ export default function App() {
     };
     window.addEventListener("mc:review_submitted", handleReviewSubmitted);
 
+    const handleChallengeAcceptedEvent = () => {
+      refreshChallenges();
+    };
+    window.addEventListener("mc:challenge_accepted", handleChallengeAcceptedEvent);
+    window.addEventListener("mc:challenge_cancelled", handleChallengeAcceptedEvent);
+
     const onFocus = () => {
       refreshChallenges();
     };
@@ -639,6 +645,8 @@ export default function App() {
 
     return () => {
       window.removeEventListener("mc:review_submitted", handleReviewSubmitted);
+      window.removeEventListener("mc:challenge_accepted", handleChallengeAcceptedEvent);
+      window.removeEventListener("mc:challenge_cancelled", handleChallengeAcceptedEvent);
       window.removeEventListener("focus", onFocus);
       clearInterval(interval);
     };
@@ -728,6 +736,7 @@ export default function App() {
     setChallenges(prev => prev.map(c => c.id === updatedChallenge.id ? updatedChallenge : c));
     setAcceptedChallenge(updatedChallenge);
     window.dispatchEvent(new CustomEvent("mc:challenge_accepted", { detail: updatedChallenge }));
+    refreshChallenges();
   };
 
   const handleCancelAcceptedChallenge = async (challengeId) => {
@@ -848,6 +857,9 @@ export default function App() {
 
   const handleChallengeUpdated = (updatedChallenge) => {
     setChallenges(prev => prev.map(c => c.id === updatedChallenge.id ? updatedChallenge : c));
+    if (updatedChallenge?.status === "accepted") {
+      refreshChallenges();
+    }
   };
 
   const handleChallengeDeleted = (id) => {

@@ -74,11 +74,11 @@ function Section({ icon: Icon, title, children, theme = "dark" }) {
 export default function CreateTournamentForm({ token, user, tournaments = [], initialTournament = null, onClose, onCreated, onUpdated, onDeleted, theme = "dark" }) {
   const isLight = theme === "light";
   const inputClass = isLight
-    ? "w-full rounded-xl px-3 py-2.5 text-sm bg-slate-50 border border-slate-300 text-black placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-colors"
-    : "w-full rounded-xl px-3 py-2.5 text-sm bg-[#111] border border-[#2a2a2a] text-white placeholder:text-[#4a5a4a] focus:outline-none focus:border-green-500/60 transition-colors";
+    ? "w-full rounded-xl px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/25 focus:border-emerald-500 focus:bg-white transition-all"
+    : "w-full rounded-xl px-3.5 py-2.5 text-sm bg-[#0d130e] border border-[#233027] text-white placeholder:text-[#4a5a4a] focus:outline-none focus:ring-2 focus:ring-emerald-500/25 focus:border-emerald-500/60 transition-all";
   const labelClass = isLight
-    ? "text-xs font-bold text-black mb-1.5 block"
-    : "text-xs font-medium text-[#c8ccc8] mb-1.5 block";
+    ? "text-xs font-bold text-slate-800 mb-1.5 block"
+    : "text-xs font-semibold text-[#c8ccc8] mb-1.5 block";
   const [myTeam, setMyTeam] = useState(null); // { id, name } | null, fetched from GET /teams/mine
   const [loadingTeam, setLoadingTeam] = useState(true);
 
@@ -305,24 +305,70 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: theme === "light" ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.6)" }}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl p-6 space-y-6"
-        style={{ backgroundColor: theme === "light" ? "#ffffff" : "#0d0f0d", border: `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}` }}
+        className="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl relative shadow-2xl animate-in zoom-in-95 duration-200 border p-5 sm:p-6 space-y-5"
+        style={{
+          backgroundColor: isLight ? "#ffffff" : "#0d120e",
+          borderColor: isLight ? "#e2e8f0" : "rgba(255,255,255,0.12)"
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold" style={{ color: theme === "light" ? "#0f172a" : "#ffffff" }}>{initialTournament ? "Edit Tournament" : "Create a Tournament"}</h2>
-          <button onClick={onClose} className="hover:opacity-80 transition-colors" style={{ color: theme === "light" ? "#64748b" : "#6b7a6b" }}>
-            <X className="w-5 h-5" />
+        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-600 rounded-t-3xl z-10 pointer-events-none" />
+
+        {/* Unified ModalHeader */}
+        <div className="flex items-start justify-between gap-3 pb-3.5 mb-2 border-b" style={{ borderColor: isLight ? "#e2e8f0" : "rgba(255,255,255,0.1)" }}>
+          <div className="flex items-center gap-3 min-w-0">
+            <div
+              className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border shadow-xs"
+              style={{
+                backgroundColor: isLight ? "#ecfdf5" : "rgba(34,197,94,0.12)",
+                borderColor: isLight ? "#a7f3d0" : "rgba(34,197,94,0.28)",
+                color: isLight ? "#16a34a" : "#4ade80"
+              }}
+            >
+              <Trophy className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base sm:text-lg font-black tracking-tight" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
+                  {initialTournament ? "Edit Tournament" : "Create a Tournament"}
+                </h3>
+                <span
+                  className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border shrink-0"
+                  style={{
+                    backgroundColor: isLight ? "#ecfdf5" : "rgba(34,197,94,0.15)",
+                    borderColor: isLight ? "#bbf7d0" : "rgba(34,197,94,0.3)",
+                    color: isLight ? "#15803d" : "#4ade80"
+                  }}
+                >
+                  {initialTournament ? "Organizer" : "New Tournament"}
+                </span>
+              </div>
+              <p className="text-xs truncate mt-0.5" style={{ color: isLight ? "#64748b" : "#9aa59c" }}>
+                {initialTournament ? "Update your tournament details, schedule or prizes" : "Set up your tournament bracket, rules & prize pool"}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="w-8 h-8 rounded-full flex items-center justify-center border cursor-pointer transition-all duration-200 hover:rotate-90 hover:scale-105 active:scale-95 shrink-0"
+            style={{
+              backgroundColor: isLight ? "#f8fafc" : "rgba(255,255,255,0.06)",
+              borderColor: isLight ? "#e2e8f0" : "rgba(255,255,255,0.1)",
+              color: isLight ? "#64748b" : "#9aa59c"
+            }}
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         <fieldset disabled={submitting}>
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <Section icon={Trophy} title="Tournament details" theme={theme}>
             <div>
               <label className={labelClass}>Tournament name</label>
@@ -330,7 +376,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
                 className={inputClass}
                 value={form.name}
                 onChange={(e) => update("name", e.target.value)}
-                placeholder="e.g. Summer Cup 2026"
+                placeholder="e.g. Summer Premier League 2026"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -367,7 +413,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
                   <span className={cn("text-[10px] font-normal", isLight ? "text-slate-500" : "text-[#4a5a4a]")}>from your account</span>
                 </div>
               ) : (
-                <div className={cn("text-xs rounded-xl px-3 py-2.5 border font-medium", isLight ? "bg-amber-50 border-amber-200 text-amber-900" : "bg-[rgba(245,158,11,0.08)] border-[rgba(245,158,11,0.2)] text-[#f59e0b]")}>
+                <div className={cn("text-xs rounded-xl px-3.5 py-2.5 border font-medium", isLight ? "bg-amber-50 border-amber-200 text-amber-900" : "bg-[rgba(245,158,11,0.08)] border-[rgba(245,158,11,0.2)] text-[#f59e0b]")}>
                   You don't have a team registered yet. You can still create the tournament as organizer-only (turn off "include my team" below), or register a team first.
                 </div>
               )}
@@ -383,11 +429,11 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
               />
             </div>
             <div
-              className={cn("rounded-xl p-3 flex items-center justify-between border", isLight ? "bg-slate-50 border-slate-200" : "bg-[#111] border-[#2a2a2a]")}
+              className={cn("rounded-2xl p-3.5 flex items-center justify-between border transition-all", isLight ? "bg-slate-50 border-slate-200" : "bg-[#111812] border-[#1d2a21]")}
             >
               <div>
-                <div className={cn("text-sm font-semibold", isLight ? "text-slate-900" : "text-white")}>Include your own team?</div>
-                <div className={cn("text-xs mt-0.5", isLight ? "text-slate-500" : "text-[#6b7a6b]")}>
+                <div className={cn("text-sm font-bold", isLight ? "text-slate-900" : "text-white")}>Include your own team?</div>
+                <div className={cn("text-xs mt-0.5", isLight ? "text-slate-500" : "text-[#9aa59c]")}>
                   {!activeTeam
                     ? "No team on your account — this stays off"
                     : form.includeOwnTeam
@@ -399,12 +445,12 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
                 type="button"
                 disabled={!activeTeam}
                 onClick={() => update("includeOwnTeam", !form.includeOwnTeam)}
-                className="shrink-0 w-11 h-6 rounded-full relative transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="shrink-0 w-12 h-6 rounded-full relative transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                 style={{ backgroundColor: form.includeOwnTeam && activeTeam ? "#16a34a" : (isLight ? "#cbd5e1" : "#2a2a2a") }}
               >
                 <span
-                  className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all shadow-xs"
-                  style={{ left: form.includeOwnTeam && activeTeam ? 22 : 2 }}
+                  className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all shadow-sm"
+                  style={{ left: form.includeOwnTeam && activeTeam ? 26 : 2 }}
                 />
               </button>
             </div>
@@ -435,7 +481,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
 
           <Section icon={DollarSign} title="Entry fee & prizes" theme={theme}>
             <div>
-              <label className={labelClass}>Entry fee per team</label>
+              <label className={labelClass}>Entry fee per team (₹)</label>
               <input
                 type="number"
                 min={0}
@@ -455,10 +501,10 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
                     type="button"
                     onClick={() => setPrizeCount(n)}
                     className={cn(
-                      "flex-1 py-2 rounded-xl text-xs font-bold transition-all border",
+                      "flex-1 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer",
                       prizeCount === n
                         ? (isLight ? "bg-[#16a34a] text-white border-[#16a34a] shadow-xs" : "bg-[#22c55e] text-black border-[#22c55e]")
-                        : (isLight ? "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100" : "bg-[#111] text-[#c8ccc8] border-[#2a2a2a]")
+                        : (isLight ? "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100" : "bg-[#111812] text-[#c8ccc8] border-[#1d2a21]")
                     )}
                   >
                     {n} {n === 1 ? "prize" : "prizes"}
@@ -471,10 +517,11 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
               {prizes.slice(0, prizeCount).map((prize, idx) => (
                 <div
                   key={prize.position}
-                  className={cn("rounded-xl p-3 flex items-center gap-3 border", isLight ? "bg-slate-50 border-slate-200" : "bg-[#111] border-[#2a2a2a]")}
+                  className={cn("rounded-2xl p-3 flex items-center gap-3 border", isLight ? "bg-slate-50 border-slate-200" : "bg-[#111812] border-[#1d2a21]")}
                 >
-                  <span className="text-xs font-bold text-amber-500 w-14 shrink-0">
-                    #{prize.position} place
+                  <span className="text-xs font-bold text-amber-500 w-16 shrink-0 flex items-center gap-1">
+                    <span>{prize.position === 1 ? "🥇" : prize.position === 2 ? "🥈" : "🥉"}</span>
+                    <span>#{prize.position} place</span>
                   </span>
                   <input
                     type="number"
@@ -482,14 +529,14 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
                     className={cn(inputClass, "flex-1")}
                     value={prize.money}
                     onChange={(e) => updatePrize(idx, "money", e.target.value)}
-                    placeholder="Prize money"
+                    placeholder="Prize money (₹)"
                   />
-                  <label className={cn("flex items-center gap-1.5 text-xs font-medium shrink-0", isLight ? "text-slate-700" : "text-[#c8ccc8]")}>
+                  <label className={cn("flex items-center gap-1.5 text-xs font-medium shrink-0 cursor-pointer select-none", isLight ? "text-slate-700" : "text-[#c8ccc8]")}>
                     <input
                       type="checkbox"
                       checked={prize.trophy}
                       onChange={(e) => updatePrize(idx, "trophy", e.target.checked)}
-                      className="accent-emerald-600"
+                      className="accent-emerald-600 rounded"
                     />
                     Trophy
                   </label>
@@ -500,10 +547,10 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
 
           <Section icon={FileText} title="Description" theme={theme}>
             <textarea
-              className={cn(inputClass, "min-h-[80px] resize-none")}
+              className={cn(inputClass, "min-h-[85px] resize-none")}
               value={form.description}
               onChange={(e) => update("description", e.target.value)}
-              placeholder="Rules, eligibility, anything teams should know..."
+              placeholder="Rules, match overs, ball type, eligibility, and reporting timings..."
             />
           </Section>
 
@@ -515,14 +562,14 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
             </div>
           )}
 
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
             {initialTournament && (
               <button
                 type="button"
                 onClick={() => setShowDeleteConfirm(true)}
                 disabled={submitting || deleting}
                 className={cn(
-                  "py-2.5 px-5 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-1.5 border",
+                  "py-2.5 px-4 rounded-xl font-bold text-sm transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 border hover:scale-[1.01] active:scale-[0.99]",
                   isLight
                     ? "bg-red-50 hover:bg-red-100 text-red-600 border-red-200 shadow-xs"
                     : "bg-red-500/10 border-red-500/25 text-red-400 hover:bg-red-500/20"
@@ -537,15 +584,24 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
             <button
               type="submit"
               disabled={submitting || deleting}
-              className={cn(
-                "flex-1 py-2.5 rounded-xl font-bold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2",
-                isLight
-                  ? "bg-[#16a34a] hover:bg-[#15803d] text-white shadow-sm"
-                  : "bg-green-500 text-black hover:bg-green-400"
-              )}
+              className="flex-1 py-2.5 px-4 rounded-xl font-bold text-sm transition-all duration-200 cursor-pointer shadow-md hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2"
+              style={{
+                background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
+                color: "#ffffff",
+                boxShadow: isLight ? "0 4px 14px -3px rgba(16,185,129,0.45)" : "0 6px 20px -6px rgba(34,197,94,0.7)"
+              }}
             >
-              {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-              {submitting ? (initialTournament ? "Saving..." : "Publishing...") : (initialTournament ? "Save Changes" : "Publish Tournament")}
+              {submitting ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>{initialTournament ? "Saving..." : "Publishing..."}</span>
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  <Trophy className="w-4 h-4" />
+                  <span>{initialTournament ? "Save Changes" : "Publish Tournament"}</span>
+                </span>
+              )}
             </button>
           </div>
         </form>
@@ -555,29 +611,28 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
       {/* Delete Tournament Confirmation Dialog */}
       {showDeleteConfirm && (
         <div
-          className="fixed inset-0 z-[70] flex items-center justify-center p-4 animate-[fadeIn_.15s_ease-out]"
-          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.6)" : "rgba(0,0,0,0.8)", backdropFilter: "blur(3px)" }}
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4 animate-in fade-in duration-150"
+          style={{ backgroundColor: isLight ? "rgba(15,23,42,0.6)" : "rgba(0,0,0,0.8)", backdropFilter: "blur(4px)" }}
           onClick={() => !deleting && setShowDeleteConfirm(false)}
         >
           <div
-            className="w-full max-w-sm rounded-2xl p-5 space-y-4"
+            className="w-full max-w-sm rounded-3xl p-5 space-y-4 relative border shadow-2xl overflow-hidden"
             style={isLight ? {
               backgroundColor: "#ffffff",
-              border: "1px solid #fee2e2",
-              boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+              borderColor: "#fee2e2",
             } : {
               backgroundColor: "#0d0f0d",
-              border: "1px solid #3a1a1a",
-              boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
+              borderColor: "#3a1a1a",
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-full bg-red-500/15 flex items-center justify-center text-red-500 shrink-0 mt-0.5">
+            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-rose-500 via-red-500 to-amber-500" />
+            <div className="flex items-start gap-3 pt-1">
+              <div className="w-10 h-10 rounded-2xl bg-red-500/15 border border-red-500/25 flex items-center justify-center text-red-500 shrink-0">
                 <Trash2 className="w-5 h-5" />
               </div>
               <div className="min-w-0">
-                <h4 className={cn("text-sm font-bold", isLight ? "text-slate-900" : "text-white")}>
+                <h4 className={cn("text-base font-bold", isLight ? "text-slate-900" : "text-white")}>
                   Delete Tournament?
                 </h4>
                 <p className={cn("text-xs mt-1 leading-relaxed", isLight ? "text-slate-600" : "text-slate-400")}>
@@ -592,7 +647,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
                 disabled={deleting}
                 onClick={() => setShowDeleteConfirm(false)}
                 className={cn(
-                  "flex-1 py-2 rounded-xl text-xs font-semibold transition-colors",
+                  "flex-1 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer",
                   isLight ? "bg-slate-100 hover:bg-slate-200 text-slate-700" : "bg-[#1c1f1c] hover:bg-[#252825] text-[#c8ccc8]"
                 )}
               >
@@ -602,7 +657,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
                 type="button"
                 disabled={deleting}
                 onClick={confirmDelete}
-                className="flex-1 py-2 rounded-xl text-xs font-bold transition-all bg-red-600 hover:bg-red-500 text-white flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold transition-all bg-red-600 hover:bg-red-500 text-white flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
               >
                 {deleting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 {deleting ? "Deleting..." : "Delete Tournament"}

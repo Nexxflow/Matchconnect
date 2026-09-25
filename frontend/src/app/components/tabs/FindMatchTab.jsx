@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Plus, X, Calendar, Clock, Search, ChevronDown, MapPin, Phone, XCircle, AlertCircle, Users, Star, RotateCcw, Zap, Edit, CheckCircle, Loader2, Info } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
@@ -224,14 +224,21 @@ function Modal({ isLight, onClose, children, maxWidth = "max-w-lg" }) {
   if (typeof document === "undefined") return null;
   return createPortal(
     <div
-      className="fixed inset-0 z-[2000] flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ backgroundColor: t.overlay, backdropFilter: "blur(6px)" }}
+      className="fixed inset-0 z-[2000] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className={cn("w-full max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl", maxWidth)}
+        className={cn(
+          "w-full max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl relative shadow-2xl animate-in zoom-in-95 duration-200 border",
+          maxWidth
+        )}
+        style={{
+          borderColor: isLight ? "#e2e8f0" : "rgba(255,255,255,0.12)",
+          backgroundColor: t.card
+        }}
         onClick={e => e.stopPropagation()}
       >
+        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-600 rounded-t-3xl z-10 pointer-events-none" />
         {children}
       </div>
     </div>,
@@ -239,17 +246,58 @@ function Modal({ isLight, onClose, children, maxWidth = "max-w-lg" }) {
   );
 }
 
-function ModalHeader({ isLight, title, onClose }) {
+function ModalHeader({ isLight, icon: Icon, title, subtitle, badge, onClose }) {
   const t = tokens(isLight);
   return (
-    <div className="flex items-center justify-between gap-3 pb-3 mb-1 border-b" style={{ borderColor: t.border }}>
-      <h3 className="text-base font-bold" style={{ color: t.text }}>{title}</h3>
+    <div className="flex items-start justify-between gap-3 pb-3.5 mb-3 border-b" style={{ borderColor: t.border }}>
+      <div className="flex items-center gap-3 min-w-0">
+        {Icon && (
+          <div
+            className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border shadow-xs"
+            style={{
+              backgroundColor: isLight ? "#ecfdf5" : "rgba(34,197,94,0.12)",
+              borderColor: isLight ? "#a7f3d0" : "rgba(34,197,94,0.28)",
+              color: isLight ? "#16a34a" : "#4ade80"
+            }}
+          >
+            <Icon className="w-5 h-5" />
+          </div>
+        )}
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-base sm:text-lg font-black tracking-tight" style={{ color: t.text }}>
+              {title}
+            </h3>
+            {badge && (
+              <span
+                className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border shrink-0"
+                style={{
+                  backgroundColor: isLight ? "#ecfdf5" : "rgba(34,197,94,0.15)",
+                  borderColor: isLight ? "#bbf7d0" : "rgba(34,197,94,0.3)",
+                  color: isLight ? "#15803d" : "#4ade80"
+                }}
+              >
+                {badge}
+              </span>
+            )}
+          </div>
+          {subtitle && (
+            <p className="text-xs truncate mt-0.5" style={{ color: t.sub }}>
+              {subtitle}
+            </p>
+          )}
+        </div>
+      </div>
       <button
         type="button"
         onClick={onClose}
         aria-label="Close"
-        className="w-8 h-8 rounded-full flex items-center justify-center border cursor-pointer"
-        style={{ borderColor: t.border, color: t.sub }}
+        className="w-8 h-8 rounded-full flex items-center justify-center border cursor-pointer transition-all duration-200 hover:rotate-90 hover:scale-105 active:scale-95 shrink-0"
+        style={{
+          backgroundColor: isLight ? "#f8fafc" : "rgba(255,255,255,0.06)",
+          borderColor: t.border,
+          color: t.sub
+        }}
       >
         <X className="w-4 h-4" />
       </button>
@@ -259,14 +307,24 @@ function ModalHeader({ isLight, title, onClose }) {
 
 const fieldStyle = isLight => {
   const t = tokens(isLight);
-  return { backgroundColor: t.input, border: `1px solid ${t.inputBorder}`, color: t.text };
+  return {
+    backgroundColor: isLight ? "#ffffff" : "#0d130e",
+    border: `1px solid ${isLight ? "#cbd5e1" : "rgba(255,255,255,0.12)"}`,
+    color: t.text
+  };
 };
 
-function Label({ isLight, children }) {
+function Label({ isLight, icon: Icon, required, children, helper }) {
+  const t = tokens(isLight);
   return (
-    <label className="text-xs mb-1.5 block font-semibold" style={{ color: tokens(isLight).sub }}>
-      {children}
-    </label>
+    <div className="flex items-center justify-between mb-1.5">
+      <label className="text-xs font-bold flex items-center gap-1.5" style={{ color: isLight ? "#1e293b" : "#e2e8f0" }}>
+        {Icon && <Icon className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+        <span>{children}</span>
+        {required && <span className="text-rose-500 font-bold ml-0.5">*</span>}
+      </label>
+      {helper && <span className="text-[11px]" style={{ color: t.faint }}>{helper}</span>}
+    </div>
   );
 }
 
@@ -315,10 +373,17 @@ function prettyTime(value) {
 
 export function getChallengeSlot(c = {}) {
   if (!c) return "Morning";
+  if (c.slot && typeof c.slot === "string" && c.slot.trim()) {
+    const s = c.slot.trim().toLowerCase();
+    if (s.includes("afternoon") || s.includes("pm") || s.includes("evening")) return "Afternoon";
+    if (s.includes("morning") || s.includes("am")) return "Morning";
+  }
   const t = c.time_slot || c.time;
   if (t) {
-    const s = String(t).trim();
-    const match = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    const s = String(t).trim().toLowerCase();
+    if (s.includes("afternoon") || s.includes("evening")) return "Afternoon";
+    if (s.includes("morning")) return "Morning";
+    const match = s.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?/i);
     if (match) {
       let hour = parseInt(match[1], 10);
       const period = match[3] ? match[3].toUpperCase() : null;
@@ -326,15 +391,34 @@ export function getChallengeSlot(c = {}) {
       if (period === "AM" && hour === 12) hour = 0;
       return hour >= 12 ? "Afternoon" : "Morning";
     }
-  }
-  if (c.slot && typeof c.slot === "string" && c.slot.trim()) {
-    const s = c.slot.trim().toLowerCase();
-    if (s.includes("afternoon") || s.includes("pm") || s.includes("evening")) return "Afternoon";
-    if (s.includes("morning") || s.includes("am")) return "Morning";
-    return c.slot;
+    const shortMatch = s.match(/^(\d{1,2})\s*(am|pm)/i);
+    if (shortMatch) {
+      let hour = parseInt(shortMatch[1], 10);
+      const period = shortMatch[2].toUpperCase();
+      if (period === "PM" && hour !== 12) hour += 12;
+      if (period === "AM" && hour === 12) hour = 0;
+      return hour >= 12 ? "Afternoon" : "Morning";
+    }
+    const numOnly = s.match(/^(\d{1,2})$/);
+    if (numOnly) {
+      const hour = parseInt(numOnly[1], 10);
+      return hour >= 12 ? "Afternoon" : "Morning";
+    }
   }
   return "Morning";
 }
+
+export const isSameCalendarDay = (a, b) => {
+  if (!a || !b) return false;
+  const da = new Date(a);
+  const db = new Date(b);
+  if (isNaN(da.getTime()) || isNaN(db.getTime())) {
+    const sa = String(a).slice(0, 10);
+    const sb = String(b).slice(0, 10);
+    return sa === sb;
+  }
+  return da.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) === db.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+};
 
 /* ============================================================================
    TIME FIELD (used in the Post Challenge form)
@@ -423,7 +507,7 @@ function TimeField({ value, onChange, theme }) {
 /* ============================================================================
    POST CHALLENGE FORM
    ============================================================================ */
-function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], autoOpen = false, onAutoOpenHandled, theme }) {
+function ChallengeForm({ token, user, challenges = [], onCreated, disabledReason, grounds = [], autoOpen = false, onAutoOpenHandled, theme }) {
   const isLight = detectLight(theme);
   const t = tokens(isLight);
   const emptyForm = {
@@ -486,12 +570,62 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
     setError(null);
   };
 
+  const currentSlot = getChallengeSlot({ time_slot: form.time_slot });
+
+  // Conflict / Slot limit validation:
+  const slotConflict = useMemo(() => {
+    if (!form.match_date || !form.time_slot) return null;
+    const chosenSlot = getChallengeSlot({ time_slot: form.time_slot });
+
+    // 1. Confirmed match check: Cannot post if user already has a confirmed match for this date & slot
+    const confirmedMatch = challenges?.find(c => {
+      if (c.status !== "accepted") return false;
+      if (!isSameCalendarDay(c.match_date, form.match_date)) return false;
+      const cSlot = (c.slot || getChallengeSlot(c)).toLowerCase();
+      if (cSlot !== chosenSlot.toLowerCase()) return false;
+      return (
+        (user?.id && (String(c.accepted_by_user_id) === String(user.id) || String(c.creator_id) === String(user.id))) ||
+        (normalizedContact && (normalizePhone(c.accepted_by_contact_no) === normalizedContact || normalizePhone(c.contact_no) === normalizedContact)) ||
+        (form.team_name && (c.accepted_by_team_name?.trim().toLowerCase() === form.team_name.trim().toLowerCase() || c.team_name?.trim().toLowerCase() === form.team_name.trim().toLowerCase()))
+      );
+    });
+    if (confirmedMatch) {
+      return {
+        type: "confirmed",
+        message: `You already have a confirmed match on ${formatDateDisplay(form.match_date)} in the ${chosenSlot} slot. Only one match can be scheduled per session.`
+      };
+    }
+
+    // 2. Already posted challenge check: Only 1 challenge per session (Morning / Afternoon) per day
+    const existingPost = challenges?.find(c => {
+      if (c.status === "cancelled") return false;
+      if (!isSameCalendarDay(c.match_date, form.match_date)) return false;
+      const cSlot = (c.slot || getChallengeSlot(c)).toLowerCase();
+      if (cSlot !== chosenSlot.toLowerCase()) return false;
+      return (
+        (user?.id && String(c.creator_id) === String(user.id)) ||
+        (normalizedContact && normalizePhone(c.contact_no) === normalizedContact) ||
+        (form.team_name && c.team_name?.trim().toLowerCase() === form.team_name.trim().toLowerCase())
+      );
+    });
+    if (existingPost) {
+      return {
+        type: "duplicate",
+        message: `You already posted a challenge for the ${chosenSlot} slot on ${formatDateDisplay(form.match_date)}. You can only post one challenge for Morning and one for Afternoon per day.`
+      };
+    }
+
+    return null;
+  }, [form.match_date, form.time_slot, challenges, user, normalizedContact, form.team_name]);
+
   const handleSubmit = async e => {
     e.preventDefault();
     setError(null);
 
     const profileErr = checkProfileCompleteness();
     if (profileErr) return setError(profileErr);
+
+    if (slotConflict) return setError(slotConflict.message);
 
     if (!form.team_name.trim()) return setError("Team name is required.");
     if (normalizedContact.length < 10 || normalizedContact.length > 15) {
@@ -546,8 +680,6 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
     );
   }
 
-  const currentSlot = getChallengeSlot({ time_slot: form.time_slot });
-
   return (
     <>
       <PrimaryButton
@@ -561,57 +693,93 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
       </PrimaryButton>
 
       {open && (
-        <Modal isLight={isLight} onClose={closeForm}>
-          <Card isLight={isLight} className="p-5">
+        <Modal isLight={isLight} onClose={closeForm} maxWidth="max-w-xl">
+          <Card isLight={isLight} className="p-5 sm:p-6 border-0 shadow-none bg-transparent">
             <form onSubmit={handleSubmit} className="space-y-4">
-              <ModalHeader isLight={isLight} title="Post a Match Challenge" onClose={closeForm} />
+              <ModalHeader
+                isLight={isLight}
+                icon={Zap}
+                title="Post a Match Challenge"
+                subtitle="Open a new fixture to challenge teams in your area"
+                badge="Open Challenge"
+                onClose={closeForm}
+              />
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <Label isLight={isLight}>Team name</Label>
+              <div className="grid grid-cols-2 gap-3.5">
+                <div className="col-span-2 sm:col-span-1">
+                  <Label isLight={isLight} icon={Users}>Team name</Label>
                   <input
                     value={form.team_name}
                     readOnly
                     disabled
-                    className="w-full rounded-xl px-3 py-2.5 text-sm font-semibold cursor-not-allowed opacity-80"
+                    className="w-full rounded-xl px-3.5 py-2.5 text-sm font-semibold cursor-not-allowed opacity-85"
                     style={fieldStyle(isLight)}
                     placeholder="Team name"
                   />
-                  <p className="text-xs mt-1" style={{ color: t.faint }}>From your profile.</p>
+                  <p className="text-[11px] mt-1" style={{ color: t.faint }}>From your profile.</p>
                 </div>
 
-                <div className="col-span-2">
-                  <Label isLight={isLight}>Contact number</Label>
+                <div className="col-span-2 sm:col-span-1">
+                  <Label isLight={isLight} icon={Phone}>Contact number</Label>
                   <input
                     value={contact}
                     readOnly
                     disabled
-                    className="w-full rounded-xl px-3 py-2.5 text-sm cursor-not-allowed opacity-80"
+                    className="w-full rounded-xl px-3.5 py-2.5 text-sm cursor-not-allowed opacity-85 font-mono"
                     style={fieldStyle(isLight)}
                   />
-                  <p className="text-xs mt-1" style={{ color: t.faint }}>Only shared with the team that accepts your challenge.</p>
+                  <p className="text-[11px] mt-1" style={{ color: t.faint }}>Only shared with the accepted opponent.</p>
                 </div>
 
-                <div>
-                  <Label isLight={isLight}>Format</Label>
-                  <div className="relative">
-                    <select
-                      value={form.format}
-                      onChange={e => handleFormatChange(e.target.value)}
-                      className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none cursor-pointer"
-                      style={fieldStyle(isLight)}
-                    >
-                      {FORMATS.map(f => (
-                        <option key={f.key} value={f.key}>{f.title}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: t.sub }} />
+                <div className="col-span-2">
+                  <Label isLight={isLight} icon={Zap} required>Select Match Format</Label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {FORMATS.map(f => {
+                      const isSelected = form.format === f.key;
+                      return (
+                        <button
+                          key={f.key}
+                          type="button"
+                          onClick={() => handleFormatChange(f.key)}
+                          className={cn(
+                            "p-2.5 rounded-xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between",
+                            isSelected
+                              ? isLight
+                                ? "bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs"
+                                : "bg-emerald-950/40 border-emerald-500/70 ring-2 ring-emerald-500/30 shadow-xs"
+                              : isLight
+                                ? "bg-white border-slate-200 hover:border-slate-300"
+                                : "bg-[#0d130e] border-[#1d2a21] hover:border-[#2a3c2e]"
+                          )}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-base">{f.emoji}</span>
+                            <span
+                              className={cn(
+                                "text-[10px] font-black uppercase px-1.5 py-0.5 rounded",
+                                isSelected
+                                  ? "bg-emerald-500 text-white"
+                                  : isLight ? "bg-slate-100 text-slate-600" : "bg-[#18231c] text-neutral-400"
+                              )}
+                            >
+                              {f.key}
+                            </span>
+                          </div>
+                          <div className="text-xs font-bold truncate" style={{ color: isSelected ? (isLight ? "#065f46" : "#34d399") : t.text }}>
+                            {f.title}
+                          </div>
+                          <div className="text-[10px] truncate mt-0.5" style={{ color: t.faint }}>
+                            {f.key === "Test" ? "Multi-day" : `${DEFAULT_OVERS[f.key] || 20} Overs`}
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
                 <div>
-                  <Label isLight={isLight}>
-                    Overs {form.format !== "Test" && <span style={{ color: t.faint }}>(default {DEFAULT_OVERS[form.format]})</span>}
+                  <Label isLight={isLight} helper={form.format !== "Test" ? `Default: ${DEFAULT_OVERS[form.format]} overs` : null}>
+                    Match Overs
                   </Label>
                   <input
                     type="number"
@@ -621,34 +789,50 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
                     onChange={e => update("overs", e.target.value)}
                     placeholder={form.format === "Test" ? "Not applicable" : String(DEFAULT_OVERS[form.format])}
                     disabled={form.format === "Test"}
-                    className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                     style={fieldStyle(isLight)}
                   />
                 </div>
 
                 <div>
-                  <Label isLight={isLight}>Ground booked?</Label>
-                  <div className="relative">
-                    <select
-                      value={form.hasGround ? "yes" : "no"}
-                      onChange={e => update("hasGround", e.target.value === "yes")}
-                      className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none cursor-pointer"
-                      style={fieldStyle(isLight)}
+                  <Label isLight={isLight}>Ground Status</Label>
+                  <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl border" style={{ backgroundColor: isLight ? "#f1f5f9" : "#0d130e", borderColor: t.border }}>
+                    <button
+                      type="button"
+                      onClick={() => update("hasGround", false)}
+                      className={cn(
+                        "py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5",
+                        !form.hasGround
+                          ? isLight ? "bg-white text-slate-900 shadow-xs" : "bg-[#1d2a21] text-white shadow-xs"
+                          : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                      )}
                     >
-                      <option value="no">Not booked yet</option>
-                      <option value="yes">Already booked</option>
-                    </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: t.sub }} />
+                      <span>⏳</span>
+                      <span>Not Booked</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => update("hasGround", true)}
+                      className={cn(
+                        "py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5",
+                        form.hasGround
+                          ? "bg-emerald-500 text-white shadow-xs"
+                          : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                      )}
+                    >
+                      <span>🏟</span>
+                      <span>Ground Booked</span>
+                    </button>
                   </div>
                 </div>
 
                 <div className="col-span-2 sm:col-span-1">
-                  <Label isLight={isLight}>Match date</Label>
+                  <Label isLight={isLight} icon={Calendar} required>Match date</Label>
                   <CalendarField value={form.match_date} onChange={v => update("match_date", v)} theme={theme} />
                 </div>
 
                 <div className="col-span-2 sm:col-span-1">
-                  <Label isLight={isLight}>Match time</Label>
+                  <Label isLight={isLight} icon={Clock} required>Match time</Label>
                   <TimeField
                     value={form.time_slot}
                     onChange={v => {
@@ -664,14 +848,14 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
                 <div className="col-span-2">
                   <Label isLight={isLight}>Match Session (Auto-determined by time)</Label>
                   <div
-                    className="p-3 rounded-xl border flex items-center justify-between"
+                    className="p-3.5 rounded-xl border flex items-center justify-between"
                     style={{
                       backgroundColor: isLight ? "#f0fdf4" : "rgba(34,197,94,0.06)",
                       borderColor: isLight ? "#bbf7d0" : "rgba(34,197,94,0.22)"
                     }}
                   >
                     <div className="flex items-center gap-2.5">
-                      <span className="text-lg">{currentSlot === "Morning" ? "🌅" : "☀️"}</span>
+                      <span className="text-xl">{currentSlot === "Morning" ? "🌅" : "☀️"}</span>
                       <div>
                         <div className="text-xs font-bold" style={{ color: t.text }}>
                           {currentSlot} Session
@@ -696,20 +880,34 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
                     </span>
                   </div>
                   <p className="text-[11px] mt-1.5" style={{ color: t.faint }}>
-                    Session is automatically assigned based on match time. Teams can accept separate challenges in Morning and Afternoon on the same day.
+                    Session is automatically assigned based on match time. Daily limit: 1 challenge in Morning and 1 in Afternoon.
                   </p>
                 </div>
 
+                {slotConflict && (
+                  <div
+                    className="col-span-2 p-3 rounded-xl border flex items-start gap-2.5 text-xs font-semibold"
+                    style={{
+                      backgroundColor: isLight ? "#fff1f2" : "rgba(244,63,94,0.1)",
+                      borderColor: isLight ? "#fecdd3" : "rgba(244,63,94,0.3)",
+                      color: isLight ? "#e11d48" : "#fb7185"
+                    }}
+                  >
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>{slotConflict.message}</span>
+                  </div>
+                )}
+
                 {form.hasGround && (
                   <div className="col-span-2">
-                    <Label isLight={isLight}>Ground</Label>
+                    <Label isLight={isLight} icon={MapPin} required>Ground Details</Label>
                     {grounds.length > 0 ? (
                       <>
                         <div className="relative">
                           <select
                             value={form.ground_id}
                             onChange={e => update("ground_id", e.target.value)}
-                            className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none cursor-pointer"
+                            className="w-full rounded-xl px-3.5 py-2.5 text-sm appearance-none pr-8 focus:outline-none cursor-pointer"
                             style={fieldStyle(isLight)}
                           >
                             <option value="">Select a ground</option>
@@ -727,7 +925,7 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
                           <input
                             value={form.ground_custom}
                             onChange={e => update("ground_custom", e.target.value)}
-                            className="w-full mt-2 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+                            className="w-full mt-2 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none"
                             style={fieldStyle(isLight)}
                             placeholder="Ground name"
                           />
@@ -740,7 +938,7 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
                           update("ground_custom", e.target.value);
                           update("ground_id", "other");
                         }}
-                        className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+                        className="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none"
                         style={fieldStyle(isLight)}
                         placeholder="Green Park Cricket Ground"
                       />
@@ -749,14 +947,14 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
                 )}
 
                 <div className="col-span-2">
-                  <Label isLight={isLight}>Description</Label>
+                  <Label isLight={isLight} icon={Info}>Description & Rules (Optional)</Label>
                   <textarea
                     value={form.note}
                     onChange={e => update("note", e.target.value)}
                     rows={3}
-                    className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none resize-none"
+                    className="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none resize-none"
                     style={fieldStyle(isLight)}
-                    placeholder="Looking for a friendly T20 match, intermediate level"
+                    placeholder="Looking for a friendly match, intermediate level, leather ball"
                   />
                 </div>
               </div>
@@ -767,12 +965,27 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
                 </div>
               )}
 
-              <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
                 <OutlineButton isLight={isLight} type="button" onClick={closeForm} className="flex-1">
                   Cancel
                 </OutlineButton>
-                <PrimaryButton type="submit" disabled={submitting || !normalizedContact} className="flex-1">
-                  {submitting ? "Posting..." : "Post Challenge"}
+                <PrimaryButton
+                  type="submit"
+                  disabled={submitting || !normalizedContact || Boolean(slotConflict)}
+                  className="flex-1"
+                  title={slotConflict?.message}
+                >
+                  {submitting ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Posting Challenge...</span>
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center gap-1.5">
+                      <Zap className="w-4 h-4" />
+                      <span>Post Challenge</span>
+                    </span>
+                  )}
                 </PrimaryButton>
               </div>
             </form>
@@ -786,7 +999,7 @@ function ChallengeForm({ token, user, onCreated, disabledReason, grounds = [], a
 /* ============================================================================
    EDIT CHALLENGE MODAL (Only creator can edit)
    ============================================================================ */
-function EditChallengeModal({ challenge, token, user, grounds = [], onUpdated, onClose, theme }) {
+function EditChallengeModal({ challenge, challenges = [], token, user, grounds = [], onUpdated, onClose, theme }) {
   const isLight = detectLight(theme);
   const t = tokens(isLight);
 
@@ -820,10 +1033,60 @@ function EditChallengeModal({ challenge, token, user, grounds = [], onUpdated, o
   };
 
   const autoSlot = getChallengeSlot({ time_slot: form.time_slot });
+  const normalizedContact = normalizePhone(challenge?.contact_no || user?.phone || "");
+
+  const slotConflict = useMemo(() => {
+    if (!form.match_date || !form.time_slot) return null;
+    const chosenSlot = getChallengeSlot({ time_slot: form.time_slot });
+
+    // 1. Confirmed match check
+    const confirmedMatch = challenges?.find(c => {
+      if (c.id === challenge.id) return false;
+      if (c.status !== "accepted") return false;
+      if (!isSameCalendarDay(c.match_date, form.match_date)) return false;
+      const cSlot = (c.slot || getChallengeSlot(c)).toLowerCase();
+      if (cSlot !== chosenSlot.toLowerCase()) return false;
+      return (
+        (user?.id && (String(c.accepted_by_user_id) === String(user.id) || String(c.creator_id) === String(user.id))) ||
+        (normalizedContact && (normalizePhone(c.accepted_by_contact_no) === normalizedContact || normalizePhone(c.contact_no) === normalizedContact)) ||
+        (form.team_name && (c.accepted_by_team_name?.trim().toLowerCase() === form.team_name.trim().toLowerCase() || c.team_name?.trim().toLowerCase() === form.team_name.trim().toLowerCase()))
+      );
+    });
+    if (confirmedMatch) {
+      return {
+        type: "confirmed",
+        message: `You already have a confirmed match on this date (${formatDateDisplay(form.match_date)}) in the ${chosenSlot} slot.`
+      };
+    }
+
+    // 2. Another active challenge check
+    const existingPost = challenges?.find(c => {
+      if (c.id === challenge.id) return false;
+      if (c.status === "cancelled") return false;
+      if (!isSameCalendarDay(c.match_date, form.match_date)) return false;
+      const cSlot = (c.slot || getChallengeSlot(c)).toLowerCase();
+      if (cSlot !== chosenSlot.toLowerCase()) return false;
+      return (
+        (user?.id && String(c.creator_id) === String(user.id)) ||
+        (normalizedContact && normalizePhone(c.contact_no) === normalizedContact) ||
+        (form.team_name && c.team_name?.trim().toLowerCase() === form.team_name.trim().toLowerCase())
+      );
+    });
+    if (existingPost) {
+      return {
+        type: "duplicate",
+        message: `You already have another challenge for the ${chosenSlot} slot on ${formatDateDisplay(form.match_date)}. Only one challenge per session is allowed.`
+      };
+    }
+
+    return null;
+  }, [form.match_date, form.time_slot, challenges, challenge.id, user, normalizedContact, form.team_name]);
 
   const handleSubmit = async e => {
     e.preventDefault();
     setError(null);
+
+    if (slotConflict) return setError(slotConflict.message);
 
     if (!form.format) return setError("Match format is required.");
     if (!form.match_date) return setError("Match date is required.");
@@ -870,43 +1133,79 @@ function EditChallengeModal({ challenge, token, user, grounds = [], onUpdated, o
   };
 
   return (
-    <Modal isLight={isLight} onClose={onClose}>
-      <Card isLight={isLight} className="p-5">
+    <Modal isLight={isLight} onClose={onClose} maxWidth="max-w-xl">
+      <Card isLight={isLight} className="p-5 sm:p-6 border-0 shadow-none bg-transparent">
         <form onSubmit={handleSubmit} className="space-y-4">
-          <ModalHeader isLight={isLight} title="Edit Match Challenge" onClose={onClose} />
+          <ModalHeader
+            isLight={isLight}
+            icon={Edit}
+            title="Edit Match Challenge"
+            subtitle="Modify fixture format, ground, overs or timing"
+            badge="Editing"
+            onClose={onClose}
+          />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3.5">
             <div className="col-span-2">
-              <Label isLight={isLight}>Team name</Label>
+              <Label isLight={isLight} icon={Users}>Team name</Label>
               <input
                 value={form.team_name}
                 readOnly
                 disabled
-                className="w-full rounded-xl px-3 py-2.5 text-sm font-semibold cursor-not-allowed opacity-80"
+                className="w-full rounded-xl px-3.5 py-2.5 text-sm font-semibold cursor-not-allowed opacity-85"
                 style={fieldStyle(isLight)}
               />
             </div>
 
-            <div>
-              <Label isLight={isLight}>Format</Label>
-              <div className="relative">
-                <select
-                  value={form.format}
-                  onChange={e => handleFormatChange(e.target.value)}
-                  className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none cursor-pointer"
-                  style={fieldStyle(isLight)}
-                >
-                  {FORMATS.map(f => (
-                    <option key={f.key} value={f.key}>{f.title}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: t.sub }} />
+            <div className="col-span-2">
+              <Label isLight={isLight} icon={Zap} required>Select Match Format</Label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {FORMATS.map(f => {
+                  const isSelected = form.format === f.key;
+                  return (
+                    <button
+                      key={f.key}
+                      type="button"
+                      onClick={() => handleFormatChange(f.key)}
+                      className={cn(
+                        "p-2.5 rounded-xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between",
+                        isSelected
+                          ? isLight
+                            ? "bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs"
+                            : "bg-emerald-950/40 border-emerald-500/70 ring-2 ring-emerald-500/30 shadow-xs"
+                          : isLight
+                            ? "bg-white border-slate-200 hover:border-slate-300"
+                            : "bg-[#0d130e] border-[#1d2a21] hover:border-[#2a3c2e]"
+                      )}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-base">{f.emoji}</span>
+                        <span
+                          className={cn(
+                            "text-[10px] font-black uppercase px-1.5 py-0.5 rounded",
+                            isSelected
+                              ? "bg-emerald-500 text-white"
+                              : isLight ? "bg-slate-100 text-slate-600" : "bg-[#18231c] text-neutral-400"
+                          )}
+                        >
+                          {f.key}
+                        </span>
+                      </div>
+                      <div className="text-xs font-bold truncate" style={{ color: isSelected ? (isLight ? "#065f46" : "#34d399") : t.text }}>
+                        {f.title}
+                      </div>
+                      <div className="text-[10px] truncate mt-0.5" style={{ color: t.faint }}>
+                        {f.key === "Test" ? "Multi-day" : `${DEFAULT_OVERS[f.key] || 20} Overs`}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
             <div>
-              <Label isLight={isLight}>
-                Overs {form.format !== "Test" && <span style={{ color: t.faint }}>(default {DEFAULT_OVERS[form.format]})</span>}
+              <Label isLight={isLight} helper={form.format !== "Test" ? `Default: ${DEFAULT_OVERS[form.format]} overs` : null}>
+                Match Overs
               </Label>
               <input
                 type="number"
@@ -916,34 +1215,50 @@ function EditChallengeModal({ challenge, token, user, grounds = [], onUpdated, o
                 onChange={e => update("overs", e.target.value)}
                 placeholder={form.format === "Test" ? "Not applicable" : String(DEFAULT_OVERS[form.format])}
                 disabled={form.format === "Test"}
-                className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                 style={fieldStyle(isLight)}
               />
             </div>
 
             <div>
-              <Label isLight={isLight}>Ground booked?</Label>
-              <div className="relative">
-                <select
-                  value={form.hasGround ? "yes" : "no"}
-                  onChange={e => update("hasGround", e.target.value === "yes")}
-                  className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none cursor-pointer"
-                  style={fieldStyle(isLight)}
+              <Label isLight={isLight}>Ground Status</Label>
+              <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl border" style={{ backgroundColor: isLight ? "#f1f5f9" : "#0d130e", borderColor: t.border }}>
+                <button
+                  type="button"
+                  onClick={() => update("hasGround", false)}
+                  className={cn(
+                    "py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5",
+                    !form.hasGround
+                      ? isLight ? "bg-white text-slate-900 shadow-xs" : "bg-[#1d2a21] text-white shadow-xs"
+                      : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                  )}
                 >
-                  <option value="no">Not booked yet</option>
-                  <option value="yes">Already booked</option>
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: t.sub }} />
+                  <span>⏳</span>
+                  <span>Not Booked</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => update("hasGround", true)}
+                  className={cn(
+                    "py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5",
+                    form.hasGround
+                      ? "bg-emerald-500 text-white shadow-xs"
+                      : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                  )}
+                >
+                  <span>🏟</span>
+                  <span>Ground Booked</span>
+                </button>
               </div>
             </div>
 
             <div className="col-span-2 sm:col-span-1">
-              <Label isLight={isLight}>Match date</Label>
+              <Label isLight={isLight} icon={Calendar} required>Match date</Label>
               <CalendarField value={form.match_date} onChange={v => update("match_date", v)} theme={theme} />
             </div>
 
             <div className="col-span-2 sm:col-span-1">
-              <Label isLight={isLight}>Match time</Label>
+              <Label isLight={isLight} icon={Clock} required>Match time</Label>
               <TimeField
                 value={form.time_slot}
                 onChange={v => update("time_slot", v)}
@@ -954,14 +1269,14 @@ function EditChallengeModal({ challenge, token, user, grounds = [], onUpdated, o
             <div className="col-span-2">
               <Label isLight={isLight}>Match Session (Auto-determined by time)</Label>
               <div
-                className="p-3 rounded-xl border flex items-center justify-between"
+                className="p-3.5 rounded-xl border flex items-center justify-between"
                 style={{
                   backgroundColor: isLight ? "#f0fdf4" : "rgba(34,197,94,0.06)",
                   borderColor: isLight ? "#bbf7d0" : "rgba(34,197,94,0.22)"
                 }}
               >
                 <div className="flex items-center gap-2.5">
-                  <span className="text-lg">{autoSlot === "Morning" ? "🌅" : "☀️"}</span>
+                  <span className="text-xl">{autoSlot === "Morning" ? "🌅" : "☀️"}</span>
                   <div>
                     <div className="text-xs font-bold" style={{ color: t.text }}>
                       {autoSlot} Session
@@ -990,16 +1305,30 @@ function EditChallengeModal({ challenge, token, user, grounds = [], onUpdated, o
               </p>
             </div>
 
+            {slotConflict && (
+              <div
+                className="col-span-2 p-3 rounded-xl border flex items-start gap-2.5 text-xs font-semibold"
+                style={{
+                  backgroundColor: isLight ? "#fff1f2" : "rgba(244,63,94,0.1)",
+                  borderColor: isLight ? "#fecdd3" : "rgba(244,63,94,0.3)",
+                  color: isLight ? "#e11d48" : "#fb7185"
+                }}
+              >
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{slotConflict.message}</span>
+              </div>
+            )}
+
             {form.hasGround && (
               <div className="col-span-2">
-                <Label isLight={isLight}>Ground</Label>
+                <Label isLight={isLight} icon={MapPin} required>Ground Details</Label>
                 {grounds.length > 0 ? (
                   <>
                     <div className="relative">
                       <select
                         value={form.ground_id}
                         onChange={e => update("ground_id", e.target.value)}
-                        className="w-full rounded-xl px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none cursor-pointer"
+                        className="w-full rounded-xl px-3.5 py-2.5 text-sm appearance-none pr-8 focus:outline-none cursor-pointer"
                         style={fieldStyle(isLight)}
                       >
                         <option value="">Select a ground</option>
@@ -1017,7 +1346,7 @@ function EditChallengeModal({ challenge, token, user, grounds = [], onUpdated, o
                         value={form.ground_custom}
                         onChange={e => update("ground_custom", e.target.value)}
                         placeholder="Enter ground name"
-                        className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none mt-2"
+                        className="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none mt-2"
                         style={fieldStyle(isLight)}
                       />
                     )}
@@ -1027,7 +1356,7 @@ function EditChallengeModal({ challenge, token, user, grounds = [], onUpdated, o
                     value={form.ground_custom}
                     onChange={e => update("ground_custom", e.target.value)}
                     placeholder="Enter ground name and location"
-                    className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+                    className="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none"
                     style={fieldStyle(isLight)}
                   />
                 )}
@@ -1035,13 +1364,13 @@ function EditChallengeModal({ challenge, token, user, grounds = [], onUpdated, o
             )}
 
             <div className="col-span-2">
-              <Label isLight={isLight}>Description</Label>
+              <Label isLight={isLight} icon={Info}>Description & Rules (Optional)</Label>
               <textarea
                 value={form.note}
                 onChange={e => update("note", e.target.value)}
                 placeholder="Looking for a friendly match, intermediate level"
                 rows={3}
-                className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none resize-none"
+                className="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none resize-none"
                 style={fieldStyle(isLight)}
               />
             </div>
@@ -1053,12 +1382,22 @@ function EditChallengeModal({ challenge, token, user, grounds = [], onUpdated, o
             </div>
           )}
 
-          <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
             <OutlineButton isLight={isLight} type="button" onClick={onClose} className="flex-1">
               Cancel
             </OutlineButton>
-            <PrimaryButton type="submit" disabled={submitting} className="flex-1">
-              {submitting ? "Saving..." : "Save Changes"}
+            <PrimaryButton type="submit" disabled={submitting || Boolean(slotConflict)} className="flex-1" title={slotConflict?.message}>
+              {submitting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Saving...</span>
+                </span>
+              ) : (
+                <span className="flex items-center justify-center gap-1.5">
+                  <Edit className="w-4 h-4" />
+                  <span>Save Changes</span>
+                </span>
+              )}
             </PrimaryButton>
           </div>
         </form>
@@ -1089,7 +1428,7 @@ function AcceptChallengeModal({ challenge, token, user, hasActiveConflict, onClo
     e.preventDefault();
     if (hasActiveConflict && hasActiveConflict(challenge.rawDate, challenge.slot)) {
       const other = challenge.slot === "Morning" ? "Afternoon" : "Morning";
-      return setError(`You already have an active match on this date (${challenge.date}) in the ${challenge.slot} slot. You can request matches on other dates or in the ${other} slot.`);
+      return setError(`You already have a confirmed match on this date (${challenge.date}) in the ${challenge.slot} slot. No more challenges can be requested or accepted for this booked slot. You can request matches on other dates or in the ${other} slot.`);
     }
     const missing = [];
     if (!user?.name?.trim()) missing.push("Name");
@@ -1128,14 +1467,36 @@ function AcceptChallengeModal({ challenge, token, user, hasActiveConflict, onClo
 
   return (
     <Modal isLight={isLight} onClose={onClose} maxWidth="max-w-md">
-      <Card isLight={isLight} className="p-5">
+      <Card isLight={isLight} className="p-5 sm:p-6 border-0 shadow-none bg-transparent">
         <form onSubmit={handleSubmit} className="space-y-4">
-          <ModalHeader isLight={isLight} title={`Request Match vs ${challenge.team}`} onClose={onClose} />
-          <p className="text-sm" style={{ color: t.sub }}>
-            {challenge.team}'s captain will review your match request. Once accepted, your match will be locked in!
-          </p>
-          <div className="rounded-xl p-3 border text-xs space-y-1" style={{ backgroundColor: t.cardAlt, borderColor: t.border }}>
-            <div className="font-semibold" style={{ color: t.text }}>Challenge Schedule:</div>
+          <ModalHeader
+            isLight={isLight}
+            icon={Users}
+            title={`Request Match vs ${challenge.team}`}
+            subtitle="Send your team's request for the host captain's approval"
+            badge="Match Request"
+            onClose={onClose}
+          />
+
+          <div
+            className="rounded-2xl p-3.5 border text-xs space-y-2"
+            style={{
+              backgroundColor: isLight ? "#f0fdf4" : "rgba(34,197,94,0.06)",
+              borderColor: isLight ? "#bbf7d0" : "rgba(34,197,94,0.22)"
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-xs" style={{ color: t.text }}>Match Fixture Details</span>
+              <span
+                className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full"
+                style={{
+                  backgroundColor: isLight ? "#dcfce7" : "rgba(34,197,94,0.2)",
+                  color: isLight ? "#15803d" : "#4ade80"
+                }}
+              >
+                {challenge.format || "T20"}
+              </span>
+            </div>
             <div className="flex flex-wrap items-center gap-2 font-medium" style={{ color: t.sub }}>
               <span>📅 {challenge.date}</span>
               <span>·</span>
@@ -1147,49 +1508,70 @@ function AcceptChallengeModal({ challenge, token, user, hasActiveConflict, onClo
               {challenge.ground && <span>· 📍 {challenge.ground}</span>}
             </div>
           </div>
+
           <div>
-            <Label isLight={isLight}>Your team name</Label>
+            <Label isLight={isLight} icon={Users}>Your team name</Label>
             <input
               value={teamName}
               readOnly
               disabled
-              className="w-full rounded-xl px-3 py-2.5 text-sm font-semibold cursor-not-allowed opacity-80"
+              className="w-full rounded-xl px-3.5 py-2.5 text-sm font-semibold cursor-not-allowed opacity-85"
               style={fieldStyle(isLight)}
             />
           </div>
+
           <div>
-            <Label isLight={isLight}>Contact number</Label>
+            <Label isLight={isLight} icon={Phone}>Contact number</Label>
             <input
               value={contact}
               readOnly
               disabled
-              className="w-full rounded-xl px-3 py-2.5 text-sm cursor-not-allowed opacity-80"
+              className="w-full rounded-xl px-3.5 py-2.5 text-sm cursor-not-allowed opacity-85 font-mono"
               style={fieldStyle(isLight)}
             />
-            <p className="text-xs mt-1" style={{ color: t.faint }}>Shared with opponent captain so they can call or WhatsApp you.</p>
+            <p className="text-[11px] mt-1" style={{ color: t.faint }}>Shared with opponent captain so they can coordinate.</p>
           </div>
+
           <div>
-            <Label isLight={isLight}>Message / Notes for Opponent Captain (Optional)</Label>
+            <Label isLight={isLight} icon={Info}>Message for Opponent Captain (Optional)</Label>
             <textarea
               value={message}
               onChange={e => setMessage(e.target.value)}
-              placeholder="e.g. Ready with 11 players, looking for a friendly match!"
+              placeholder="e.g. Ready with 11 players, looking forward to a great game!"
               rows={2}
-              className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none resize-none"
+              className="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none resize-none"
               style={fieldStyle(isLight)}
             />
           </div>
+
           {error && (
             <div className="text-xs rounded-xl p-3 font-medium border" style={{ backgroundColor: t.redSoft, borderColor: t.redBorder, color: t.red }}>
               {error}
             </div>
           )}
-          <div className="flex flex-col sm:flex-row gap-2">
+
+          <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
             <OutlineButton isLight={isLight} type="button" onClick={onClose} className="flex-1">
               Cancel
             </OutlineButton>
-            <PrimaryButton type="submit" disabled={submitting || !contact} className="flex-1">
-              {submitting ? "Sending Request..." : "Send Match Request"}
+            <PrimaryButton
+              type="submit"
+              disabled={submitting || !contact || (hasActiveConflict && hasActiveConflict(challenge.rawDate, challenge.slot))}
+              className="flex-1"
+            >
+              {submitting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Sending Request...</span>
+                </span>
+              ) : (hasActiveConflict && hasActiveConflict(challenge.rawDate, challenge.slot)) ? (
+                `Slot Booked (${challenge.slot})`
+              ) : (
+                <span className="flex items-center justify-center gap-1.5">
+                  <Zap className="w-4 h-4" />
+                  <span>Send Match Request</span>
+                </span>
+              )}
             </PrimaryButton>
           </div>
         </form>
@@ -1201,10 +1583,13 @@ function AcceptChallengeModal({ challenge, token, user, hasActiveConflict, onClo
 /* ============================================================================
    CHALLENGE REQUESTS REVIEW MODAL (for Challenge Creator)
    ============================================================================ */
-export function ChallengeRequestsReviewModal({ challenge, isOpen, onClose, token, onChallengeUpdated, theme }) {
+export function ChallengeRequestsReviewModal({ challenge, isOpen, onClose, token, onChallengeUpdated, theme, hasActiveConflict }) {
   if (!isOpen || !challenge) return null;
   const isLight = detectLight(theme);
   const t = tokens(isLight);
+
+  const targetSlot = challenge.slot || getChallengeSlot(challenge);
+  const isSlotConflict = hasActiveConflict ? hasActiveConflict(challenge.match_date || challenge.date, targetSlot) : false;
 
   const initialRequests = challenge.pending_requests || challenge.pendingRequests || [];
   const [requests, setRequests] = useState(initialRequests);
@@ -1243,8 +1628,9 @@ export function ChallengeRequestsReviewModal({ challenge, isOpen, onClose, token
       if (res?.challenge) {
         setActionFeedback({
           type: "success",
-          message: `Match confirmed against Team "${reqItem.team_name}"!`,
+          message: `Match confirmed against Team "${reqItem.team_name}"! Other requests on this slot have been cleared.`,
         });
+        window.dispatchEvent(new CustomEvent("mc:challenge_accepted", { detail: res.challenge }));
         onChallengeUpdated?.(res.challenge);
         setTimeout(() => {
           onClose();
@@ -1339,6 +1725,19 @@ export function ChallengeRequestsReviewModal({ challenge, isOpen, onClose, token
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Conflict Warning */}
+        {isSlotConflict && (
+          <div
+            className={cn(
+              "px-5 py-2.5 text-xs font-bold flex items-center gap-2 border-b",
+              isLight ? "bg-amber-50 text-amber-900 border-amber-200" : "bg-amber-950/40 text-amber-300 border-amber-500/30"
+            )}
+          >
+            <AlertCircle className="w-4 h-4 shrink-0 text-amber-500" />
+            <span>You already have a confirmed match on this date in the {targetSlot} slot. Accepting additional requests for this slot is disabled.</span>
+          </div>
+        )}
 
         {/* Feedback Alert */}
         {actionFeedback && (
@@ -1491,22 +1890,24 @@ export function ChallengeRequestsReviewModal({ challenge, isOpen, onClose, token
                   <div className="flex items-center gap-2 pt-1">
                     <button
                       type="button"
-                      disabled={isProcessing}
+                      disabled={isProcessing || isSlotConflict}
                       onClick={() => handleAccept(reqItem)}
                       className={cn(
                         "flex-1 py-2 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50 cursor-pointer",
-                        isLight
+                        isSlotConflict
+                          ? "bg-slate-500/20 text-slate-400 border border-slate-500/30 cursor-not-allowed"
+                          : isLight
                           ? "bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 text-white"
                           : "bg-gradient-to-r from-emerald-400 to-green-400 hover:from-emerald-300 text-black"
                       )}
-                      title="Confirm this match challenge"
+                      title={isSlotConflict ? `You already have a confirmed match on this date in the ${targetSlot} slot` : "Confirm this match challenge"}
                     >
                       {isProcessing ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       ) : (
                         <CheckCircle className="w-3.5 h-3.5" />
                       )}
-                      <span>✓ Accept & Confirm Match</span>
+                      <span>{isSlotConflict ? `Slot Booked (${targetSlot})` : "✓ Accept & Confirm Match"}</span>
                     </button>
                     <button
                       type="button"
@@ -1893,6 +2294,10 @@ function normalizeChallenge(c) {
     urgent: !!c.urgent,
     rating: c.team_rating != null ? Number(c.team_rating) : c.rating ? Number(c.rating) : 5.0,
     reviewsCount: Number(c.reviews_count) || 0,
+    status: c.status || "open",
+    accepted_by_team_name: c.accepted_by_team_name || null,
+    accepted_by_contact_no: c.accepted_by_contact_no || null,
+    accepted_by_user_id: c.accepted_by_user_id || null,
     pending_requests_count: Number(c.pending_requests_count) || (Array.isArray(c.pending_requests) ? c.pending_requests.length : 0),
     pending_requests: Array.isArray(c.pending_requests) ? c.pending_requests : [],
     pendingRequestsCount: Number(c.pending_requests_count) || (Array.isArray(c.pending_requests) ? c.pending_requests.length : 0),
@@ -2190,27 +2595,19 @@ export default function FindMatchTab({
   const myPhone = normalizePhone(user?.phone);
   const teamPhoneSet = new Set([myPhone, ...teammatePhones].filter(Boolean));
 
-  // Collect all accepted challenges involving the user's team
-  const myAcceptedChallengesList = challenges.filter(
-    c =>
-      c.status === "accepted" &&
-      ((user?.id && (String(c.accepted_by_user_id) === String(user.id) || String(c.creator_id) === String(user.id))) ||
-        (myPhone && (normalizePhone(c.accepted_by_contact_no) === myPhone || normalizePhone(c.contact_no) === myPhone)) ||
-        (teamPhoneSet.size > 0 &&
-          (teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no)) || teamPhoneSet.has(normalizePhone(c.contact_no)))))
-  );
-
-  const isSameCalendarDay = (a, b) => {
-    if (!a || !b) return false;
-    const da = new Date(a);
-    const db = new Date(b);
-    if (isNaN(da.getTime()) || isNaN(db.getTime())) {
-      const sa = String(a).slice(0, 10);
-      const sb = String(b).slice(0, 10);
-      return sa === sb;
-    }
-    return da.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) === db.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-  };
+  // Collect all accepted challenges involving the user's team (as host or acceptor)
+  const myAcceptedChallengesList = challenges.filter(c => {
+    if (c.status !== "accepted") return false;
+    const isAcceptedUser =
+      (user?.id && (String(c.accepted_by_user_id) === String(user.id) || String(c.creator_id) === String(user.id))) ||
+      (myPhone && (normalizePhone(c.accepted_by_contact_no) === myPhone || normalizePhone(c.contact_no) === myPhone)) ||
+      (user?.team_name &&
+        (c.accepted_by_team_name?.trim().toLowerCase() === user.team_name.trim().toLowerCase() ||
+          c.team_name?.trim().toLowerCase() === user.team_name.trim().toLowerCase())) ||
+      (teamPhoneSet.size > 0 &&
+        (teamPhoneSet.has(normalizePhone(c.accepted_by_contact_no)) || teamPhoneSet.has(normalizePhone(c.contact_no))));
+    return isAcceptedUser;
+  });
 
   // Conflict check: returns true ONLY if user already accepted/scheduled a match on the EXACT SAME date AND same slot (Morning / Afternoon).
   // Challenges on other days OR in the other slot on the same day are allowed!
@@ -2225,9 +2622,19 @@ export default function FindMatchTab({
     });
   };
 
-  const openChallenges = challenges.filter(c => (!c.status || c.status === "open") && !teamPhoneSet.has(normalizePhone(c.contact_no)));
-  const normalized = openChallenges.map(normalizeChallenge);
+  const isOwnChallenge = (c) => {
+    return (
+      (user?.id && String(c.creator_id) === String(user.id)) ||
+      (myPhone && normalizePhone(c.contact_no) === myPhone) ||
+      (user?.team_name && c.team_name?.trim().toLowerCase() === user.team_name.trim().toLowerCase()) ||
+      teamPhoneSet.has(normalizePhone(c.contact_no))
+    );
+  };
+
+  const displayChallenges = challenges.filter(c => !isOwnChallenge(c) && c.status !== "on_hold" && c.status !== "cancelled");
+  const normalized = displayChallenges.map(normalizeChallenge);
   const format = FORMATS[selectedFormat];
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const sameDay = (dateStr, isoTarget) => {
     if (!dateStr) return false;
@@ -2273,7 +2680,7 @@ export default function FindMatchTab({
   })();
 
   const formatCounts = FORMATS.reduce((acc, f) => {
-    acc[f.key] = normalized.filter(c => c.format === f.key).length;
+    acc[f.key] = normalized.filter(c => c.format === f.key && (!c.status || c.status === "open")).length;
     return acc;
   }, {});
 
@@ -2282,6 +2689,11 @@ export default function FindMatchTab({
     .filter(c => !dateFilter || sameDay(c.rawDate, dateFilter))
     .filter(c => sameTime(c.time, timeFilter))
     .filter(c => !slotFilter || c.slot === slotFilter)
+    .filter(c => {
+      if (statusFilter === "open") return !c.status || c.status === "open";
+      if (statusFilter === "booked") return c.status === "accepted";
+      return true;
+    })
     .filter(c => {
       if (!query) return true;
       return c.team.toLowerCase().includes(query) || c.ground.toLowerCase().includes(query) || c.note.toLowerCase().includes(query);
@@ -2296,15 +2708,29 @@ export default function FindMatchTab({
   }
   if (timeFilter) activeFilters.push({ id: "time", label: `⏰ ${timeFilter}`, clear: () => setTimeFilter("") });
   if (slotFilter) activeFilters.push({ id: "slot", label: slotFilter === "Morning" ? "🌅 Morning" : "☀️ Afternoon", clear: () => setSlotFilter("") });
+  if (statusFilter !== "all") {
+    activeFilters.push({
+      id: "status",
+      label: statusFilter === "open" ? "🟢 Open Challenges" : "🔒 Booked Matches",
+      clear: () => setStatusFilter("all")
+    });
+  }
 
   const clearAllFilters = () => {
     setSearchQuery("");
     setDateFilter(null);
     setTimeFilter("");
     setSlotFilter("");
+    setStatusFilter("all");
   };
 
-  const myOwnOpenChallenges = challenges.filter(c => (c.status === "open" || c.status === "on_hold") && c.creator_id === user?.id);
+  const myOwnOpenChallenges = challenges.filter(c => {
+    if (!isOwnChallenge(c)) return false;
+    if (c.status !== "open") return false;
+    const cSlot = c.slot || getChallengeSlot(c);
+    if (hasActiveConflict(c.match_date, cSlot)) return false;
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -2317,6 +2743,7 @@ export default function FindMatchTab({
           <ChallengeForm
             token={token}
             user={user}
+            challenges={challenges}
             grounds={effectiveGrounds}
             onCreated={onChallengeCreated}
             disabledReason={null}
@@ -2444,7 +2871,7 @@ export default function FindMatchTab({
             <div className="flex-1 sm:w-36 px-4 py-3 flex items-center min-w-0 border-r" style={{ borderColor: t.border }}>
               <TimePicker value={timeFilter} onChange={setTimeFilter} theme={theme} />
             </div>
-            <div className="flex-1 sm:w-36 px-4 py-3 flex items-center min-w-0">
+            <div className="flex-1 sm:w-36 px-4 py-3 flex items-center min-w-0 border-r" style={{ borderColor: t.border }}>
               <select
                 value={slotFilter}
                 onChange={e => setSlotFilter(e.target.value)}
@@ -2454,6 +2881,18 @@ export default function FindMatchTab({
                 <option value="" style={{ backgroundColor: t.card, color: t.text }}>Any Slot</option>
                 <option value="Morning" style={{ backgroundColor: t.card, color: t.text }}>🌅 Morning</option>
                 <option value="Afternoon" style={{ backgroundColor: t.card, color: t.text }}>☀️ Afternoon</option>
+              </select>
+            </div>
+            <div className="flex-1 sm:w-36 px-4 py-3 flex items-center min-w-0">
+              <select
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+                className="w-full text-sm bg-transparent focus:outline-none cursor-pointer"
+                style={{ color: statusFilter !== "all" ? t.text : t.sub, fontWeight: statusFilter !== "all" ? 600 : 500 }}
+              >
+                <option value="all" style={{ backgroundColor: t.card, color: t.text }}>All Status</option>
+                <option value="open" style={{ backgroundColor: t.card, color: t.text }}>🟢 Open</option>
+                <option value="booked" style={{ backgroundColor: t.card, color: t.text }}>🔒 Booked</option>
               </select>
             </div>
           </div>
@@ -2503,7 +2942,7 @@ export default function FindMatchTab({
 
       {/* CHALLENGE REQUESTS */}
       <section>
-        <SectionTitle isLight={isLight} title="Challenge Requests" badge={`${filtered.length} open`} />
+        <SectionTitle isLight={isLight} title="Challenge Requests" badge={`${filtered.length} ${filtered.length === 1 ? "challenge" : "challenges"}`} />
 
         {myAcceptedChallengesList.length > 0 && (
           <div
@@ -2516,7 +2955,9 @@ export default function FindMatchTab({
           >
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>
-              You have <strong>{myAcceptedChallengesList.length}</strong> active accepted match{myAcceptedChallengesList.length > 1 ? "es" : ""}. You can accept additional challenges on other dates or available time slots (Morning / Afternoon).
+              You have <strong>{myAcceptedChallengesList.length}</strong> confirmed match{myAcceptedChallengesList.length > 1 ? "es" : ""}.
+              Once confirmed, other requests on that timing slot (Morning / Afternoon) are automatically cleared and no more challenges can be requested or accepted for that booked slot.
+              You can still request open challenges on other dates or available slots.
             </span>
           </div>
         )}
@@ -2531,7 +2972,9 @@ export default function FindMatchTab({
           )}
 
           {filtered.map(c => {
+            const isAlreadyBooked = c.status === "accepted";
             const blocked = hasActiveConflict(c.rawDate, c.slot);
+            const isPending = !isAlreadyBooked && !blocked && (c.my_request_status === "pending" || c.myRequestStatus === "pending");
             const postedAgo = formatPostedAgo(c.postedAt);
             return (
               <Card key={c.id} isLight={isLight} className="p-5">
@@ -2544,7 +2987,13 @@ export default function FindMatchTab({
                     </StatusBadge>
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
-                    <StatusBadge tone={c.urgent ? "red" : "green"}>{c.urgent ? "Urgent" : "Open"}</StatusBadge>
+                    {isAlreadyBooked ? (
+                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-500/20 text-slate-300 border border-slate-500/30 whitespace-nowrap">
+                        🔒 Booked
+                      </span>
+                    ) : (
+                      <StatusBadge tone={c.urgent ? "red" : "green"}>{c.urgent ? "Urgent" : "Open"}</StatusBadge>
+                    )}
                     {postedAgo && <span className="text-[11px]" style={{ color: t.faint }}>{postedAgo}</span>}
                   </div>
                 </div>
@@ -2564,6 +3013,11 @@ export default function FindMatchTab({
                 <div className="flex flex-wrap gap-2 mt-3">
                   <Pill isLight={isLight}>{format.title}</Pill>
                   {c.note && <Pill isLight={isLight} dot={false}>{c.note}</Pill>}
+                  {isAlreadyBooked && c.accepted_by_team_name && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-sky-500/10 text-sky-400 border border-sky-500/25">
+                      ✓ Confirmed vs {c.accepted_by_team_name}
+                    </span>
+                  )}
                 </div>
 
                 {c.latestReview && (
@@ -2578,7 +3032,27 @@ export default function FindMatchTab({
                 )}
 
                 <div className="flex flex-col sm:flex-row gap-2 mt-4">
-                  {(c.my_request_status === "pending" || c.myRequestStatus === "pending") ? (
+                  {isAlreadyBooked ? (
+                    <SoftButton
+                      isLight={isLight}
+                      type="button"
+                      disabled={true}
+                      className="flex-1 opacity-60 cursor-not-allowed"
+                      title="This challenge is already booked and confirmed"
+                    >
+                      Already Booked
+                    </SoftButton>
+                  ) : blocked ? (
+                    <SoftButton
+                      isLight={isLight}
+                      type="button"
+                      disabled={true}
+                      className="flex-1 opacity-70 cursor-not-allowed"
+                      title={`You already have a confirmed match on this date in the ${c.slot} slot. Other requests on this slot are cleared.`}
+                    >
+                      Slot Booked ({c.slot})
+                    </SoftButton>
+                  ) : isPending ? (
                     <div className="flex-1 flex gap-2">
                       <span
                         className={cn(
@@ -2609,12 +3083,12 @@ export default function FindMatchTab({
                     <SoftButton
                       isLight={isLight}
                       type="button"
-                      disabled={blocked}
+                      disabled={false}
                       onClick={() => setAcceptTarget(c)}
                       className="flex-1"
-                      title={blocked ? `You already have an accepted challenge on this date in the ${c.slot} slot` : "Send request to play this challenge"}
+                      title="Send request to play this challenge"
                     >
-                      {blocked ? `Slot Booked (${c.slot})` : "Request to Play"}
+                      Request to Play
                     </SoftButton>
                   )}
                   <OutlineButton isLight={isLight} type="button" onClick={() => setDetailsTarget(c)} className="flex-1">
@@ -2694,6 +3168,25 @@ export default function FindMatchTab({
                 >
                   <Edit className="w-4 h-4" /> Edit Challenge
                 </OutlineButton>
+              ) : detailsTarget.status === "accepted" ? (
+                <SoftButton
+                  isLight={isLight}
+                  type="button"
+                  disabled={true}
+                  className="flex-1 opacity-60 cursor-not-allowed"
+                >
+                  Already Booked
+                </SoftButton>
+              ) : hasActiveConflict(detailsTarget.rawDate, detailsTarget.slot) ? (
+                <SoftButton
+                  isLight={isLight}
+                  type="button"
+                  disabled={true}
+                  className="flex-1 opacity-70 cursor-not-allowed"
+                  title={`You already have a confirmed match on this date in the ${detailsTarget.slot} slot. Other requests for this slot are cleared.`}
+                >
+                  Slot Booked ({detailsTarget.slot})
+                </SoftButton>
               ) : (detailsTarget.my_request_status === "pending" || detailsTarget.myRequestStatus === "pending") ? (
                 <div className="flex-1 flex gap-2">
                   <span
@@ -2728,21 +3221,15 @@ export default function FindMatchTab({
                 <SoftButton
                   isLight={isLight}
                   type="button"
-                  disabled={hasActiveConflict(detailsTarget.rawDate, detailsTarget.slot)}
+                  disabled={false}
                   onClick={() => {
                     setAcceptTarget(detailsTarget);
                     setDetailsTarget(null);
                   }}
                   className="flex-1"
-                  title={
-                    hasActiveConflict(detailsTarget.rawDate, detailsTarget.slot)
-                      ? `You already have an accepted challenge on this date in the ${detailsTarget.slot} slot`
-                      : "Send request to play this challenge"
-                  }
+                  title="Send request to play this challenge"
                 >
-                  {hasActiveConflict(detailsTarget.rawDate, detailsTarget.slot)
-                    ? `Slot Booked (${detailsTarget.slot})`
-                    : "Request to Play"}
+                  Request to Play
                 </SoftButton>
               )}
               <OutlineButton isLight={isLight} type="button" onClick={() => setViewTeamTarget(detailsTarget)} className="flex-1">
@@ -2777,6 +3264,7 @@ export default function FindMatchTab({
           isOpen={!!reviewTarget}
           onClose={() => setReviewTarget(null)}
           token={token}
+          hasActiveConflict={hasActiveConflict}
           onChallengeUpdated={updated => {
             onChallengeUpdated?.(updated);
             setReviewTarget(prev => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));
@@ -2788,6 +3276,7 @@ export default function FindMatchTab({
       {editTarget && (
         <EditChallengeModal
           challenge={editTarget}
+          challenges={challenges}
           token={token}
           user={user}
           grounds={effectiveGrounds}
