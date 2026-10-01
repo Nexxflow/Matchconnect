@@ -1,4 +1,4 @@
-gCREATE TABLE IF NOT EXISTS tournaments (
+CREATE TABLE IF NOT EXISTS tournaments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR(150) NOT NULL,
   format VARCHAR(20) DEFAULT 'T20',
@@ -54,6 +54,8 @@ CREATE INDEX IF NOT EXISTS idx_tournament_reg_tournament ON tournament_registrat
 CREATE INDEX IF NOT EXISTS idx_tournament_reg_team ON tournament_registrations(team_id);
 
 ALTER TABLE matches ADD COLUMN IF NOT EXISTS tournament_id UUID REFERENCES tournaments(id);
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS match_date TIMESTAMPTZ;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS match_time VARCHAR(50);
 CREATE INDEX IF NOT EXISTS idx_matches_tournament ON matches(tournament_id);
 
 -- teams table: columns the tournament/team-creation flow relies on
@@ -63,3 +65,4 @@ ALTER TABLE teams ADD COLUMN IF NOT EXISTS year_formed INTEGER;
 -- challenges table: columns the "Post a Match Challenge" flow relies on
 ALTER TABLE challenges ADD COLUMN IF NOT EXISTS overs INTEGER DEFAULT 20;
 ALTER TABLE challenges ADD COLUMN IF NOT EXISTS ground_name VARCHAR(200);
+ALTER TABLE challenges ADD COLUMN IF NOT EXISTS slot VARCHAR(20) DEFAULT 'Morning';

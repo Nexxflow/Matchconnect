@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { CalendarCheck, Users, Calendar, Megaphone, MapPin, Swords, Phone, XCircle, Trophy, Star, MessageSquare, RotateCw } from "lucide-react";
 import { apiRequest } from "../../api";
-import { C, cn, Tag, normalizePhone } from "../../utils/helpers.jsx";
+import { C, cn, Tag, normalizePhone, getChallengeSlot } from "../../utils/helpers.jsx";
 import TeamDetailsModal from "../TeamDetailsModal.jsx";
+import { ChallengeRequestsReviewModal } from "./FindMatchTab.jsx";
 
 // ─── Colorful accent bar ─────────────────────────────────────────────────
 function ColorBar({ gradient = "from-emerald-400 via-green-500 to-teal-500", className = "" }) {
@@ -118,6 +119,7 @@ export default function MyTeamTab({
   deleting,
   onOpenChat,
   challenges = [],
+  onChallengeUpdated = () => {},
   teammatePhones = [],
   teammateIds = [],
   user,
@@ -131,6 +133,7 @@ export default function MyTeamTab({
   const [teamStats, setTeamStats] = useState(null);
   const [refreshingStats, setRefreshingStats] = useState(false);
   const [viewSelfTeam, setViewSelfTeam] = useState(false);
+  const [reviewChallenge, setReviewChallenge] = useState(null);
   const [squadLoading, setSquadLoading] = useState(true);
   const [squadError, setSquadError] = useState(null);
   const [cancellingBookingId, setCancellingBookingId] = useState(null);
@@ -356,6 +359,21 @@ export default function MyTeamTab({
     ? acceptedChallenges
     : (acceptedChallenge ? [acceptedChallenge] : []);
 
+  const hasActiveConflict = (targetDate, targetSlot) => {
+    if (!targetDate) return false;
+    const targetSlotNorm = (targetSlot || "Morning").toLowerCase();
+    return acceptedChallengesFinal.some(c => {
+      const da = new Date(c.match_date);
+      const db = new Date(targetDate);
+      const sameDay = isNaN(da.getTime()) || isNaN(db.getTime())
+        ? String(c.match_date).slice(0, 10) === String(targetDate).slice(0, 10)
+        : da.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) === db.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+      if (!sameDay) return false;
+      const cSlot = (c.slot || getChallengeSlot(c)).toLowerCase();
+      return cSlot === targetSlotNorm;
+    });
+  };
+
   const scheduleCount = postedChallenges.length + acceptedChallengesFinal.length + registeredTournaments.length;
 
   return (
@@ -488,6 +506,22 @@ export default function MyTeamTab({
               loadTeamStats(effectiveTeam.team_name);
             }
           }}
+        />
+      )}
+
+      {/* Challenge Requests Review Modal */}
+      {reviewChallenge && (
+        <ChallengeRequestsReviewModal
+          challenge={reviewChallenge}
+          isOpen={!!reviewChallenge}
+          onClose={() => setReviewChallenge(null)}
+          token={token}
+          hasActiveConflict={hasActiveConflict}
+          onChallengeUpdated={updated => {
+            onChallengeUpdated?.(updated);
+            setReviewChallenge(prev => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));
+          }}
+          theme={theme}
         />
       )}
 
@@ -693,8 +727,11 @@ export default function MyTeamTab({
                       <div className="flex items-start justify-between gap-3 mb-2">
                         <div className="min-w-0">
                           <div className={cn("text-sm font-semibold truncate", isLight ? "text-slate-900" : "text-white")}>{pc.team_name}</div>
-                          <div className="text-xs mt-0.5" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
-                            {pc.match_date} · {pc.time_slot}
+                          <div className="text-xs mt-0.5 flex items-center gap-1.5 flex-wrap" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
+                            <span>{pc.match_date} · {pc.time_slot}</span>
+                            <span className="font-semibold text-[11px] px-2 py-0.2 rounded-full border" style={{ borderColor: isLight ? "#bae6fd" : "rgba(56,189,248,0.3)", color: isLight ? "#0284c7" : "#38bdf8" }}>
+                              {getChallengeSlot(pc) === "Morning" ? "🌅 Morning" : "☀️ Afternoon"}
+                            </span>
                           </div>
                         </div>
                         <Tag color="sky">{pc.status === "on_hold" ? "On Hold" : "Awaiting Opponent"}</Tag>
@@ -710,6 +747,17 @@ export default function MyTeamTab({
 
                       {pc.note && (
                         <p className="text-xs mb-2 line-clamp-2" style={{ color: isLight ? "#475569" : "#8fa08f" }}>{pc.note}</p>
+                      )}
+
+                      {Number(pc.pending_requests_count || pc.pending_requests?.length || 0) > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setReviewChallenge(pc)}
+                          className="mt-2 w-full py-2 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 text-white animate-pulse"
+                        >
+                          <span>🔔</span>
+                          <span>Review Team Match Requests ({Number(pc.pending_requests_count || pc.pending_requests?.length || 0)})</span>
+                        </button>
                       )}
                     </div>
                   ))}
@@ -763,8 +811,11 @@ export default function MyTeamTab({
                         <div className="flex items-start justify-between gap-3 mb-2">
                           <div className="min-w-0">
                             <div className={cn("text-sm font-semibold truncate", isLight ? "text-slate-900" : "text-white")}>vs {opponentName}</div>
-                            <div className="text-xs mt-0.5" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
-                              {ac.match_date} · {ac.time_slot}
+                            <div className="text-xs mt-0.5 flex items-center gap-1.5 flex-wrap" style={{ color: isLight ? "#64748b" : "#6b7a6b" }}>
+                              <span>{ac.match_date} · {ac.time_slot}</span>
+                              <span className="font-semibold text-[11px] px-2 py-0.2 rounded-full border" style={{ borderColor: isLight ? "#fde68a" : "rgba(245,158,11,0.3)", color: isLight ? "#d97706" : "#fbbf24" }}>
+                                {getChallengeSlot(ac) === "Morning" ? "🌅 Morning" : "☀️ Afternoon"}
+                              </span>
                             </div>
                           </div>
                           <Tag color="amber">Confirmed</Tag>

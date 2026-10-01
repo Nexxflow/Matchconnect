@@ -126,13 +126,29 @@ export function transformTournament(t) {
   const maxTeams = t.max_teams ?? 0;
   const teamCount = t.team_count ?? 0;
 
+  const confirmedList = Array.isArray(t.teams)
+    ? t.teams
+    : Array.isArray(t.confirmed_teams)
+    ? t.confirmed_teams
+    : [];
+
+  const pendingList = Array.isArray(t.pending_requests)
+    ? t.pending_requests
+    : [];
+
   return {
     ...t,
     startDate: t.start_date ?? t.startDate ?? null,
     prizes: Array.isArray(prizes) ? prizes : [],
     max_teams: maxTeams,
-    team_count: teamCount,
-    spots_left: t.spots_left ?? Math.max(maxTeams - teamCount, 0),
+    team_count: teamCount || confirmedList.length,
+    spots_left: t.spots_left ?? Math.max(maxTeams - (teamCount || confirmedList.length), 0),
+    pending_requests_count: Number(t.pending_requests_count ?? pendingList.length ?? 0),
+    my_registration_status: t.my_registration_status || null,
+    my_registration_id: t.my_registration_id || null,
+    teams: confirmedList,
+    confirmed_teams: confirmedList,
+    pending_requests: pendingList,
   };
 }
 
@@ -237,4 +253,41 @@ export function formatDateIST(dateStr) {
     year: "numeric",
     timeZone: "Asia/Kolkata"
   });
+}
+
+export function getChallengeSlot(c = {}) {
+  if (!c) return "Morning";
+  if (c.slot && typeof c.slot === "string" && c.slot.trim()) {
+    const s = c.slot.trim().toLowerCase();
+    if (s.includes("afternoon") || s.includes("pm") || s.includes("evening")) return "Afternoon";
+    if (s.includes("morning") || s.includes("am")) return "Morning";
+  }
+  const t = c.time_slot || c.time;
+  if (t) {
+    const s = String(t).trim().toLowerCase();
+    if (s.includes("afternoon") || s.includes("evening")) return "Afternoon";
+    if (s.includes("morning")) return "Morning";
+    const match = s.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+    if (match) {
+      let hour = parseInt(match[1], 10);
+      const period = match[3] ? match[3].toUpperCase() : null;
+      if (period === "PM" && hour !== 12) hour += 12;
+      if (period === "AM" && hour === 12) hour = 0;
+      return hour >= 12 ? "Afternoon" : "Morning";
+    }
+    const shortMatch = s.match(/^(\d{1,2})\s*(am|pm)/i);
+    if (shortMatch) {
+      let hour = parseInt(shortMatch[1], 10);
+      const period = shortMatch[2].toUpperCase();
+      if (period === "PM" && hour !== 12) hour += 12;
+      if (period === "AM" && hour === 12) hour = 0;
+      return hour >= 12 ? "Afternoon" : "Morning";
+    }
+    const numOnly = s.match(/^(\d{1,2})$/);
+    if (numOnly) {
+      const hour = parseInt(numOnly[1], 10);
+      return hour >= 12 ? "Afternoon" : "Morning";
+    }
+  }
+  return "Morning";
 }

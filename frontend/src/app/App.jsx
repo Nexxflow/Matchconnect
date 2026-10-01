@@ -57,6 +57,14 @@ function normalizeChallenge(c) {
     rating: c.team_rating != null ? Number(c.team_rating) : (c.rating ? Number(c.rating) : 5.0),
     reliabilityScore: c.reliability_score != null ? Number(c.reliability_score) : 5.0,
     reviewsCount: Number(c.reviews_count) || 0,
+    pending_requests_count: Number(c.pending_requests_count) || (Array.isArray(c.pending_requests) ? c.pending_requests.length : 0),
+    pending_requests: Array.isArray(c.pending_requests) ? c.pending_requests : [],
+    pendingRequestsCount: Number(c.pending_requests_count) || (Array.isArray(c.pending_requests) ? c.pending_requests.length : 0),
+    pendingRequests: Array.isArray(c.pending_requests) ? c.pending_requests : [],
+    my_request_status: c.my_request_status || null,
+    myRequestStatus: c.my_request_status || null,
+    my_request_id: c.my_request_id || null,
+    myRequestId: c.my_request_id || null,
     latestReview: c.latest_review || (c.latest_review_text ? {
       reviewer_name: c.latest_reviewer_name || "Cricket Player",
       reviewer_team_name: c.latest_reviewer_team_name || null,
@@ -87,6 +95,20 @@ export default function App() {
   const [autoOpenChallengeForm, setAutoOpenChallengeForm] = useState(false);
   const [autoOpenTournamentForm, setAutoOpenTournamentForm] = useState(false);
   const [findMatchEntryMode, setFindMatchEntryMode] = useState("browse");
+  const [liveScoreParams, setLiveScoreParams] = useState({
+    matchId: null,
+    view: null,
+    tournament: null,
+  });
+
+  const handleNavigateToLiveScore = (matchId, view = "score", tournament = null) => {
+    setLiveScoreParams({ matchId, view, tournament });
+    setActiveTab("Live Score");
+  };
+
+  const handleBackToTournament = () => {
+    setActiveTab("Tournaments");
+  };
 
   const goCreateChallenge = () => {
     setActiveTab("Find Match");
@@ -155,7 +177,7 @@ export default function App() {
       setMyTeam(team);
       if (team) {
         const res = await apiRequest(`/tournaments/mine/${team.id}`, { token });
-        setRegisteredIds((res.tournaments || []).map(t => t.id));
+        setRegisteredIds((res.tournaments || []).filter(t => t.registration_status === 'confirmed').map(t => t.id));
       }
     } catch (err) {
       console.warn("Could not load team/tournament registrations:", err.message);
@@ -164,7 +186,7 @@ export default function App() {
 
   const refreshTournaments = async () => {
     try {
-      const res = await apiRequest("/tournaments");
+      const res = await apiRequest("/tournaments", { token: auth.token });
       setTournaments(res.tournaments.map(transformTournament));
     } catch (err) {
       console.warn("Could not refresh tournaments:", err.message);
@@ -204,7 +226,7 @@ export default function App() {
       const [groundsRes, umpiresRes, tournamentsRes, challengesRes] = await Promise.all([
         apiRequest("/grounds"),
         apiRequest("/umpires"),
-        apiRequest("/tournaments"),
+        apiRequest("/tournaments", { token }),
         apiRequest("/challenges", { token })
       ]);
       setGrounds(groundsRes.grounds.map(transformGround));
@@ -339,12 +361,26 @@ export default function App() {
     }
 
     // 4. Tournaments:
-    // If registration -> My Team
+    // If incoming registration request for organizer -> Tournaments tab
+    if (
+      type.includes("tournament_registration_request") ||
+      full.includes("registration request") ||
+      full.includes("requested to join your tournament")
+    ) {
+      setActiveTab("Tournaments");
+      return;
+    }
+    // If registration accepted / confirmed -> Tournaments tab
+    if (type.includes("tournament_registration_accepted")) {
+      setActiveTab("Tournaments");
+      return;
+    }
+    // If general registration -> My Team
     if (
       type.includes("tournament_registration") ||
       (full.includes("tournament") && (full.includes("registered") || full.includes("registration") || full.includes("confirmed")))
     ) {
-      setActiveTab("My Team");
+      setActiveTab("Tournaments");
       return;
     }
     // If tournament announced / general -> Tournaments tab
@@ -493,7 +529,7 @@ export default function App() {
         setPushNotifications((prev) => [newNotif, ...prev]);
 
         // Automatically update challenges and reviews if feedback or challenge notification arrives
-        if (type === "team_feedback" || type === "new_challenge" || type === "challenge_accepted" || type === "challenge_cancelled") {
+        if (type === "team_feedback" || type.includes("challenge") || type.includes("tournament")) {
           refreshChallenges();
         }
 
@@ -589,6 +625,12 @@ export default function App() {
     };
     window.addEventListener("mc:review_submitted", handleReviewSubmitted);
 
+    const handleChallengeAcceptedEvent = () => {
+      refreshChallenges();
+    };
+    window.addEventListener("mc:challenge_accepted", handleChallengeAcceptedEvent);
+    window.addEventListener("mc:challenge_cancelled", handleChallengeAcceptedEvent);
+
     const onFocus = () => {
       refreshChallenges();
     };
@@ -603,6 +645,8 @@ export default function App() {
 
     return () => {
       window.removeEventListener("mc:review_submitted", handleReviewSubmitted);
+      window.removeEventListener("mc:challenge_accepted", handleChallengeAcceptedEvent);
+      window.removeEventListener("mc:challenge_cancelled", handleChallengeAcceptedEvent);
       window.removeEventListener("focus", onFocus);
       clearInterval(interval);
     };
@@ -692,6 +736,7 @@ export default function App() {
     setChallenges(prev => prev.map(c => c.id === updatedChallenge.id ? updatedChallenge : c));
     setAcceptedChallenge(updatedChallenge);
     window.dispatchEvent(new CustomEvent("mc:challenge_accepted", { detail: updatedChallenge }));
+    refreshChallenges();
   };
 
   const handleCancelAcceptedChallenge = async (challengeId) => {
@@ -701,7 +746,7 @@ export default function App() {
     try {
       const res = await apiRequest(`/challenges/${targetId}/cancel`, { method: "POST", token: auth.token });
       setChallenges(prev => prev.map(c => c.id === res.challenge.id ? res.challenge : c));
-      setAcceptedChallenge(null);
+      setAcceptedChallenge(prev => (prev?.id === targetId ? null : prev));
       window.dispatchEvent(new CustomEvent("mc:challenge_cancelled", { detail: { challengeId: targetId } }));
     } catch (err) {
       console.error("Could not cancel challenge:", err.message);
@@ -718,8 +763,13 @@ export default function App() {
         token: auth.token,
         body: myTeam?.id ? { team_id: myTeam.id } : {},
       });
-      setRegisteredIds(prev => (prev.includes(tournamentId) ? prev : [...prev, tournamentId]));
-      if (res.tournament) {
+      if (res?.message) {
+        alert(res.message);
+      }
+      if (res?.status === "confirmed") {
+        setRegisteredIds(prev => (prev.includes(tournamentId) ? prev : [...prev, tournamentId]));
+      }
+      if (res?.tournament) {
         setTournaments(prev => prev.map(t => (t.id === tournamentId ? transformTournament(res.tournament) : t)));
       }
       // Reload team & registrations data to keep backend sync seamless across all tabs
@@ -770,8 +820,17 @@ export default function App() {
   };
   const handleTournamentUpdated = (raw) => {
     const t = transformTournament(raw);
+    if (!t) return;
     setTournaments(prev => prev.map(item => item.id === t.id ? { ...item, ...t } : item));
+    if (raw?.creator_included && raw?.id) {
+      setRegisteredIds(prev => (prev.includes(raw.id) ? prev : [...prev, raw.id]));
+    } else if (raw?.creator_included === false && raw?.id) {
+      setRegisteredIds(prev => prev.filter(item => item !== raw.id));
+    }
     refreshTournaments();
+    if (auth?.token) {
+      loadMyTeamAndRegistrations(auth.token);
+    }
   };
   const handleTournamentDeleted = (id) => {
     setTournaments(prev => prev.filter(item => item.id !== id));
@@ -794,6 +853,13 @@ export default function App() {
 
   const handleChallengeCreated = (newChallenge) => {
     setChallenges(prev => [newChallenge, ...prev]);
+  };
+
+  const handleChallengeUpdated = (updatedChallenge) => {
+    setChallenges(prev => prev.map(c => c.id === updatedChallenge.id ? updatedChallenge : c));
+    if (updatedChallenge?.status === "accepted") {
+      refreshChallenges();
+    }
   };
 
   const handleChallengeDeleted = (id) => {
@@ -832,7 +898,9 @@ export default function App() {
         token={auth.token}
         user={auth.user}
         challenges={challenges}
+        grounds={grounds}
         onChallengeCreated={handleChallengeCreated}
+        onChallengeUpdated={handleChallengeUpdated}
         onChallengeDeleted={handleChallengeDeleted}
         teammatePhones={teammates.phones}
         teammateIds={teammates.ids}
@@ -867,7 +935,17 @@ export default function App() {
         theme={theme}
       />
     ),
-    "Live Score": <LiveScoreTab user={auth.user} token={auth.token} theme={theme} />,
+    "Live Score": (
+      <LiveScoreTab
+        user={auth.user}
+        token={auth.token}
+        theme={theme}
+        initialMatchId={liveScoreParams.matchId}
+        initialView={liveScoreParams.view}
+        tournament={liveScoreParams.tournament}
+        onBackToTournament={liveScoreParams.tournament ? handleBackToTournament : null}
+      />
+    ),
     "Tournaments": (
       <TournamentsTab
         tournaments={tournaments}
@@ -883,6 +961,7 @@ export default function App() {
         onTournamentDeleted={handleTournamentDeleted}
         autoOpenCreate={autoOpenTournamentForm}
         onAutoOpenHandled={() => setAutoOpenTournamentForm(false)}
+        onNavigateToLiveScore={handleNavigateToLiveScore}
         theme={theme}
       />
     ),
@@ -899,6 +978,7 @@ export default function App() {
         cancelling={cancellingChallenge}
         onOpenChat={setChatChallenge}
         challenges={challenges}
+        onChallengeUpdated={handleChallengeUpdated}
         teammatePhones={teammates.phones}
         teammateIds={teammates.ids}
         user={auth.user}

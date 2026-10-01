@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, Star, Users, CheckCircle, XCircle, AlertCircle, Send, Award, Phone, Calendar, MapPin, MessageSquare, ThumbsUp, Shield, Trash2 } from "lucide-react";
+import { X, Star, Users, CheckCircle, XCircle, AlertCircle, Send, Award, Phone, Calendar, MapPin, MessageSquare, ThumbsUp, Shield, Trash2, Loader2 } from "lucide-react";
 import { apiRequest } from "../api";
 import { GhostButton, cn } from "../utils/helpers.jsx";
 
@@ -239,19 +239,18 @@ export default function TeamDetailsModal({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
-      style={{ backgroundColor: theme === "light" ? "rgba(15,23,42,0.5)" : "rgba(0,0,0,0.8)", backdropFilter: "blur(4px)" }}
+      className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl p-5 sm:p-6 relative animate-in fade-in zoom-in-95 duration-150 custom-scrollbar"
+        className="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 relative shadow-2xl animate-in zoom-in-95 duration-200 border custom-scrollbar"
         style={{
-          backgroundColor: theme === "light" ? "#ffffff" : "#121412",
-          border: `1px solid ${theme === "light" ? "#e2e8f0" : "#2a2a2a"}`,
-          boxShadow: theme === "light" ? "0 20px 25px -5px rgba(0,0,0,0.1)" : "0 24px 64px rgba(0,0,0,0.8)"
+          backgroundColor: theme === "light" ? "#ffffff" : "#0d120e",
+          borderColor: theme === "light" ? "#e2e8f0" : "rgba(255,255,255,0.12)",
         }}
         onClick={e => e.stopPropagation()}
       >
+        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-600 rounded-t-3xl z-10 pointer-events-none" />
         {/* Header with Close */}
         <div className="flex items-start justify-between gap-4 pb-4 border-b" style={{ borderColor: theme === "light" ? "#f1f5f9" : "#222" }}>
           <div className="flex items-center gap-3.5 min-w-0">
@@ -474,10 +473,11 @@ export default function TeamDetailsModal({
                       onChange={e => setReviewTextInput(e.target.value)}
                       placeholder="Write your feedback about this team (e.g. sportsmanship, punctuality, fair play)..."
                       className={cn(
-                        "w-full rounded-xl p-3 text-xs focus:outline-none focus:border-green-500 transition-colors resize-none",
-                        isLight ? "bg-slate-50 text-slate-900 placeholder-slate-400 border border-slate-200" : "text-white placeholder-neutral-500 resize-none"
+                        "w-full rounded-xl p-3 text-xs focus:outline-none transition-all resize-none border font-medium",
+                        isLight
+                          ? "bg-slate-50 text-slate-900 placeholder-slate-400 border-slate-200 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/25"
+                          : "bg-[#101210] text-white placeholder-neutral-500 border-[#2a2a2a] focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/25"
                       )}
-                      style={isLight ? undefined : { backgroundColor: "#101210", border: "1px solid #2a2a2a" }}
                       disabled={submittingReview}
                     />
                   </div>
@@ -501,9 +501,24 @@ export default function TeamDetailsModal({
                     <button
                       type="submit"
                       disabled={submittingReview || !reviewTextInput.trim()}
-                      className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#16a34a] hover:bg-[#15803d] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
+                      className={cn(
+                        "px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed",
+                        isLight
+                          ? "bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 text-white shadow-emerald-500/20"
+                          : "bg-gradient-to-r from-emerald-400 via-teal-400 to-green-400 hover:from-emerald-300 text-black font-extrabold shadow-emerald-500/25"
+                      )}
                     >
-                      {submittingReview ? "Submitting..." : "Submit Review"}
+                      {submittingReview ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Submitting...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Submit Review</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </form>

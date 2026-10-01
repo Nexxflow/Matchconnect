@@ -49,11 +49,20 @@ export function saveCreatedMatchId(matchId) {
 export function isMatchCreator(match, user) {
   if (!match) return false;
   const currentUserId = user?.id ? String(user.id) : null;
-  // 1. Matches where created_by in DB matches user's ID
+  // 1. Explicit flag from server
+  if (match.is_creator === true) return true;
+  // 2. Matches where created_by in DB matches user's ID
   if (currentUserId && match.created_by && String(match.created_by) === currentUserId) {
     return true;
   }
-  // 2. Matches stored in local storage for this browser/user session
+  // 3. Tournament matches where tournament creator matches user's ID
+  if (currentUserId && match.tournament_creator_id && String(match.tournament_creator_id) === currentUserId) {
+    return true;
+  }
+  if (currentUserId && match.tournament?.created_by && String(match.tournament.created_by) === currentUserId) {
+    return true;
+  }
+  // 4. Matches stored in local storage for this browser/user session
   const localCreated = getMyCreatedMatchIds();
   if (localCreated.includes(String(match.id))) {
     return true;
@@ -304,14 +313,29 @@ const cardStyle = {
 
 const BTN_TRANSITION = "transition-all duration-150 ease-out active:scale-[0.97]";
 
-export default function ScoringApp({ user, token, theme = "dark" }) {
+export default function ScoringApp({
+  user,
+  token,
+  theme = "dark",
+  initialMatchId = null,
+  initialView = null,
+  tournament = null,
+  onBackToTournament = null,
+}) {
   useEffect(() => {
     if (token) setLiveScoreToken(token);
   }, [token]);
 
-  const [view, setView] = useState("home");
-  const [activeMatchId, setActiveMatchId] = useState(null);
+  const [view, setView] = useState(initialView || "home");
+  const [activeMatchId, setActiveMatchId] = useState(initialMatchId || null);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (initialMatchId) {
+      setActiveMatchId(initialMatchId);
+      setView(initialView || "score");
+    }
+  }, [initialMatchId, initialView]);
 
   const goHome = useCallback(() => {
     setActiveMatchId(null);
@@ -354,32 +378,53 @@ export default function ScoringApp({ user, token, theme = "dark" }) {
         .cb-fade-in-up { animation: cb-fade-in-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
       `}</style>
 
-      {view !== "home" && (
-        <div className="flex items-center justify-between pb-1">
-          <button
-            onClick={goHome}
-            className={`text-xs font-bold flex items-center gap-2 ${BTN_TRANSITION} hover:text-emerald-400 py-2 px-3.5 rounded-xl shadow`}
-            style={{ color: COLOR.ink, backgroundColor: COLOR.surface, border: `1px solid ${COLOR.border}` }}
-          >
-            <span style={{ fontFamily: FONT_MONO }}>←</span>
-            <span>Back to Matches List</span>
-          </button>
+      {(view !== "home" || onBackToTournament) && (
+        <div className="flex items-center justify-between pb-1 flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            {onBackToTournament && (
+              <button
+                onClick={onBackToTournament}
+                className={`text-xs font-bold flex items-center gap-1.5 ${BTN_TRANSITION} py-2 px-3.5 rounded-xl shadow`}
+                style={{
+                  background: isLightMode() ? "#fef3c7" : "rgba(234,179,8,0.15)",
+                  color: isLightMode() ? "#b45309" : "#facc15",
+                  border: "1px solid rgba(234,179,8,0.4)"
+                }}
+              >
+                <span>🏆</span>
+                <span>Back to {tournament?.name || "Tournament"}</span>
+              </button>
+            )}
+            {view !== "home" && (
+              <button
+                onClick={goHome}
+                className={`text-xs font-bold flex items-center gap-2 ${BTN_TRANSITION} hover:text-emerald-400 py-2 px-3.5 rounded-xl shadow`}
+                style={{ color: COLOR.ink, backgroundColor: COLOR.surface, border: `1px solid ${COLOR.border}` }}
+              >
+                <span style={{ fontFamily: FONT_MONO }}>←</span>
+                <span>Matches List</span>
+              </button>
+            )}
+          </div>
 
-          <button
-            onClick={() => {
-              if (view === "scoreboard") setView("score");
-              else if (view === "score") setView("toss");
-              else if (view === "toss") setView("squads");
-              else if (view === "squads") setView("new");
-              else if (view === "edit") setView("score");
-              else goHome();
-            }}
-            className={`text-xs font-bold flex items-center gap-1.5 ${BTN_TRANSITION} hover:text-sky-400 py-2 px-3.5 rounded-xl shadow`}
-            style={{ color: COLOR.ink, backgroundColor: COLOR.surface, border: `1px solid ${COLOR.border}` }}
-          >
-            <span style={{ fontFamily: FONT_MONO }}>↩</span>
-            <span>Back</span>
-          </button>
+          {view !== "home" && (
+            <button
+              onClick={() => {
+                if (view === "scoreboard") setView("score");
+                else if (view === "score") setView("toss");
+                else if (view === "toss") setView("squads");
+                else if (view === "squads") setView("new");
+                else if (view === "edit") setView("score");
+                else if (onBackToTournament) onBackToTournament();
+                else goHome();
+              }}
+              className={`text-xs font-bold flex items-center gap-1.5 ${BTN_TRANSITION} hover:text-sky-400 py-2 px-3.5 rounded-xl shadow`}
+              style={{ color: COLOR.ink, backgroundColor: COLOR.surface, border: `1px solid ${COLOR.border}` }}
+            >
+              <span style={{ fontFamily: FONT_MONO }}>↩</span>
+              <span>Back</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -400,11 +445,7 @@ export default function ScoringApp({ user, token, theme = "dark" }) {
               setView("score");
             }
           }}
-          onViewScoreboard={(id, m) => {
-            if (m && !isMatchCreator(m, user)) {
-              alert("Only the creator of this scoreboard can view it.");
-              return;
-            }
+          onViewScoreboard={(id) => {
             setActiveMatchId(id);
             setView("scoreboard");
           }}
@@ -2851,6 +2892,30 @@ function MatchLiveConsole({ user, matchId, onBack, onChangeStage, onMatchComplet
             )}
           </div>
 
+          {!isCreator && (
+            <div
+              className="p-3.5 rounded-2xl flex items-center justify-between gap-3 text-xs border shadow-sm relative overflow-hidden"
+              style={{
+                background: isLightMode() ? "#f0fdf4" : "rgba(34,197,94,0.08)",
+                borderColor: isLightMode() ? "#bbf7d0" : "rgba(34,197,94,0.25)",
+                color: isLightMode() ? "#166534" : "#4ade80"
+              }}
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="text-base">📡</span>
+                <div>
+                  <div className="font-extrabold uppercase tracking-wide">Live Spectator Mode</div>
+                  <div className="text-[11px] opacity-80 mt-0.5">
+                    Scores update automatically in real-time. Only the tournament organizer or match creator can enter scores.
+                  </div>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 animate-pulse shrink-0">
+                LIVE
+              </span>
+            </div>
+          )}
+
           {!isCreator && isOverEnded && !currentBowler && (
             <div className="p-3.5 rounded-2xl text-center text-xs relative overflow-hidden" style={{ background: COLOR.surface, border: `1px solid rgba(59,130,246,0.4)` }}>
               <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: COLOR.blueGradient }} />
@@ -4140,35 +4205,6 @@ function FinalScoreboard({ user, matchId, onBack }) {
   if (!data) return <div className="text-xs p-6" style={{ color: COLOR.inkDim }}>Loading Final Scorecard...</div>;
 
   const isCreator = isMatchCreator(data.match, user);
-  if (!isCreator) {
-    return (
-      <div
-        className="p-8 text-center space-y-4 rounded-2xl max-w-md mx-auto my-8 relative overflow-hidden"
-        style={{
-          background: isLightMode()
-            ? "linear-gradient(135deg,#fef2f2 0%,#fee2e2 100%)"
-            : "linear-gradient(135deg,rgba(239,68,68,0.15) 0%,rgba(220,38,38,0.1) 100%)",
-          border: `1px solid ${isLightMode() ? "#fecaca" : "rgba(239,68,68,0.4)"}`
-        }}
-      >
-        <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: COLOR.redGradient }} />
-        <div className="text-4xl">🔒</div>
-        <h3 className="text-base font-extrabold" style={{ color: COLOR.red }}>Scoreboard Access Restricted</h3>
-        <p className="text-xs max-w-sm mx-auto leading-relaxed" style={{ color: COLOR.inkDim }}>
-          Only the creator of this scoreboard can view this scoreboard. Other users cannot access it.
-        </p>
-        {onBack && (
-          <button
-            onClick={onBack}
-            className={`px-4 py-2 rounded-xl text-xs font-bold ${BTN_TRANSITION}`}
-            style={{ background: COLOR.surfaceRaised, color: COLOR.ink, border: `1px solid ${COLOR.border}` }}
-          >
-            ← Back to Matches
-          </button>
-        )}
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-4">
