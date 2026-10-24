@@ -228,8 +228,43 @@ app.use(
 app.use(morgan("dev"));
 
 // ====================================================
-// Request Logger
+// Request Logger (sensitive fields masked)
 // ====================================================
+
+const SENSITIVE_KEYS = [
+  "password",
+  "newpassword",
+  "oldpassword",
+  "currentpassword",
+  "confirmpassword",
+  "password_hash",
+  "token",
+  "accesstoken",
+  "refreshtoken",
+  "otp",
+  "authorization",
+];
+
+function maskBody(value, depth = 0) {
+  if (value === null || value === undefined) return value;
+  if (depth > 4) return "[nested]";
+  if (typeof value === "string") {
+    return value.length > 200 ? value.slice(0, 200) + "...[truncated]" : value;
+  }
+  if (Array.isArray(value)) {
+    return value.slice(0, 20).map((v) => maskBody(v, depth + 1));
+  }
+  if (typeof value === "object") {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = SENSITIVE_KEYS.includes(k.toLowerCase())
+        ? "***"
+        : maskBody(v, depth + 1);
+    }
+    return out;
+  }
+  return value;
+}
 
 app.use((req, res, next) => {
   // Only log detailed multi-line payload for state-modifying requests (POST, PUT, PATCH, DELETE)
@@ -244,7 +279,7 @@ app.use((req, res, next) => {
   console.log("URL:", req.originalUrl);
   console.log("Origin:", req.headers.origin);
   console.log("Authorization:", req.headers.authorization ? "Present" : "None");
-  console.log("Body:", req.body);
+  console.log("Body:", maskBody(req.body));
 
   next();
 });
@@ -253,14 +288,18 @@ app.use((req, res, next) => {
 // Health Check
 // ====================================================
 
-app.get("/health", (req, res) => {
+// Lightweight health checks (no database query, so the DB can stay idle)
+const healthHandler = (req, res) => {
   res.json({
     success: true,
     service: "MatchConnect Backend",
     status: "Running",
     timestamp: new Date(),
   });
-});
+};
+
+app.get("/health", healthHandler);
+app.get("/api/health", healthHandler);
 
 // ====================================================
 // Routes
@@ -295,10 +334,6 @@ app.use((req, res) => {
 // ====================================================
 
 app.use(errorHandler);
-
-// ====================================================
-// SMTP
-// ====================================================
 
 // ====================================================
 // SMTP

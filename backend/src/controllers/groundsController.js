@@ -69,6 +69,13 @@ function normalizeGroundRow(row) {
   };
 }
 
+// Owner phone numbers are private: only logged-in users get them.
+// Anonymous requests (anyone who just opens /api/grounds) get phone = null.
+function sanitizeGroundForViewer(ground, user) {
+  if (user && user.id) return ground;
+  return { ...ground, posted_by_phone: null };
+}
+
 // GET /api/grounds?location=Bandra
 const listGrounds = asyncHandler(async (req, res) => {
   const { location, address } = req.query;
@@ -102,7 +109,9 @@ const listGrounds = asyncHandler(async (req, res) => {
      ORDER BY g.created_at DESC`,
     values
   );
-  res.json({ grounds: result.rows.map(normalizeGroundRow) });
+  res.json({
+    grounds: result.rows.map(normalizeGroundRow).map((g) => sanitizeGroundForViewer(g, req.user))
+  });
 });
 
 // GET /api/grounds/:id
@@ -129,7 +138,7 @@ const getGround = asyncHandler(async (req, res) => {
     [req.params.id]
   );
   if (result.rows.length === 0) return res.status(404).json({ error: "Ground not found" });
-  res.json({ ground: normalizeGroundRow(result.rows[0]) });
+  res.json({ ground: sanitizeGroundForViewer(normalizeGroundRow(result.rows[0]), req.user) });
 });
 
 // GET /api/grounds/:id/bookings?date=YYYY-MM-DD
@@ -153,7 +162,15 @@ const getGroundBookings = asyncHandler(async (req, res) => {
     params
   );
 
-  res.json({ bookings: result.rows });
+  // Booker phone numbers are only visible to the ground owner and to the
+  // person who made that booking.
+  const ground = await pool.query("SELECT posted_by_user_id FROM grounds WHERE id = $1", [req.params.id]);
+  const isOwner = ground.rows.length > 0 && String(ground.rows[0].posted_by_user_id) === String(req.user.id);
+  const bookings = result.rows.map((b) =>
+    isOwner || String(b.user_id) === String(req.user.id) ? b : { ...b, booked_by_phone: null }
+  );
+
+  res.json({ bookings });
 });
 
 // POST /api/grounds — add a ground
