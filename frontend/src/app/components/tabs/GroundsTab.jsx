@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Search, ChevronDown, MapPin, Star, Plus, X, Map, Pencil, Trash2, ExternalLink, Hash, RotateCcw, IndianRupee, Clock, Loader2, MessageSquare, Lock, Send, CheckCircle2, Camera, Phone, Image as ImageIcon } from "lucide-react";
+import { Search, ChevronDown, MapPin, Star, Plus, X, Map as MapIcon, Pencil, Trash2, ExternalLink, Hash, RotateCcw, IndianRupee, Clock, Loader2, MessageSquare, Lock, Send, CheckCircle2, Camera, Phone, Image as ImageIcon } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -739,7 +739,7 @@ function GroundForm({ token, onCreated, initialGround = null, onUpdated, onDelet
 
         <div className="rounded-2xl overflow-hidden border" style={{ borderColor: t.border }}>
           <div className="flex items-center gap-2 px-3.5 py-2.5 border-b" style={{ borderColor: t.border, backgroundColor: t.cardAlt }}>
-            <Map className="w-4 h-4" style={{ color: t.green }} />
+            <MapIcon className="w-4 h-4" style={{ color: t.green }} />
             <span className="text-xs font-bold" style={{ color: t.text }}>Google Maps Location Preview</span>
           </div>
           {previewUrl ? (
@@ -1699,7 +1699,7 @@ export default function GroundsTab({ onBook, grounds = GROUNDS, token, onGroundC
                 <MessageSquare className="w-4 h-4" /> Reviews ({selectedGround.reviews_count || 0})
               </SoftButton>
               <SoftButton isLight={isLight} type="button" onClick={() => setShowMap(prev => !prev)}>
-                <Map className="w-4 h-4" /> {showMap ? "Hide Map" : "View Map"}
+                <MapIcon className="w-4 h-4" /> {showMap ? "Hide Map" : "View Map"}
               </SoftButton>
               {buildGroundMapsLink(selectedGround) && (
                 <a
