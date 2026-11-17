@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { X, Trophy, Users, Phone, DollarSign, FileText, Loader2, AlertCircle, Trash2 } from "lucide-react";
 import { apiRequest } from "../api"; // same helper App.jsx already uses
 import CalendarField from "./CalendarField.jsx";
+import { showToast } from "../utils/toast.jsx";
 
 function cn(...classes) {
   return classes.filter(Boolean).join(" ");
@@ -211,7 +212,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
 
     if (missingProfile.length > 0) {
       const msg = `Please update your required profile details (${missingProfile.join(", ")}) in the Profile page first.`;
-      alert(msg);
+      showToast.warning(msg);
       return msg;
     }
     if (!form.name?.trim()) return "Tournament name is required";
@@ -234,6 +235,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
       return;
     }
     if (!token) {
+      showToast.warning("You need to be logged in.");
       setError("You need to be logged in.");
       return;
     }
@@ -264,6 +266,7 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
           token,
           body: payload,
         });
+        showToast.success("Tournament updated successfully!");
         onUpdated?.(res.tournament || res);
       } else {
         const res = await apiRequest("/tournaments", {
@@ -271,10 +274,12 @@ export default function CreateTournamentForm({ token, user, tournaments = [], in
           token,
           body: payload,
         });
+        showToast.success("Tournament created successfully!");
         onCreated?.(res.tournament || res);
       }
       onClose?.();
     } catch (err) {
+      showToast.error(err, "Failed to save tournament");
       setError(err.message || "Failed to save tournament");
     } finally {
       setSubmitting(false);

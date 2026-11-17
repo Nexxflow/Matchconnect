@@ -20,6 +20,7 @@ const {
   setActivePlayers,
   updatePlayerName,
   endInnings,
+  swapBatsmen,
 } = require("../controllers/matchController");
 const { authRequired, optionalAuth } = require("../middleware/auth");
 
@@ -42,6 +43,7 @@ router.post("/:matchId/start-innings", optionalAuth, startInnings);
 router.post("/:matchId/set-players", optionalAuth, setActivePlayers);
 router.post("/:matchId/balls", optionalAuth, recordBall);
 router.post("/:matchId/balls/undo", optionalAuth, undoBall);
+router.post("/:matchId/swap-batsmen", optionalAuth, swapBatsmen);
 router.post("/:matchId/select-bowler", optionalAuth, selectBowler);
 router.post("/:matchId/new-batsman", optionalAuth, newBatsman);
 router.post("/:matchId/complete", optionalAuth, completeMatch);

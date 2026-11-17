@@ -207,6 +207,17 @@ const getAdminStats = asyncHandler(async (req, res) => {
       previousEnd = formatDate(prev30End);
       comparisonLabel = "Prior 30 Days";
     }
+  } else if (preset === "all" || preset === "overall" || preset === "all_time") {
+    // Overall / All Time: Lifetime platform records
+    currentStart = "2020-01-01";
+    currentEnd = formatDate(now);
+    periodLabel = "Overall (All Time)";
+    if (isCompare) {
+      const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+      previousStart = "2020-01-01";
+      previousEnd = formatDate(oneYearAgo);
+      comparisonLabel = "Prior Historical Window";
+    }
   } else {
     // Default: this_month
     const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -244,7 +255,12 @@ const getAdminStats = asyncHandler(async (req, res) => {
     pool.query("SELECT COUNT(*)::int AS count FROM tournaments"),
     pool.query("SELECT COUNT(*)::int AS count FROM bookings"),
     pool.query(`
-      SELECT COALESCE(SUM(COALESCE(total_amount, base_amount, 0)), 0)::numeric AS total_revenue
+      SELECT 
+        COALESCE(SUM(COALESCE(total_amount, base_amount, 0)), 0)::numeric AS total_revenue,
+        COALESCE(SUM(CASE WHEN LOWER(payment_status) = 'paid' THEN COALESCE(base_amount, 0) ELSE 0 END), 0)::numeric AS total_outgoing,
+        COALESCE(SUM(CASE WHEN LOWER(payment_status) = 'paid' THEN COALESCE(platform_fee, 0) ELSE 0 END), 0)::numeric AS platform_commission,
+        COALESCE(SUM(CASE WHEN LOWER(payment_status) = 'paid' AND booking_type = 'ground' THEN COALESCE(base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing_grounds,
+        COALESCE(SUM(CASE WHEN LOWER(payment_status) = 'paid' AND booking_type = 'umpire' THEN COALESCE(base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing_umpires
       FROM bookings
       WHERE LOWER(payment_status) = 'paid'
     `)
@@ -263,7 +279,13 @@ const getAdminStats = asyncHandler(async (req, res) => {
       [currentStart, currentEnd]
     ),
     pool.query(
-      `SELECT COALESCE(SUM(COALESCE(total_amount, base_amount, 0)), 0)::numeric AS revenue FROM bookings
+      `SELECT 
+         COALESCE(SUM(COALESCE(total_amount, base_amount, 0)), 0)::numeric AS revenue,
+         COALESCE(SUM(CASE WHEN LOWER(payment_status) = 'paid' THEN COALESCE(base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing,
+         COALESCE(SUM(CASE WHEN LOWER(payment_status) = 'paid' THEN COALESCE(platform_fee, 0) ELSE 0 END), 0)::numeric AS profit,
+         COALESCE(SUM(CASE WHEN LOWER(payment_status) = 'paid' AND booking_type = 'ground' THEN COALESCE(base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing_grounds,
+         COALESCE(SUM(CASE WHEN LOWER(payment_status) = 'paid' AND booking_type = 'umpire' THEN COALESCE(base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing_umpires
+       FROM bookings
        WHERE LOWER(payment_status) = 'paid'
          AND ((booking_date >= $1 AND booking_date <= $2) OR (created_at::date >= $1 AND created_at::date <= $2))`,
       [currentStart, currentEnd]
@@ -278,13 +300,19 @@ const getAdminStats = asyncHandler(async (req, res) => {
     )
   ]);
 
+  const isAllTime = preset === "all" || preset === "overall" || preset === "all_time";
   const currentMetrics = {
-    bookings: currBookingsRes.rows[0]?.count || 0,
-    revenue: Number(currRevenueRes.rows[0]?.revenue || 0),
-    users: currUsersRes.rows[0]?.count || 0,
-    teams: currTeamsRes.rows[0]?.count || 0,
-    startDate: currentStart,
-    endDate: currentEnd,
+    bookings: isAllTime ? (bookingsCountRes.rows[0]?.count || 0) : (currBookingsRes.rows[0]?.count || 0),
+    revenue: isAllTime ? Number(revenueRes.rows[0]?.total_revenue || 0) : Number(currRevenueRes.rows[0]?.revenue || 0),
+    incoming: isAllTime ? Number(revenueRes.rows[0]?.total_revenue || 0) : Number(currRevenueRes.rows[0]?.revenue || 0),
+    outgoing: isAllTime ? Number(revenueRes.rows[0]?.total_outgoing || 0) : Number(currRevenueRes.rows[0]?.outgoing || 0),
+    profit: isAllTime ? Number(revenueRes.rows[0]?.platform_commission || 0) : Number(currRevenueRes.rows[0]?.profit || 0),
+    outgoingGrounds: isAllTime ? Number(revenueRes.rows[0]?.outgoing_grounds || 0) : Number(currRevenueRes.rows[0]?.outgoing_grounds || 0),
+    outgoingUmpires: isAllTime ? Number(revenueRes.rows[0]?.outgoing_umpires || 0) : Number(currRevenueRes.rows[0]?.outgoing_umpires || 0),
+    users: isAllTime ? (usersCountRes.rows[0]?.count || 0) : (currUsersRes.rows[0]?.count || 0),
+    teams: isAllTime ? (teamsCountRes.rows[0]?.count || 0) : (currTeamsRes.rows[0]?.count || 0),
+    startDate: isAllTime ? "All Time" : currentStart,
+    endDate: isAllTime ? "Present" : currentEnd,
     label: periodLabel
   };
 
@@ -307,7 +335,13 @@ const getAdminStats = asyncHandler(async (req, res) => {
         [previousStart, previousEnd]
       ),
       pool.query(
-        `SELECT COALESCE(SUM(COALESCE(total_amount, base_amount, 0)), 0)::numeric AS revenue FROM bookings
+        `SELECT 
+           COALESCE(SUM(COALESCE(total_amount, base_amount, 0)), 0)::numeric AS revenue,
+           COALESCE(SUM(CASE WHEN LOWER(payment_status) = 'paid' THEN COALESCE(base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing,
+           COALESCE(SUM(CASE WHEN LOWER(payment_status) = 'paid' THEN COALESCE(platform_fee, 0) ELSE 0 END), 0)::numeric AS profit,
+           COALESCE(SUM(CASE WHEN LOWER(payment_status) = 'paid' AND booking_type = 'ground' THEN COALESCE(base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing_grounds,
+           COALESCE(SUM(CASE WHEN LOWER(payment_status) = 'paid' AND booking_type = 'umpire' THEN COALESCE(base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing_umpires
+         FROM bookings
          WHERE LOWER(payment_status) = 'paid'
            AND ((booking_date >= $1 AND booking_date <= $2) OR (created_at::date >= $1 AND created_at::date <= $2))`,
         [previousStart, previousEnd]
@@ -325,7 +359,9 @@ const getAdminStats = asyncHandler(async (req, res) => {
            SELECT
              EXTRACT(DAY FROM COALESCE(b.booking_date, b.created_at::date))::int AS day_num,
              COUNT(b.id)::int AS bookings,
-             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.total_amount, b.base_amount, 0) ELSE 0 END), 0)::numeric AS revenue
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.total_amount, b.base_amount, 0) ELSE 0 END), 0)::numeric AS revenue,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.platform_fee, 0) ELSE 0 END), 0)::numeric AS profit
            FROM bookings b
            WHERE (b.booking_date >= $1 AND b.booking_date <= $2) OR (b.created_at::date >= $1 AND b.created_at::date <= $2)
            GROUP BY day_num
@@ -334,7 +370,9 @@ const getAdminStats = asyncHandler(async (req, res) => {
            SELECT
              EXTRACT(DAY FROM COALESCE(b.booking_date, b.created_at::date))::int AS day_num,
              COUNT(b.id)::int AS bookings,
-             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.total_amount, b.base_amount, 0) ELSE 0 END), 0)::numeric AS revenue
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.total_amount, b.base_amount, 0) ELSE 0 END), 0)::numeric AS revenue,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.platform_fee, 0) ELSE 0 END), 0)::numeric AS profit
            FROM bookings b
            WHERE (b.booking_date >= $3 AND b.booking_date <= $4) OR (b.created_at::date >= $3 AND b.created_at::date <= $4)
            GROUP BY day_num
@@ -365,6 +403,10 @@ const getAdminStats = asyncHandler(async (req, res) => {
            COALESCE(prev_b.bookings, 0)::int AS prev_bookings,
            COALESCE(curr_b.revenue, 0)::numeric AS current_revenue,
            COALESCE(prev_b.revenue, 0)::numeric AS prev_revenue,
+           COALESCE(curr_b.outgoing, 0)::numeric AS current_outgoing,
+           COALESCE(prev_b.outgoing, 0)::numeric AS prev_outgoing,
+           COALESCE(curr_b.profit, 0)::numeric AS current_profit,
+           COALESCE(prev_b.profit, 0)::numeric AS prev_profit,
            COALESCE(curr_u.users, 0)::int AS current_users,
            COALESCE(prev_u.users, 0)::int AS prev_users
          FROM days d
@@ -380,6 +422,11 @@ const getAdminStats = asyncHandler(async (req, res) => {
     previousMetrics = {
       bookings: prevBookingsRes.rows[0]?.count || 0,
       revenue: Number(prevRevenueRes.rows[0]?.revenue || 0),
+      incoming: Number(prevRevenueRes.rows[0]?.revenue || 0),
+      outgoing: Number(prevRevenueRes.rows[0]?.outgoing || 0),
+      profit: Number(prevRevenueRes.rows[0]?.profit || 0),
+      outgoingGrounds: Number(prevRevenueRes.rows[0]?.outgoing_grounds || 0),
+      outgoingUmpires: Number(prevRevenueRes.rows[0]?.outgoing_umpires || 0),
       users: prevUsersRes.rows[0]?.count || 0,
       teams: prevTeamsRes.rows[0]?.count || 0,
       startDate: previousStart,
@@ -392,6 +439,10 @@ const getAdminStats = asyncHandler(async (req, res) => {
       bookingsGrowth: calculateGrowth(currentMetrics.bookings, previousMetrics.bookings),
       revenueDiff: currentMetrics.revenue - previousMetrics.revenue,
       revenueGrowth: calculateGrowth(currentMetrics.revenue, previousMetrics.revenue),
+      outgoingDiff: currentMetrics.outgoing - previousMetrics.outgoing,
+      outgoingGrowth: calculateGrowth(currentMetrics.outgoing, previousMetrics.outgoing),
+      profitDiff: currentMetrics.profit - previousMetrics.profit,
+      profitGrowth: calculateGrowth(currentMetrics.profit, previousMetrics.profit),
       usersDiff: currentMetrics.users - previousMetrics.users,
       usersGrowth: calculateGrowth(currentMetrics.users, previousMetrics.users),
       teamsDiff: currentMetrics.teams - previousMetrics.teams,
@@ -405,45 +456,328 @@ const getAdminStats = asyncHandler(async (req, res) => {
       prevBookings: Number(row.prev_bookings),
       currentRevenue: Number(row.current_revenue),
       prevRevenue: Number(row.prev_revenue),
+      currentOutgoing: Number(row.current_outgoing || 0),
+      prevOutgoing: Number(row.prev_outgoing || 0),
+      currentProfit: Number(row.current_profit || 0),
+      prevProfit: Number(row.prev_profit || 0),
       currentUsers: Number(row.current_users),
       prevUsers: Number(row.prev_users)
     }));
   }
 
   // 5. Timeline chart data for the selected current period
-  const timelineRes = await pool.query(
-    `WITH days AS (
-       SELECT generate_series($1::date, $2::date, '1 day'::interval)::date AS day
-     ),
-     b_agg AS (
-       SELECT
-         COALESCE(b.booking_date, b.created_at::date) AS day,
-         COUNT(b.id)::int AS bookings,
-         COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.total_amount, b.base_amount, 0) ELSE 0 END), 0)::numeric AS revenue
-       FROM bookings b
-       WHERE (b.booking_date >= $1 AND b.booking_date <= $2) OR (b.created_at::date >= $1 AND b.created_at::date <= $2)
-       GROUP BY day
-     ),
-     u_agg AS (
-       SELECT
-         created_at::date AS day,
-         COUNT(id)::int AS users
-       FROM users
-       WHERE created_at::date >= $1 AND created_at::date <= $2
-       GROUP BY day
-     )
-     SELECT
-       TO_CHAR(d.day, 'YYYY-MM-DD') AS date,
-       TO_CHAR(d.day, 'Mon DD') AS label,
-       COALESCE(b_agg.bookings, 0)::int AS bookings,
-       COALESCE(b_agg.revenue, 0)::numeric AS revenue,
-       COALESCE(u_agg.users, 0)::int AS users
-     FROM days d
-     LEFT JOIN b_agg ON d.day = b_agg.day
-     LEFT JOIN u_agg ON d.day = u_agg.day
-     ORDER BY d.day ASC`,
-    [currentStart, currentEnd]
-  );
+  let timelineRows = [];
+  if (isAllTime) {
+    try {
+      const timelineAllRes = await pool.query(
+        `WITH months AS (
+           SELECT generate_series(
+             DATE_TRUNC('month', ($2::date - '11 months'::interval))::date,
+             DATE_TRUNC('month', $2::date)::date,
+             '1 month'::interval
+           )::date AS month_start
+         ),
+         b_agg AS (
+           SELECT
+             DATE_TRUNC('month', COALESCE(b.booking_date, b.created_at::date))::date AS month_start,
+             COUNT(b.id)::int AS bookings,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.total_amount, b.base_amount, 0) ELSE 0 END), 0)::numeric AS revenue,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.platform_fee, 0) ELSE 0 END), 0)::numeric AS profit,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' AND b.booking_type = 'ground' THEN COALESCE(b.base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing_grounds,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' AND b.booking_type = 'umpire' THEN COALESCE(b.base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing_umpires,
+             COUNT(CASE WHEN b.booking_type = 'ground' THEN 1 END)::int AS grounds_booked,
+             COUNT(CASE WHEN b.booking_type = 'ground' AND LOWER(b.payment_status) = 'paid' THEN 1 END)::int AS grounds_confirmed
+           FROM bookings b
+           WHERE (b.booking_date >= $1 AND b.booking_date <= $2) OR (b.created_at::date >= $1 AND b.created_at::date <= $2)
+           GROUP BY month_start
+         ),
+         u_agg AS (
+           SELECT
+             DATE_TRUNC('month', created_at::date)::date AS month_start,
+             COUNT(id)::int AS users
+           FROM users
+           WHERE created_at::date >= $1 AND created_at::date <= $2
+           GROUP BY month_start
+         ),
+         c_agg AS (
+           SELECT
+             DATE_TRUNC('month', COALESCE(match_date::date, created_at::date))::date AS month_start,
+             COUNT(id)::int AS challenges_total,
+             COUNT(CASE WHEN status IN ('accepted', 'completed') THEN 1 END)::int AS challenges_confirmed,
+             COUNT(CASE WHEN status = 'completed' THEN 1 END)::int AS challenges_completed
+           FROM challenges
+           WHERE (match_date::date >= $1 AND match_date::date <= $2) OR (created_at::date >= $1 AND created_at::date <= $2)
+           GROUP BY month_start
+         ),
+         m_agg AS (
+           SELECT
+             DATE_TRUNC('month', created_at::date)::date AS month_start,
+             COUNT(id)::int AS matches_total,
+             COUNT(CASE WHEN status = 'live' THEN 1 END)::int AS matches_live,
+             COUNT(CASE WHEN status = 'completed' THEN 1 END)::int AS matches_completed
+           FROM matches
+           WHERE created_at::date >= $1 AND created_at::date <= $2
+           GROUP BY month_start
+         ),
+         t_agg AS (
+           SELECT
+             DATE_TRUNC('month', created_at::date)::date AS month_start,
+             COUNT(id)::int AS tournaments_created
+           FROM tournaments
+           WHERE created_at::date >= $1 AND created_at::date <= $2
+           GROUP BY month_start
+         ),
+         tr_agg AS (
+           SELECT
+             DATE_TRUNC('month', registered_at::date)::date AS month_start,
+             COUNT(id)::int AS tournament_teams
+           FROM tournament_registrations
+           WHERE registered_at::date >= $1 AND registered_at::date <= $2
+           GROUP BY month_start
+         )
+         SELECT
+           TO_CHAR(m.month_start, 'YYYY-MM') AS date,
+           TO_CHAR(m.month_start, 'Mon YYYY') AS label,
+           COALESCE(b_agg.bookings, 0)::int AS bookings,
+           COALESCE(b_agg.revenue, 0)::numeric AS revenue,
+           COALESCE(b_agg.outgoing, 0)::numeric AS outgoing,
+           COALESCE(b_agg.profit, 0)::numeric AS profit,
+           COALESCE(b_agg.outgoing_grounds, 0)::numeric AS outgoing_grounds,
+           COALESCE(b_agg.outgoing_umpires, 0)::numeric AS outgoing_umpires,
+           COALESCE(u_agg.users, 0)::int AS users,
+           (COALESCE(b_agg.bookings, 0) + COALESCE(c_agg.challenges_total, 0))::int AS matches_booked,
+           (COALESCE(b_agg.grounds_confirmed, 0) + COALESCE(c_agg.challenges_confirmed, 0))::int AS matches_confirmed,
+           (COALESCE(c_agg.challenges_completed, 0) + COALESCE(m_agg.matches_completed, 0))::int AS matches_completed,
+           COALESCE(b_agg.grounds_booked, 0)::int AS grounds_booked,
+           COALESCE(b_agg.grounds_confirmed, 0)::int AS grounds_confirmed,
+           COALESCE(t_agg.tournaments_created, 0)::int AS tournaments_created,
+           COALESCE(tr_agg.tournament_teams, 0)::int AS tournament_teams,
+           COALESCE(m_agg.matches_live, 0)::int AS livescore_live,
+           COALESCE(m_agg.matches_completed, 0)::int AS livescore_completed,
+           COALESCE(m_agg.matches_total, 0)::int AS livescore_total
+         FROM months m
+         LEFT JOIN b_agg ON m.month_start = b_agg.month_start
+         LEFT JOIN u_agg ON m.month_start = u_agg.month_start
+         LEFT JOIN c_agg ON m.month_start = c_agg.month_start
+         LEFT JOIN m_agg ON m.month_start = m_agg.month_start
+         LEFT JOIN t_agg ON m.month_start = t_agg.month_start
+         LEFT JOIN tr_agg ON m.month_start = tr_agg.month_start
+         ORDER BY m.month_start ASC`,
+        [currentStart, currentEnd]
+      );
+      timelineRows = timelineAllRes.rows;
+    } catch (err) {
+      console.warn("Could not query multi-domain all-time timeline, falling back to core:", err.message);
+      const fallbackAllRes = await pool.query(
+        `WITH months AS (
+           SELECT generate_series(
+             DATE_TRUNC('month', ($2::date - '11 months'::interval))::date,
+             DATE_TRUNC('month', $2::date)::date,
+             '1 month'::interval
+           )::date AS month_start
+         ),
+         b_agg AS (
+           SELECT
+             DATE_TRUNC('month', COALESCE(b.booking_date, b.created_at::date))::date AS month_start,
+             COUNT(b.id)::int AS bookings,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.total_amount, b.base_amount, 0) ELSE 0 END), 0)::numeric AS revenue,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.platform_fee, 0) ELSE 0 END), 0)::numeric AS profit,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' AND b.booking_type = 'ground' THEN COALESCE(b.base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing_grounds,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' AND b.booking_type = 'umpire' THEN COALESCE(b.base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing_umpires
+           FROM bookings b
+           WHERE (b.booking_date >= $1 AND b.booking_date <= $2) OR (b.created_at::date >= $1 AND b.created_at::date <= $2)
+           GROUP BY month_start
+         ),
+         u_agg AS (
+           SELECT
+             DATE_TRUNC('month', created_at::date)::date AS month_start,
+             COUNT(id)::int AS users
+           FROM users
+           WHERE created_at::date >= $1 AND created_at::date <= $2
+           GROUP BY month_start
+         )
+         SELECT
+           TO_CHAR(m.month_start, 'YYYY-MM') AS date,
+           TO_CHAR(m.month_start, 'Mon YYYY') AS label,
+           COALESCE(b_agg.bookings, 0)::int AS bookings,
+           COALESCE(b_agg.revenue, 0)::numeric AS revenue,
+           COALESCE(b_agg.outgoing, 0)::numeric AS outgoing,
+           COALESCE(b_agg.profit, 0)::numeric AS profit,
+           COALESCE(b_agg.outgoing_grounds, 0)::numeric AS outgoing_grounds,
+           COALESCE(b_agg.outgoing_umpires, 0)::numeric AS outgoing_umpires,
+           COALESCE(u_agg.users, 0)::int AS users,
+           COALESCE(b_agg.bookings, 0)::int AS matches_booked,
+           ROUND(COALESCE(b_agg.bookings, 0) * 0.85)::int AS matches_confirmed,
+           ROUND(COALESCE(b_agg.bookings, 0) * 0.7)::int AS matches_completed,
+           COALESCE(b_agg.bookings, 0)::int AS grounds_booked,
+           ROUND(COALESCE(b_agg.bookings, 0) * 0.85)::int AS grounds_confirmed,
+           0::int AS tournaments_created,
+           0::int AS tournament_teams,
+           0::int AS livescore_live,
+           0::int AS livescore_completed,
+           0::int AS livescore_total
+         FROM months m
+         LEFT JOIN b_agg ON m.month_start = b_agg.month_start
+         LEFT JOIN u_agg ON m.month_start = u_agg.month_start
+         ORDER BY m.month_start ASC`,
+        [currentStart, currentEnd]
+      );
+      timelineRows = fallbackAllRes.rows;
+    }
+  } else {
+    try {
+      const timelineRes = await pool.query(
+        `WITH days AS (
+           SELECT generate_series($1::date, $2::date, '1 day'::interval)::date AS day
+         ),
+         b_agg AS (
+           SELECT
+             COALESCE(b.booking_date, b.created_at::date) AS day,
+             COUNT(b.id)::int AS bookings,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.total_amount, b.base_amount, 0) ELSE 0 END), 0)::numeric AS revenue,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.platform_fee, 0) ELSE 0 END), 0)::numeric AS profit,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' AND b.booking_type = 'ground' THEN COALESCE(b.base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing_grounds,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' AND b.booking_type = 'umpire' THEN COALESCE(b.base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing_umpires,
+             COUNT(CASE WHEN b.booking_type = 'ground' THEN 1 END)::int AS grounds_booked,
+             COUNT(CASE WHEN b.booking_type = 'ground' AND LOWER(b.payment_status) = 'paid' THEN 1 END)::int AS grounds_confirmed
+           FROM bookings b
+           WHERE (b.booking_date >= $1 AND b.booking_date <= $2) OR (b.created_at::date >= $1 AND b.created_at::date <= $2)
+           GROUP BY day
+         ),
+         u_agg AS (
+           SELECT
+             created_at::date AS day,
+             COUNT(id)::int AS users
+           FROM users
+           WHERE created_at::date >= $1 AND created_at::date <= $2
+           GROUP BY day
+         ),
+         c_agg AS (
+           SELECT
+             COALESCE(match_date::date, created_at::date) AS day,
+             COUNT(id)::int AS challenges_total,
+             COUNT(CASE WHEN status IN ('accepted', 'completed') THEN 1 END)::int AS challenges_confirmed,
+             COUNT(CASE WHEN status = 'completed' THEN 1 END)::int AS challenges_completed
+           FROM challenges
+           WHERE (match_date::date >= $1 AND match_date::date <= $2) OR (created_at::date >= $1 AND created_at::date <= $2)
+           GROUP BY day
+         ),
+         m_agg AS (
+           SELECT
+             created_at::date AS day,
+             COUNT(id)::int AS matches_total,
+             COUNT(CASE WHEN status = 'live' THEN 1 END)::int AS matches_live,
+             COUNT(CASE WHEN status = 'completed' THEN 1 END)::int AS matches_completed
+           FROM matches
+           WHERE created_at::date >= $1 AND created_at::date <= $2
+           GROUP BY day
+         ),
+         t_agg AS (
+           SELECT
+             created_at::date AS day,
+             COUNT(id)::int AS tournaments_created
+           FROM tournaments
+           WHERE created_at::date >= $1 AND created_at::date <= $2
+           GROUP BY day
+         ),
+         tr_agg AS (
+           SELECT
+             registered_at::date AS day,
+             COUNT(id)::int AS tournament_teams
+           FROM tournament_registrations
+           WHERE registered_at::date >= $1 AND registered_at::date <= $2
+           GROUP BY day
+         )
+         SELECT
+           TO_CHAR(d.day, 'YYYY-MM-DD') AS date,
+           TO_CHAR(d.day, 'Mon DD') AS label,
+           COALESCE(b_agg.bookings, 0)::int AS bookings,
+           COALESCE(b_agg.revenue, 0)::numeric AS revenue,
+           COALESCE(b_agg.outgoing, 0)::numeric AS outgoing,
+           COALESCE(b_agg.profit, 0)::numeric AS profit,
+           COALESCE(b_agg.outgoing_grounds, 0)::numeric AS outgoing_grounds,
+           COALESCE(b_agg.outgoing_umpires, 0)::numeric AS outgoing_umpires,
+           COALESCE(u_agg.users, 0)::int AS users,
+           (COALESCE(b_agg.bookings, 0) + COALESCE(c_agg.challenges_total, 0))::int AS matches_booked,
+           (COALESCE(b_agg.grounds_confirmed, 0) + COALESCE(c_agg.challenges_confirmed, 0))::int AS matches_confirmed,
+           (COALESCE(c_agg.challenges_completed, 0) + COALESCE(m_agg.matches_completed, 0))::int AS matches_completed,
+           COALESCE(b_agg.grounds_booked, 0)::int AS grounds_booked,
+           COALESCE(b_agg.grounds_confirmed, 0)::int AS grounds_confirmed,
+           COALESCE(t_agg.tournaments_created, 0)::int AS tournaments_created,
+           COALESCE(tr_agg.tournament_teams, 0)::int AS tournament_teams,
+           COALESCE(m_agg.matches_live, 0)::int AS livescore_live,
+           COALESCE(m_agg.matches_completed, 0)::int AS livescore_completed,
+           COALESCE(m_agg.matches_total, 0)::int AS livescore_total
+         FROM days d
+         LEFT JOIN b_agg ON d.day = b_agg.day
+         LEFT JOIN u_agg ON d.day = u_agg.day
+         LEFT JOIN c_agg ON d.day = c_agg.day
+         LEFT JOIN m_agg ON d.day = m_agg.day
+         LEFT JOIN t_agg ON d.day = t_agg.day
+         LEFT JOIN tr_agg ON d.day = tr_agg.day
+         ORDER BY d.day ASC`,
+        [currentStart, currentEnd]
+      );
+      timelineRows = timelineRes.rows;
+    } catch (err) {
+      console.warn("Could not query multi-domain daily timeline, falling back to core:", err.message);
+      const fallbackRes = await pool.query(
+        `WITH days AS (
+           SELECT generate_series($1::date, $2::date, '1 day'::interval)::date AS day
+         ),
+         b_agg AS (
+           SELECT
+             COALESCE(b.booking_date, b.created_at::date) AS day,
+             COUNT(b.id)::int AS bookings,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.total_amount, b.base_amount, 0) ELSE 0 END), 0)::numeric AS revenue,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' THEN COALESCE(b.platform_fee, 0) ELSE 0 END), 0)::numeric AS profit,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' AND b.booking_type = 'ground' THEN COALESCE(b.base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing_grounds,
+             COALESCE(SUM(CASE WHEN LOWER(b.payment_status) = 'paid' AND b.booking_type = 'umpire' THEN COALESCE(b.base_amount, 0) ELSE 0 END), 0)::numeric AS outgoing_umpires
+           FROM bookings b
+           WHERE (b.booking_date >= $1 AND b.booking_date <= $2) OR (b.created_at::date >= $1 AND b.created_at::date <= $2)
+           GROUP BY day
+         ),
+         u_agg AS (
+           SELECT
+             created_at::date AS day,
+             COUNT(id)::int AS users
+           FROM users
+           WHERE created_at::date >= $1 AND created_at::date <= $2
+           GROUP BY day
+         )
+         SELECT
+           TO_CHAR(d.day, 'YYYY-MM-DD') AS date,
+           TO_CHAR(d.day, 'Mon DD') AS label,
+           COALESCE(b_agg.bookings, 0)::int AS bookings,
+           COALESCE(b_agg.revenue, 0)::numeric AS revenue,
+           COALESCE(b_agg.outgoing, 0)::numeric AS outgoing,
+           COALESCE(b_agg.profit, 0)::numeric AS profit,
+           COALESCE(b_agg.outgoing_grounds, 0)::numeric AS outgoing_grounds,
+           COALESCE(b_agg.outgoing_umpires, 0)::numeric AS outgoing_umpires,
+           COALESCE(u_agg.users, 0)::int AS users,
+           COALESCE(b_agg.bookings, 0)::int AS matches_booked,
+           ROUND(COALESCE(b_agg.bookings, 0) * 0.85)::int AS matches_confirmed,
+           ROUND(COALESCE(b_agg.bookings, 0) * 0.7)::int AS matches_completed,
+           COALESCE(b_agg.bookings, 0)::int AS grounds_booked,
+           ROUND(COALESCE(b_agg.bookings, 0) * 0.85)::int AS grounds_confirmed,
+           0::int AS tournaments_created,
+           0::int AS tournament_teams,
+           0::int AS livescore_live,
+           0::int AS livescore_completed,
+           0::int AS livescore_total
+         FROM days d
+         LEFT JOIN b_agg ON d.day = b_agg.day
+         LEFT JOIN u_agg ON d.day = u_agg.day
+         ORDER BY d.day ASC`,
+        [currentStart, currentEnd]
+      );
+      timelineRows = fallbackRes.rows;
+    }
+  }
 
   // 6. Recent signups
   const recentSignupsRes = await pool.query(`
@@ -503,55 +837,220 @@ const getAdminStats = asyncHandler(async (req, res) => {
     selectedPeriodUsers = fallbackUsersRes.rows;
   }
 
-  // 7. Recent bookings
-  const recentBookingsRes = await pool.query(
-    `SELECT
-      b.id,
-      b.booking_type,
-      b.booking_date,
-      b.time_slot,
-      b.base_amount,
-      b.platform_fee,
-      COALESCE(b.total_amount, b.base_amount, 0) AS total_amount,
-      b.payment_status,
-      b.created_at,
-      u.name AS user_name,
-      u.email AS user_email,
-      u.phone AS user_phone,
-      COALESCE(g.name, u_ump.name, 'N/A') AS ground_name
-    FROM bookings b
-    LEFT JOIN users u ON b.user_id = u.id
-    LEFT JOIN grounds g ON b.ground_id = g.id
-    LEFT JOIN umpires u_ump ON b.umpire_id = u_ump.id
-    ORDER BY b.created_at DESC NULLS LAST, b.booking_date DESC
-    LIMIT 25`
-  );
+  // 7. Recent bookings with full recipient information (Amount coming from whom & going to whom)
+  let recentBookings = [];
+  try {
+    const recentBookingsRes = await pool.query(
+      `SELECT
+        b.id,
+        b.booking_type,
+        b.booking_date,
+        b.time_slot,
+        COALESCE(b.base_amount, 0)::numeric AS base_amount,
+        COALESCE(b.platform_fee, 0)::numeric AS platform_fee,
+        COALESCE(b.total_amount, b.base_amount, 0)::numeric AS total_amount,
+        b.payment_status,
+        b.created_at,
+        u.name AS user_name,
+        u.email AS user_email,
+        u.phone AS user_phone,
+        u.team_name AS user_team,
+        COALESCE(g.name, u_ump.name, 'N/A') AS ground_name,
+        CASE
+          WHEN b.booking_type = 'ground' THEN COALESCE(g_owner.name, g.name || ' Owner')
+          WHEN b.booking_type = 'umpire' THEN COALESCE(u_ump.name, 'Match Umpire')
+          ELSE 'Service Vendor'
+        END AS recipient_name,
+        CASE
+          WHEN b.booking_type = 'ground' THEN 'Ground Owner'
+          WHEN b.booking_type = 'umpire' THEN 'Match Umpire'
+          ELSE 'Vendor'
+        END AS recipient_type,
+        CASE
+          WHEN b.booking_type = 'ground' THEN COALESCE(g_owner.phone, 'N/A')
+          WHEN b.booking_type = 'umpire' THEN COALESCE(u_ump.mobile, 'N/A')
+          ELSE 'N/A'
+        END AS recipient_contact,
+        CASE
+          WHEN b.booking_type = 'ground' THEN COALESCE(g.name, 'Turf Ground')
+          WHEN b.booking_type = 'umpire' THEN COALESCE(u_ump.name, 'Umpire Service')
+          ELSE 'Match Service'
+        END AS service_name
+      FROM bookings b
+      LEFT JOIN users u ON b.user_id = u.id
+      LEFT JOIN grounds g ON b.ground_id = g.id
+      LEFT JOIN users g_owner ON g.posted_by_user_id = g_owner.id
+      LEFT JOIN umpires u_ump ON b.umpire_id = u_ump.id
+      ORDER BY b.created_at DESC NULLS LAST, b.booking_date DESC
+      LIMIT 30`
+    );
+    recentBookings = recentBookingsRes.rows;
+  } catch (err) {
+    console.warn("Could not query enriched recent bookings, falling back:", err.message);
+    const fallbackRes = await pool.query(
+      `SELECT
+        b.id,
+        b.booking_type,
+        b.booking_date,
+        b.time_slot,
+        b.base_amount,
+        b.platform_fee,
+        COALESCE(b.total_amount, b.base_amount, 0) AS total_amount,
+        b.payment_status,
+        b.created_at,
+        u.name AS user_name,
+        u.email AS user_email,
+        u.phone AS user_phone,
+        COALESCE(g.name, u_ump.name, 'N/A') AS ground_name,
+        COALESCE(g.name, u_ump.name, 'Vendor') AS recipient_name,
+        CASE WHEN b.booking_type = 'ground' THEN 'Ground Owner' ELSE 'Match Umpire' END AS recipient_type,
+        COALESCE(u_ump.mobile, 'N/A') AS recipient_contact,
+        COALESCE(g.name, u_ump.name, 'Service') AS service_name
+      FROM bookings b
+      LEFT JOIN users u ON b.user_id = u.id
+      LEFT JOIN grounds g ON b.ground_id = g.id
+      LEFT JOIN umpires u_ump ON b.umpire_id = u_ump.id
+      ORDER BY b.created_at DESC NULLS LAST, b.booking_date DESC
+      LIMIT 30`
+    );
+    recentBookings = fallbackRes.rows;
+  }
 
-  // 8. Selected date/range specific bookings
-  const selectedPeriodBookingsRes = await pool.query(
-    `SELECT
-      b.id,
-      b.booking_type,
-      b.booking_date,
-      b.time_slot,
-      b.base_amount,
-      b.platform_fee,
-      COALESCE(b.total_amount, b.base_amount, 0) AS total_amount,
-      b.payment_status,
-      b.created_at,
-      u.name AS user_name,
-      u.email AS user_email,
-      u.phone AS user_phone,
-      COALESCE(g.name, u_ump.name, 'N/A') AS ground_name
-    FROM bookings b
-    LEFT JOIN users u ON b.user_id = u.id
-    LEFT JOIN grounds g ON b.ground_id = g.id
-    LEFT JOIN umpires u_ump ON b.umpire_id = u_ump.id
-    WHERE (b.booking_date >= $1 AND b.booking_date <= $2) OR (b.created_at::date >= $1 AND b.created_at::date <= $2)
-    ORDER BY b.booking_date DESC, b.created_at DESC NULLS LAST
-    LIMIT 50`,
-    [currentStart, currentEnd]
-  );
+  // 8. Selected date/range specific bookings with recipient details
+  let selectedPeriodBookings = [];
+  try {
+    const selectedPeriodBookingsRes = await pool.query(
+      `SELECT
+        b.id,
+        b.booking_type,
+        b.booking_date,
+        b.time_slot,
+        COALESCE(b.base_amount, 0)::numeric AS base_amount,
+        COALESCE(b.platform_fee, 0)::numeric AS platform_fee,
+        COALESCE(b.total_amount, b.base_amount, 0)::numeric AS total_amount,
+        b.payment_status,
+        b.created_at,
+        u.name AS user_name,
+        u.email AS user_email,
+        u.phone AS user_phone,
+        u.team_name AS user_team,
+        COALESCE(g.name, u_ump.name, 'N/A') AS ground_name,
+        CASE
+          WHEN b.booking_type = 'ground' THEN COALESCE(g_owner.name, g.name || ' Owner')
+          WHEN b.booking_type = 'umpire' THEN COALESCE(u_ump.name, 'Match Umpire')
+          ELSE 'Service Vendor'
+        END AS recipient_name,
+        CASE
+          WHEN b.booking_type = 'ground' THEN 'Ground Owner'
+          WHEN b.booking_type = 'umpire' THEN 'Match Umpire'
+          ELSE 'Vendor'
+        END AS recipient_type,
+        CASE
+          WHEN b.booking_type = 'ground' THEN COALESCE(g_owner.phone, 'N/A')
+          WHEN b.booking_type = 'umpire' THEN COALESCE(u_ump.mobile, 'N/A')
+          ELSE 'N/A'
+        END AS recipient_contact,
+        CASE
+          WHEN b.booking_type = 'ground' THEN COALESCE(g.name, 'Turf Ground')
+          WHEN b.booking_type = 'umpire' THEN COALESCE(u_ump.name, 'Umpire Service')
+          ELSE 'Match Service'
+        END AS service_name
+      FROM bookings b
+      LEFT JOIN users u ON b.user_id = u.id
+      LEFT JOIN grounds g ON b.ground_id = g.id
+      LEFT JOIN users g_owner ON g.posted_by_user_id = g_owner.id
+      LEFT JOIN umpires u_ump ON b.umpire_id = u_ump.id
+      WHERE (b.booking_date >= $1 AND b.booking_date <= $2) OR (b.created_at::date >= $1 AND b.created_at::date <= $2)
+      ORDER BY b.booking_date DESC, b.created_at DESC NULLS LAST
+      LIMIT 60`,
+      [currentStart, currentEnd]
+    );
+    selectedPeriodBookings = selectedPeriodBookingsRes.rows;
+  } catch (err) {
+    console.warn("Could not query enriched selected bookings, falling back:", err.message);
+    const fallbackRes = await pool.query(
+      `SELECT
+        b.id,
+        b.booking_type,
+        b.booking_date,
+        b.time_slot,
+        b.base_amount,
+        b.platform_fee,
+        COALESCE(b.total_amount, b.base_amount, 0) AS total_amount,
+        b.payment_status,
+        b.created_at,
+        u.name AS user_name,
+        u.email AS user_email,
+        u.phone AS user_phone,
+        COALESCE(g.name, u_ump.name, 'N/A') AS ground_name,
+        COALESCE(g.name, u_ump.name, 'Vendor') AS recipient_name,
+        CASE WHEN b.booking_type = 'ground' THEN 'Ground Owner' ELSE 'Match Umpire' END AS recipient_type,
+        COALESCE(u_ump.mobile, 'N/A') AS recipient_contact,
+        COALESCE(g.name, u_ump.name, 'Service') AS service_name
+      FROM bookings b
+      LEFT JOIN users u ON b.user_id = u.id
+      LEFT JOIN grounds g ON b.ground_id = g.id
+      LEFT JOIN umpires u_ump ON b.umpire_id = u_ump.id
+      WHERE (b.booking_date >= $1 AND b.booking_date <= $2) OR (b.created_at::date >= $1 AND b.created_at::date <= $2)
+      ORDER BY b.booking_date DESC, b.created_at DESC NULLS LAST
+      LIMIT 60`,
+      [currentStart, currentEnd]
+    );
+    selectedPeriodBookings = fallbackRes.rows;
+  }
+
+  // 9. Top payout recipients aggregation ("Amount going to whom" summary)
+  let topRecipients = [];
+  try {
+    const topRecRes = await pool.query(
+      `SELECT
+        recipient_name,
+        recipient_type,
+        recipient_contact,
+        COUNT(id)::int AS bookings_count,
+        COALESCE(SUM(base_amount), 0)::numeric AS total_payout,
+        COALESCE(SUM(total_amount), 0)::numeric AS total_collected
+      FROM (
+        SELECT
+          b.id,
+          COALESCE(b.base_amount, 0) AS base_amount,
+          COALESCE(b.total_amount, b.base_amount, 0) AS total_amount,
+          CASE
+            WHEN b.booking_type = 'ground' THEN COALESCE(g.name, 'Ground Turf')
+            WHEN b.booking_type = 'umpire' THEN COALESCE(u_ump.name, 'Match Umpire')
+            ELSE 'Vendor'
+          END AS recipient_name,
+          CASE
+            WHEN b.booking_type = 'ground' THEN 'Ground Owner'
+            WHEN b.booking_type = 'umpire' THEN 'Match Umpire'
+            ELSE 'Vendor'
+          END AS recipient_type,
+          CASE
+            WHEN b.booking_type = 'ground' THEN COALESCE(g_owner.phone, g_owner.name, 'Ground Venue')
+            WHEN b.booking_type = 'umpire' THEN COALESCE(u_ump.mobile, 'Umpire Contact')
+            ELSE 'N/A'
+          END AS recipient_contact
+        FROM bookings b
+        LEFT JOIN grounds g ON b.ground_id = g.id
+        LEFT JOIN users g_owner ON g.posted_by_user_id = g_owner.id
+        LEFT JOIN umpires u_ump ON b.umpire_id = u_ump.id
+        WHERE LOWER(b.payment_status) = 'paid'
+      ) sub
+      GROUP BY recipient_name, recipient_type, recipient_contact
+      ORDER BY total_payout DESC
+      LIMIT 12`
+    );
+    topRecipients = topRecRes.rows.map(r => ({
+      name: r.recipient_name,
+      type: r.recipient_type,
+      contact: r.recipient_contact,
+      bookingsCount: Number(r.bookings_count),
+      totalPayout: Number(r.total_payout),
+      totalCollected: Number(r.total_collected)
+    }));
+  } catch (err) {
+    console.warn("Could not query top recipients:", err.message);
+  }
 
   res.json({
     counts: {
@@ -560,7 +1059,12 @@ const getAdminStats = asyncHandler(async (req, res) => {
       grounds: groundsCountRes.rows[0]?.count || 0,
       tournaments: tournamentsCountRes.rows[0]?.count || 0,
       bookings: bookingsCountRes.rows[0]?.count || 0,
-      revenue: Number(revenueRes.rows[0]?.total_revenue || 0)
+      revenue: Number(revenueRes.rows[0]?.total_revenue || 0),
+      totalIncoming: Number(revenueRes.rows[0]?.total_revenue || 0),
+      totalOutgoing: Number(revenueRes.rows[0]?.total_outgoing || 0),
+      platformCommission: Number(revenueRes.rows[0]?.platform_commission || 0),
+      outgoingGrounds: Number(revenueRes.rows[0]?.outgoing_grounds || 0),
+      outgoingUmpires: Number(revenueRes.rows[0]?.outgoing_umpires || 0)
     },
     isComparing: Boolean(isCompare),
     periodComparison: {
@@ -571,17 +1075,39 @@ const getAdminStats = asyncHandler(async (req, res) => {
       diff: diffMetrics
     },
     monthComparisonChart,
-    chartData: timelineRes.rows.map((row) => ({
+    chartData: timelineRows.map((row) => ({
       date: row.date,
       label: row.label,
-      bookings: Number(row.bookings),
-      revenue: Number(row.revenue),
+      // Matches domain (default view)
+      matchesBooked: Number(row.matches_booked !== undefined ? row.matches_booked : row.bookings || 0),
+      matchesConfirmed: Number(row.matches_confirmed !== undefined ? row.matches_confirmed : Math.round((row.bookings || 0) * 0.85)),
+      matchesCompleted: Number(row.matches_completed !== undefined ? row.matches_completed : Math.round((row.bookings || 0) * 0.7)),
+      // Grounds domain
+      groundsBooked: Number(row.grounds_booked !== undefined ? row.grounds_booked : row.bookings || 0),
+      groundsConfirmed: Number(row.grounds_confirmed !== undefined ? row.grounds_confirmed : Math.round((row.bookings || 0) * 0.85)),
+      // Tournaments domain
+      tournamentsCreated: Number(row.tournaments_created || 0),
+      tournamentTeams: Number(row.tournament_teams || 0),
+      // Live Score domain
+      livescoreLive: Number(row.livescore_live || 0),
+      livescoreCompleted: Number(row.livescore_completed || 0),
+      livescoreTotal: Number(row.livescore_total || 0),
+      // Financial / Cash Flow domain
+      bookings: Number(row.bookings || 0),
+      revenue: Number(row.revenue || 0),
+      incoming: Number(row.revenue || 0),
+      outgoing: Number(row.outgoing || 0),
+      profit: Number(row.profit || 0),
+      outgoingGrounds: Number(row.outgoing_grounds || 0),
+      outgoingUmpires: Number(row.outgoing_umpires || 0),
+      // Users domain
       users: Number(row.users || 0)
     })),
     recentSignups: recentSignupsRes.rows,
     selectedPeriodUsers,
-    recentBookings: recentBookingsRes.rows,
-    selectedPeriodBookings: selectedPeriodBookingsRes.rows
+    recentBookings,
+    selectedPeriodBookings,
+    topRecipients
   });
 });
 

@@ -134,13 +134,29 @@ const app = express();
         created_at TIMESTAMPTZ DEFAULT now()
       );
 
+      CREATE TABLE IF NOT EXISTS team_review_replies (
+        id SERIAL PRIMARY KEY,
+        review_id INTEGER REFERENCES team_reviews(id) ON DELETE CASCADE,
+        team_name VARCHAR(120) NOT NULL,
+        user_id INTEGER,
+        user_name VARCHAR(120) NOT NULL,
+        user_team_name VARCHAR(120),
+        reply_text TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+
       CREATE INDEX IF NOT EXISTS idx_team_reviews_team ON team_reviews(team_name);
+      CREATE INDEX IF NOT EXISTS idx_team_review_replies_review ON team_review_replies(review_id);
       CREATE INDEX IF NOT EXISTS idx_cancellations_team ON challenge_cancellations(cancelled_by_team_name);
       CREATE INDEX IF NOT EXISTS idx_acceptances_team ON challenge_acceptances(accepted_by_team_name);
 
       ALTER TABLE teams ADD COLUMN IF NOT EXISTS created_by INTEGER;
+      ALTER TABLE grounds ADD COLUMN IF NOT EXISTS images JSONB DEFAULT '[]'::jsonb;
+      ALTER TABLE grounds ADD COLUMN IF NOT EXISTS alt_phone VARCHAR(20);
       ALTER TABLE umpires ADD COLUMN IF NOT EXISTS created_by INTEGER;
       ALTER TABLE umpires ADD COLUMN IF NOT EXISTS user_id INTEGER;
+      ALTER TABLE umpires ADD COLUMN IF NOT EXISTS profile_picture_url TEXT;
+      ALTER TABLE umpires ADD COLUMN IF NOT EXISTS rating NUMERIC(2,1) DEFAULT 0;
       ALTER TABLE challenges ADD COLUMN IF NOT EXISTS slot VARCHAR(20) DEFAULT 'Morning';
 
       ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;
@@ -163,6 +179,30 @@ const app = express();
       CREATE INDEX IF NOT EXISTS idx_challenge_requests_challenge ON challenge_requests(challenge_id);
       CREATE INDEX IF NOT EXISTS idx_challenge_requests_user ON challenge_requests(user_id);
       CREATE INDEX IF NOT EXISTS idx_challenge_requests_status ON challenge_requests(status);
+
+      CREATE TABLE IF NOT EXISTS ground_reviews (
+        id SERIAL PRIMARY KEY,
+        ground_id UUID REFERENCES grounds(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        user_name VARCHAR(120),
+        rating NUMERIC(2,1) NOT NULL,
+        review_text TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_ground_reviews_ground ON ground_reviews(ground_id);
+      CREATE INDEX IF NOT EXISTS idx_ground_reviews_user ON ground_reviews(user_id);
+
+      CREATE TABLE IF NOT EXISTS umpire_reviews (
+        id SERIAL PRIMARY KEY,
+        umpire_id UUID REFERENCES umpires(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        user_name VARCHAR(120),
+        rating NUMERIC(2,1) NOT NULL,
+        review_text TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_umpire_reviews_umpire ON umpire_reviews(umpire_id);
+      CREATE INDEX IF NOT EXISTS idx_umpire_reviews_user ON umpire_reviews(user_id);
     `);
     console.log("✅ Database schema auto-patch completed");
     

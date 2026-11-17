@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from "react";
-import { Plus, X, ChevronDown, Pencil, Trash2, Filter, Search, RotateCcw, Users, ArrowUpDown, Phone, Award, Shield, FileText, Sparkles, Loader2 } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Plus, X, ChevronDown, Pencil, Trash2, Filter, Search, RotateCcw, Users, ArrowUpDown, Phone, Award, Shield, FileText, Sparkles, Loader2, Eye, Camera, User, Star, MessageSquare, Lock, Send, CheckCircle2 } from "lucide-react";
 import { apiRequest } from "../../api";
 import { C, cn, normalizePhone, formatPhoneDisplay } from "../../utils/helpers.jsx";
 import CalendarField, { formatDateDisplay } from "../CalendarField.jsx";
+import { showToast } from "../../utils/toast.jsx";
 
 function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpire = null, onClose, theme = "dark" }) {
   const editing = !!initialUmpire;
   const isLight = theme === "light";
+  const fileInputRef = useRef(null);
 
   const buildForm = (ump, u) => ({
     name: ump?.name || u?.name || "",
@@ -14,7 +16,8 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
     experience: ump?.experience !== undefined && ump?.experience !== null ? String(ump.experience) : "",
     fee_per_match: ump?.fee_per_match !== undefined && ump?.fee_per_match !== null
       ? String(ump.fee_per_match)
-      : (ump?.price ? String(ump.price).replace(/[^0-9.]/g, "") : "")
+      : (ump?.price ? String(ump.price).replace(/[^0-9.]/g, "") : ""),
+    profile_picture_url: ump?.profile_picture_url || ""
   });
 
   const [open, setOpen] = useState(editing);
@@ -42,6 +45,18 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
   }, [initialUmpire?.id, user?.name]);
 
   const update = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setError("Photo must be under 2 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => update("profile_picture_url", ev.target.result);
+    reader.readAsDataURL(file);
+  };
 
   const isOwner = (ump) => {
     if (!ump) return false;
@@ -77,18 +92,22 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
           mobile: normalizedPhone,
           role: form.role,
           experience: Number(form.experience || 0),
-          fee_per_match: Number(form.fee_per_match)
+          fee_per_match: Number(form.fee_per_match),
+          profile_picture_url: form.profile_picture_url || null
         }
       });
       if (editing) {
+        showToast.success("Official profile updated successfully!");
         onUpdated?.(res.umpire);
         onClose?.();
       } else {
+        showToast.success("Match Official registered successfully!");
         onCreated(res.umpire);
         setForm(buildForm(null, user));
         setOpen(false);
       }
     } catch (err) {
+      showToast.error(err, "Could not save — please try again.");
       setError(err.message || "Could not save — please try again.");
     } finally {
       setSubmitting(false);
@@ -98,6 +117,7 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
   const handleDelete = async () => {
     if (!editing || !initialUmpire?.id || !token) return;
     if (!isOwner(initialUmpire)) {
+      showToast.warning("Only the user who posted this umpire can delete it.");
       return setError("Only the user who posted this umpire can delete it.");
     }
     if (!window.confirm("Are you sure you want to delete this umpire?")) return;
@@ -106,9 +126,11 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
     setError(null);
     try {
       await apiRequest(`/umpires/${initialUmpire.id}`, { method: "DELETE", token });
+      showToast.delete("Umpire deleted successfully.");
       onDeleted?.(initialUmpire.id);
       onClose?.();
     } catch (err) {
+      showToast.error(err, "Could not delete umpire.");
       setError(err.message || "Could not delete umpire.");
     } finally {
       setSubmitting(false);
@@ -272,6 +294,61 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
           </div>
         </div>
 
+        {/* Profile Photo Upload */}
+        <div className="col-span-2">
+          <label className="text-xs font-bold mb-1.5 block" style={{ color: isLight ? "#1e293b" : "#e2e8f0" }}>
+            Profile Photo <span className="font-normal text-[11px]" style={{ color: isLight ? "#64748b" : "#5f6b62" }}>(optional)</span>
+          </label>
+          <div className="flex items-center gap-4">
+            {/* Preview */}
+            <div
+              className="w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 overflow-hidden shadow-md border"
+              style={{
+                background: form.profile_picture_url ? "transparent" : "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
+                borderColor: isLight ? "#a7f3d0" : "rgba(34,197,94,0.3)"
+              }}
+            >
+              {form.profile_picture_url ? (
+                <img src={form.profile_picture_url} alt="Preview" className="w-full h-full object-cover" />
+              ) : (
+                <User className="w-7 h-7 text-white opacity-70" />
+              )}
+            </div>
+            <div className="flex-1 space-y-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoChange}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all hover:scale-[1.02] cursor-pointer"
+                style={isLight
+                  ? { backgroundColor: "#f8fafc", borderColor: "#cbd5e1", color: "#0f172a" }
+                  : { backgroundColor: "#0d130e", borderColor: "#233027", color: "#fff" }
+                }
+              >
+                <Camera className="w-3.5 h-3.5" style={{ color: isLight ? "#16a34a" : "#4ade80" }} />
+                {form.profile_picture_url ? "Change Photo" : "Upload Photo"}
+              </button>
+              {form.profile_picture_url && (
+                <button
+                  type="button"
+                  onClick={() => { update("profile_picture_url", ""); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                  className="flex items-center gap-1.5 text-[11px] font-semibold cursor-pointer hover:opacity-80"
+                  style={{ color: isLight ? "#dc2626" : "#f87171" }}
+                >
+                  <X className="w-3 h-3" /> Remove photo
+                </button>
+              )}
+              <p className="text-[11px]" style={{ color: isLight ? "#64748b" : "#5f6b62" }}>Max 2 MB · JPG, PNG, WEBP</p>
+            </div>
+          </div>
+        </div>
+
         <div className="col-span-2">
           <label className="text-xs font-bold mb-1.5 block" style={{ color: isLight ? "#1e293b" : "#e2e8f0" }}>Fee per match (₹)</label>
           <input
@@ -382,6 +459,601 @@ function UmpireForm({ user, token, onCreated, onUpdated, onDeleted, initialUmpir
   );
 }
 
+/* ============================================================================
+   UMPIRE DETAILS & REVIEWS MODAL
+   ============================================================================ */
+function UmpireDetailsModal({
+  umpire,
+  isLight,
+  user,
+  token,
+  dateFilter,
+  onClose,
+  onBook,
+  onEdit,
+  onUpdated,
+  roleColor,
+  isOwner
+}) {
+  const [reviews, setReviews] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [canReview, setCanReview] = useState(false);
+  const [hasBooked, setHasBooked] = useState(false);
+  const [isOwnerState, setIsOwnerState] = useState(false);
+  const [averageRating, setAverageRating] = useState(Number(umpire?.rating) || 0);
+  const [reviewsCount, setReviewsCount] = useState(Number(umpire?.reviews_count) || 0);
+
+  // Review submission state
+  const [starRating, setStarRating] = useState(5);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [reviewText, setReviewText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+
+  const role = umpire.role || "Umpire";
+  const rc = roleColor(role);
+  const bookedDates = umpire.bookedDates || umpire.booked_dates || [];
+  const isBookedForDate = dateFilter && bookedDates.includes(dateFilter);
+  const isAvailable = umpire.avail && !isBookedForDate;
+  const formattedPhone = formatPhoneDisplay(umpire.mobile);
+  const roleGradient =
+    role === "Scorer"
+      ? "linear-gradient(135deg,#3b82f6 0%,#0ea5e9 100%)"
+      : role === "Umpire + Scorer"
+      ? "linear-gradient(135deg,#f59e0b 0%,#ec4899 100%)"
+      : "linear-gradient(135deg,#22c55e 0%,#10b981 100%)";
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadReviews() {
+      try {
+        setLoading(true);
+        const res = await apiRequest(`/umpires/${umpire.id}/reviews`, { token });
+        if (mounted && res) {
+          setReviews(res.reviews || []);
+          setCanReview(!!res.can_review);
+          setHasBooked(!!res.has_booked);
+          setIsOwnerState(!!res.is_owner);
+          setAverageRating(Number(res.rating) || 0);
+          setReviewsCount(Number(res.reviews_count) || 0);
+        }
+      } catch (err) {
+        console.error("Failed to load umpire reviews:", err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    if (umpire?.id) {
+      loadReviews();
+    }
+    return () => { mounted = false; };
+  }, [umpire?.id, token]);
+
+  const handleSubmitReview = async (e) => {
+    e.preventDefault();
+    if (!token) {
+      showToast.warning("Please log in to submit a review.");
+      return;
+    }
+    if (!reviewText.trim()) {
+      showToast.warning("Please write your review feedback.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const res = await apiRequest(`/umpires/${umpire.id}/reviews`, {
+        method: "POST",
+        token,
+        body: { rating: starRating, review_text: reviewText.trim() }
+      });
+      showToast.success("Official review submitted successfully!");
+      setReviewText("");
+      setStarRating(5);
+      if (res?.review) {
+        const updatedList = [res.review, ...reviews];
+        setReviews(updatedList);
+        const newCount = updatedList.length;
+        const newAvg = Number((updatedList.reduce((acc, r) => acc + (Number(r.rating) || 0), 0) / newCount).toFixed(1));
+        setAverageRating(newAvg);
+        setReviewsCount(newCount);
+        onUpdated?.({ ...umpire, rating: newAvg, reviews_count: newCount });
+      }
+    } catch (err) {
+      showToast.error(err, "Could not submit review.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteReview = async (reviewId) => {
+    if (!window.confirm("Are you sure you want to delete this review?")) return;
+    try {
+      setDeletingId(reviewId);
+      await apiRequest(`/umpires/${umpire.id}/reviews/${reviewId}`, {
+        method: "DELETE",
+        token
+      });
+      showToast.delete("Official review deleted successfully.");
+      const updatedList = reviews.filter(r => r.id !== reviewId);
+      setReviews(updatedList);
+      const newCount = updatedList.length;
+      const newAvg = newCount > 0
+        ? Number((updatedList.reduce((acc, r) => acc + (Number(r.rating) || 0), 0) / newCount).toFixed(1))
+        : 0;
+      setAverageRating(newAvg);
+      setReviewsCount(newCount);
+      onUpdated?.({ ...umpire, rating: newAvg, reviews_count: newCount });
+    } catch (err) {
+      showToast.error(err, "Could not delete review.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const isAdmin = user?.is_admin === true || (user?.phone && String(user.phone).includes("6382757532"));
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div
+        className={cn(
+          "w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl p-5 sm:p-6 relative border shadow-2xl animate-in zoom-in-95 duration-200"
+        )}
+        style={
+          isLight
+            ? { backgroundColor: "#ffffff", borderColor: "#e2e8f0" }
+            : { backgroundColor: "#0f1310", borderColor: "rgba(255,255,255,0.12)" }
+        }
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Top accent gradient bar */}
+        <div className="absolute top-0 inset-x-0 h-1.5" style={{ background: roleGradient }} />
+
+        {/* Header with Title and Close Button */}
+        <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor: isLight ? "#e2e8f0" : "rgba(255,255,255,0.1)" }}>
+          <div className="flex items-center gap-2">
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center"
+              style={{ background: roleGradient, color: "#fff" }}
+            >
+              <Eye className="w-4 h-4" />
+            </div>
+            <h3 className="text-base font-black tracking-tight" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
+              Official Details & Reviews
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-full flex items-center justify-center border cursor-pointer transition-all duration-200 hover:rotate-90 hover:scale-105 active:scale-95"
+            style={{
+              backgroundColor: isLight ? "#f8fafc" : "rgba(255,255,255,0.06)",
+              borderColor: isLight ? "#e2e8f0" : "rgba(255,255,255,0.1)",
+              color: isLight ? "#64748b" : "#9aa59c"
+            }}
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Profile Card Center Content */}
+        <div className="flex flex-col items-center text-center pt-4 pb-2">
+          {/* Photo or Avatar */}
+          <div
+            className="w-24 h-24 rounded-3xl flex items-center justify-center text-white text-2xl font-black shadow-xl overflow-hidden mb-3 border-2"
+            style={{
+              background: umpire.profile_picture_url ? "transparent" : roleGradient,
+              borderColor: isLight ? "#a7f3d0" : "rgba(34,197,94,0.4)",
+              boxShadow: "0 8px 24px -4px rgba(0,0,0,0.4)"
+            }}
+          >
+            {umpire.profile_picture_url ? (
+              <img src={umpire.profile_picture_url} alt={umpire.name} className="w-full h-full object-cover" />
+            ) : (
+              umpire.name?.split(" ").map((x) => x[0]).slice(0, 2).join("").toUpperCase()
+            )}
+          </div>
+
+          {/* Name */}
+          <h4 className="text-xl font-black tracking-tight mb-1" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
+            {umpire.name}
+          </h4>
+
+          {/* Badges: Role, Availability, and Reviews Rating Status */}
+          <div className="flex items-center gap-2 flex-wrap justify-center mb-3">
+            <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${rc.bg} ${rc.text}`}>
+              {role === "Umpire" && <Shield className="w-3.5 h-3.5" />}
+              {role === "Scorer" && <FileText className="w-3.5 h-3.5" />}
+              {role === "Umpire + Scorer" && <Award className="w-3.5 h-3.5" />}
+              <span>{role}</span>
+            </span>
+
+            <span
+              className="px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1.5"
+              style={
+                isAvailable
+                  ? {
+                      background: "linear-gradient(135deg,rgba(34,197,94,0.15) 0%,rgba(6,182,212,0.12) 100%)",
+                      color: isLight ? "#15803d" : "#4ade80",
+                      border: `1px solid ${isLight ? "#a7f3d0" : "rgba(34,197,94,0.35)"}`
+                    }
+                  : isBookedForDate
+                  ? {
+                      background: "linear-gradient(135deg,rgba(239,68,68,0.15) 0%,rgba(236,72,153,0.12) 100%)",
+                      color: isLight ? "#dc2626" : "#f87171",
+                      border: `1px solid ${isLight ? "#fecaca" : "rgba(239,68,68,0.35)"}`
+                    }
+                  : {
+                      backgroundColor: isLight ? "#f1f5f9" : "rgba(115,115,115,0.15)",
+                      color: isLight ? "#64748b" : "#a3a3a3",
+                      border: `1px solid ${isLight ? "#e2e8f0" : "rgba(115,115,115,0.3)"}`
+                    }
+              }
+            >
+              {isAvailable ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Available</span>
+                </>
+              ) : isBookedForDate ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-red-500" />
+                  <span>Booked on {formatDateDisplay(dateFilter)}</span>
+                </>
+              ) : (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-neutral-500" />
+                  <span>Busy</span>
+                </>
+              )}
+            </span>
+
+            {/* ⭐ Review Rating Status Pill */}
+            <span
+              className="px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1.5"
+              style={{
+                background: "linear-gradient(135deg,rgba(245,158,11,0.15) 0%,rgba(217,119,6,0.12) 100%)",
+                border: `1px solid ${isLight ? "#fde68a" : "rgba(245,158,11,0.35)"}`,
+                color: isLight ? "#b45309" : "#fbbf24"
+              }}
+            >
+              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+              <span>
+                {averageRating > 0 ? `${averageRating} / 5.0` : "No rating"} ({reviewsCount} {reviewsCount === 1 ? "review" : "reviews"})
+              </span>
+            </span>
+          </div>
+        </div>
+
+        {/* Grid of basic info */}
+        <div
+          className="grid grid-cols-2 gap-2.5 p-3.5 rounded-2xl mb-4"
+          style={{
+            backgroundColor: isLight ? "#f8fafc" : "#141914",
+            border: `1px solid ${isLight ? "#e2e8f0" : "#222c22"}`
+          }}
+        >
+          {/* Match Fee */}
+          <div className="p-2.5 rounded-xl" style={{ backgroundColor: isLight ? "#ffffff" : "#1a211a" }}>
+            <div className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: isLight ? "#64748b" : "#8a968a" }}>
+              Match Fee
+            </div>
+            <div
+              className="text-base font-black font-mono"
+              style={{
+                background: isLight
+                  ? "linear-gradient(135deg,#15803d 0%,#0284c7 100%)"
+                  : "linear-gradient(135deg,#4ade80 0%,#38bdf8 100%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                backgroundClip: "text"
+              }}
+            >
+              {umpire.price || `₹${umpire.fee_per_match || 0}/match`}
+            </div>
+          </div>
+
+          {/* Experience */}
+          <div className="p-2.5 rounded-xl" style={{ backgroundColor: isLight ? "#ffffff" : "#1a211a" }}>
+            <div className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: isLight ? "#64748b" : "#8a968a" }}>
+              Experience
+            </div>
+            <div className="text-base font-black flex items-center gap-1.5" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
+              <Award className="w-4 h-4 text-amber-500 shrink-0" />
+              <span>{umpire.exp || `${umpire.experience || 0} yrs`}</span>
+            </div>
+          </div>
+
+          {/* Contact Phone */}
+          <div className="col-span-2 p-2.5 rounded-xl flex items-center justify-between" style={{ backgroundColor: isLight ? "#ffffff" : "#1a211a" }}>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: isLight ? "#64748b" : "#8a968a" }}>
+                Phone / Mobile
+              </div>
+              <div className="text-sm font-bold font-mono flex items-center gap-1.5" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
+                <Phone className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <span>{formattedPhone}</span>
+              </div>
+            </div>
+            {umpire.mobile && (
+              <a
+                href={`tel:${umpire.mobile}`}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all hover:scale-105 active:scale-95"
+                style={{ background: "linear-gradient(135deg,#22c55e 0%,#10b981 100%)" }}
+              >
+                Call Now
+              </a>
+            )}
+          </div>
+        </div>
+
+        {/* ─── REVIEW SECTION & STATUS ON THE CARD ─── */}
+        <div
+          className="rounded-2xl p-4 border space-y-3.5 mb-4"
+          style={{
+            backgroundColor: isLight ? "#f8fafc" : "#141914",
+            borderColor: isLight ? "#e2e8f0" : "#222c22"
+          }}
+        >
+          <div className="flex items-center justify-between pb-2 border-b" style={{ borderColor: isLight ? "#e2e8f0" : "#222c22" }}>
+            <div className="flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-emerald-500" />
+              <h4 className="text-xs font-bold uppercase tracking-wider" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
+                Player Reviews ({reviewsCount})
+              </h4>
+            </div>
+            {averageRating > 0 && (
+              <span className="text-xs font-mono font-bold flex items-center gap-1" style={{ color: "#f59e0b" }}>
+                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                <span>{averageRating} / 5.0</span>
+              </span>
+            )}
+          </div>
+
+          {/* Review Eligibility Banner or Form */}
+          {!token ? (
+            <div className="rounded-xl p-3 border flex items-center gap-2.5 text-xs" style={{ backgroundColor: isLight ? "#ffffff" : "#1a211a", borderColor: isLight ? "#e2e8f0" : "#283428", color: isLight ? "#64748b" : "#8a968a" }}>
+              <Lock className="w-4 h-4 text-amber-500 shrink-0" />
+              <span>Log in to check if you can review this official.</span>
+            </div>
+          ) : isOwnerState ? (
+            <div className="rounded-xl p-3 border flex items-center gap-2.5 text-xs" style={{ backgroundColor: isLight ? "#ffffff" : "#1a211a", borderColor: isLight ? "#e2e8f0" : "#283428", color: isLight ? "#64748b" : "#8a968a" }}>
+              <span>🛡️</span>
+              <span>This is your official profile. Officials cannot leave reviews on their own profile.</span>
+            </div>
+          ) : !hasBooked ? (
+            <div className="rounded-xl p-3 border flex items-start sm:items-center justify-between gap-3 text-xs" style={{ backgroundColor: isLight ? "#ffffff" : "#1a211a", borderColor: isLight ? "#e2e8f0" : "#283428" }}>
+              <div className="flex items-center gap-2" style={{ color: isLight ? "#64748b" : "#8a968a" }}>
+                <Lock className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>Only teams/players who have <strong>booked this official</strong> can leave a review.</span>
+              </div>
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider shrink-0 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                Verified Bookers Only
+              </span>
+            </div>
+          ) : (
+            /* Verified Booker Review Form */
+            <form onSubmit={handleSubmitReview} className="rounded-xl p-3 border space-y-2.5" style={{ backgroundColor: isLight ? "#ffffff" : "#1a211a", borderColor: "rgba(34,197,94,0.3)" }}>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 text-emerald-500">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Leave Official Review
+                </span>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setStarRating(s)}
+                      onMouseEnter={() => setHoverRating(s)}
+                      onMouseLeave={() => setHoverRating(0)}
+                      className="p-1 cursor-pointer transition-transform hover:scale-125 focus:outline-none"
+                    >
+                      <Star
+                        className={cn(
+                          "w-4 h-4 transition-colors",
+                          (hoverRating ? s <= hoverRating : s <= starRating)
+                            ? "fill-amber-400 text-amber-400"
+                            : "text-neutral-500"
+                        )}
+                      />
+                    </button>
+                  ))}
+                  <span className="text-xs font-bold ml-1 font-mono" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
+                    {hoverRating || starRating}.0
+                  </span>
+                </div>
+              </div>
+
+              <textarea
+                rows={2}
+                value={reviewText}
+                onChange={(e) => setReviewText(e.target.value)}
+                placeholder="How was the officiating, decision accuracy, match flow, and punctuality?..."
+                className="w-full rounded-xl p-2.5 text-xs font-medium focus:outline-none border transition-all resize-none"
+                style={{
+                  backgroundColor: isLight ? "#f8fafc" : "#0d130e",
+                  borderColor: isLight ? "#cbd5e1" : "#233027",
+                  color: isLight ? "#0f172a" : "#ffffff"
+                }}
+              />
+
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={submitting || !reviewText.trim()}
+                  className="py-1.5 px-3.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all text-white shadow-md disabled:opacity-50 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                  style={{ background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)" }}
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Submitting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Submit Review</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Reviews List */}
+          <div className="space-y-2 pt-1 max-h-48 overflow-y-auto">
+            {loading ? (
+              <div className="py-4 text-center text-xs flex items-center justify-center gap-2" style={{ color: isLight ? "#64748b" : "#8a968a" }}>
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-500" />
+                <span>Loading reviews...</span>
+              </div>
+            ) : reviews.length === 0 ? (
+              <div className="py-4 text-center" style={{ color: isLight ? "#64748b" : "#8a968a" }}>
+                <p className="text-xs font-semibold">No reviews yet for this official.</p>
+                <p className="text-[11px] mt-0.5" style={{ color: isLight ? "#94a3b8" : "#5f6b62" }}>
+                  Players who have booked this official can share their rating & feedback!
+                </p>
+              </div>
+            ) : (
+              reviews.map((r) => {
+                const isAuthor = user?.id && Number(r.user_id) === Number(user.id);
+                const canDelete = isAuthor || isAdmin;
+
+                return (
+                  <div
+                    key={r.id}
+                    className="rounded-xl p-3 border space-y-1.5 relative transition-all"
+                    style={{
+                      backgroundColor: isLight ? "#ffffff" : "#182018",
+                      borderColor: isLight ? "#e2e8f0" : "#243224"
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div
+                          className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 overflow-hidden"
+                          style={{ background: roleGradient }}
+                        >
+                          {r.user_avatar ? (
+                            <img src={r.user_avatar} alt={r.user_name} className="w-full h-full object-cover" />
+                          ) : (
+                            (r.user_name || "P").charAt(0).toUpperCase()
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold truncate flex items-center gap-1.5" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
+                            <span>{r.user_name || "MatchConnect Player"}</span>
+                            {r.user_team_name && (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-500">
+                                {r.user_team_name}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[9px] font-mono" style={{ color: isLight ? "#94a3b8" : "#5f6b62" }}>
+                            {r.created_at ? new Date(r.created_at).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" }) : ""}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <Star
+                              key={s}
+                              className={cn(
+                                "w-3 h-3",
+                                s <= Math.round(Number(r.rating) || 0)
+                                  ? "fill-amber-400 text-amber-400"
+                                  : "text-neutral-500"
+                              )}
+                            />
+                          ))}
+                        </div>
+                        {canDelete && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteReview(r.id)}
+                            disabled={deletingId === r.id}
+                            title="Delete review"
+                            className="p-1 rounded text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
+                          >
+                            {deletingId === r.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3 h-3" />
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <p className="text-xs leading-relaxed whitespace-pre-line" style={{ color: isLight ? "#334155" : "#c8ccc8" }}>
+                      {r.review_text}
+                    </p>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Actions Footer */}
+        <div className="flex gap-2.5 pt-1">
+          {isOwner && (
+            <button
+              type="button"
+              onClick={onEdit}
+              className={cn(
+                "py-2.5 px-4 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer border hover:scale-[1.02] active:scale-[0.98]"
+              )}
+              style={{
+                backgroundColor: isLight ? "#f1f5f9" : "#1e241e",
+                color: isLight ? "#475569" : "#c8d0c8",
+                borderColor: isLight ? "#e2e8f0" : "#2a342a"
+              }}
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span>Edit Profile</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-2.5 px-4 rounded-xl font-bold text-xs transition-all cursor-pointer border hover:scale-[1.02] active:scale-[0.98]"
+            style={{
+              backgroundColor: isLight ? "#f8fafc" : "transparent",
+              borderColor: isLight ? "#cbd5e1" : "#1d2a21",
+              color: isLight ? "#334155" : "#c8ccc8"
+            }}
+          >
+            Close
+          </button>
+
+          {isAvailable && (
+            <button
+              type="button"
+              onClick={() => onBook(umpire, dateFilter)}
+              className="flex-1 py-2.5 px-4 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md text-white hover:scale-[1.02] active:scale-[0.98]"
+              style={{
+                background: "linear-gradient(135deg,#22c55e 0%,#10b981 50%,#06b6d4 100%)",
+                boxShadow: isLight
+                  ? "0 4px 14px -3px rgba(16,185,129,0.45)"
+                  : "0 6px 20px -6px rgba(34,197,94,0.7)"
+              }}
+            >
+              <span>Book Official</span>
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function UmpiresTab({ umpires, onBook, token, user, onCreated, onUpdated, onDeleted, theme = "dark" }) {
   const isLight = theme === "light";
   const [query, setQuery] = useState("");
@@ -389,6 +1061,7 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
   const [dateFilter, setDateFilter] = useState("");
   const [sortBy, setSortBy] = useState("default");
   const [editingUmpire, setEditingUmpire] = useState(null);
+  const [viewingUmpire, setViewingUmpire] = useState(null);
 
   const userPhoneNorm = normalizePhone(user?.phone);
   const isOwner = (u) => {
@@ -541,13 +1214,17 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
           <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg,#22c55e,#3b82f6,#a855f7)" }} />
           <div className="flex items-center gap-3 min-w-0">
             <div
-              className="w-10 h-10 rounded-full flex items-center justify-center font-bold shrink-0 shadow-md"
+              className="w-10 h-10 rounded-full flex items-center justify-center font-bold shrink-0 shadow-md overflow-hidden"
               style={{
-                background: "linear-gradient(135deg,#22c55e 0%,#06b6d4 100%)",
+                background: myUmpire.profile_picture_url ? "transparent" : "linear-gradient(135deg,#22c55e 0%,#06b6d4 100%)",
                 color: "#ffffff"
               }}
             >
-              ✓
+              {myUmpire.profile_picture_url ? (
+                <img src={myUmpire.profile_picture_url} alt={myUmpire.name} className="w-full h-full object-cover" />
+              ) : (
+                "✓"
+              )}
             </div>
             <div className="min-w-0">
               <div
@@ -568,21 +1245,38 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
               </div>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setEditingUmpire(myUmpire)}
-            className={cn(
-              "px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer hover:scale-[1.03] active:scale-[0.97]"
-            )}
-            style={{
-              backgroundColor: isLight ? "#ffffff" : "#252525",
-              color: isLight ? "#0f172a" : "#ffffff",
-              border: `1px solid ${isLight ? "#e2e8f0" : "#333"}`,
-              boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.06)" : "0 2px 8px rgba(0,0,0,0.3)"
-            }}
-          >
-            <Pencil className="w-3.5 h-3.5" style={{ color: isLight ? "#16a34a" : "#4ade80" }} /> Edit Registration
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setViewingUmpire(myUmpire)}
+              className={cn(
+                "px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer hover:scale-[1.03] active:scale-[0.97]"
+              )}
+              style={{
+                backgroundColor: isLight ? "#ffffff" : "#1a211a",
+                color: isLight ? "#0f172a" : "#ffffff",
+                border: `1px solid ${isLight ? "#e2e8f0" : "#283428"}`,
+                boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.06)" : "0 2px 8px rgba(0,0,0,0.3)"
+              }}
+            >
+              <Eye className="w-3.5 h-3.5" style={{ color: isLight ? "#16a34a" : "#4ade80" }} /> View
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditingUmpire(myUmpire)}
+              className={cn(
+                "px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer hover:scale-[1.03] active:scale-[0.97]"
+              )}
+              style={{
+                backgroundColor: isLight ? "#ffffff" : "#252525",
+                color: isLight ? "#0f172a" : "#ffffff",
+                border: `1px solid ${isLight ? "#e2e8f0" : "#333"}`,
+                boxShadow: isLight ? "0 1px 3px rgba(15,23,42,0.06)" : "0 2px 8px rgba(0,0,0,0.3)"
+              }}
+            >
+              <Pencil className="w-3.5 h-3.5" style={{ color: isLight ? "#16a34a" : "#4ade80" }} /> Edit Registration
+            </button>
+          </div>
         </div>
       )}
 
@@ -857,15 +1551,19 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       {/* Left: Avatar + Details */}
                       <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                        {/* Gradient Avatar */}
+                        {/* Avatar: photo if available, else gradient initials */}
                         <div
-                          className="w-12 h-12 rounded-2xl flex items-center justify-center text-white text-sm font-black shrink-0 shadow-md transition-transform group-hover:scale-105 group-hover:rotate-3"
+                          className="w-12 h-12 rounded-2xl flex items-center justify-center text-white text-sm font-black shrink-0 shadow-md transition-transform group-hover:scale-105 group-hover:rotate-3 overflow-hidden"
                           style={{
-                            background: roleGradient,
+                            background: u.profile_picture_url ? "transparent" : roleGradient,
                             boxShadow: "0 4px 14px -2px rgba(0, 0, 0, 0.3)"
                           }}
                         >
-                          {u.name?.split(" ").map((x) => x[0]).slice(0, 2).join("").toUpperCase()}
+                          {u.profile_picture_url ? (
+                            <img src={u.profile_picture_url} alt={u.name} className="w-full h-full object-cover" />
+                          ) : (
+                            u.name?.split(" ").map((x) => x[0]).slice(0, 2).join("").toUpperCase()
+                          )}
                         </div>
 
                         {/* Name, Role, Availability */}
@@ -948,6 +1646,22 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                               <Award className="w-3 h-3" style={{ color: isLight ? "#d97706" : "#fbbf24" }} />
                               <span>{u.exp || `${u.experience || 0} yrs`} experience</span>
                             </span>
+
+                            {Number(u.rating) > 0 && (
+                              <span
+                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs font-medium cursor-pointer transition-transform hover:scale-105"
+                                style={{
+                                  background: "linear-gradient(135deg,rgba(245,158,11,0.15) 0%,rgba(217,119,6,0.12) 100%)",
+                                  border: `1px solid ${isLight ? "#fde68a" : "rgba(245,158,11,0.35)"}`,
+                                  color: isLight ? "#b45309" : "#fbbf24"
+                                }}
+                                onClick={() => setViewingUmpire(u)}
+                                title="View rating & reviews"
+                              >
+                                <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                                <span>{u.rating} {u.reviews_count ? `(${u.reviews_count})` : ""}</span>
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -998,9 +1712,10 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                                 if (!window.confirm(`Delete ${u.name}?`)) return;
                                 try {
                                   await apiRequest(`/umpires/${u.id}`, { method: "DELETE", token });
+                                  showToast.delete("Umpire deleted successfully.");
                                   onDeleted?.(u.id);
                                 } catch (err) {
-                                  alert(err.message || "Could not delete umpire.");
+                                  showToast.error(err, "Could not delete umpire.");
                                 }
                               }}
                               title="Delete Official"
@@ -1017,6 +1732,23 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
                             </button>
                           </div>
                         )}
+
+                        {/* View Details Button */}
+                        <button
+                          type="button"
+                          onClick={() => setViewingUmpire(u)}
+                          className={cn(
+                            "px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer hover:scale-[1.03] active:scale-[0.97] border"
+                          )}
+                          style={{
+                            backgroundColor: isLight ? "#f8fafc" : "#1a1f1a",
+                            color: isLight ? "#0f172a" : "#e2e8f0",
+                            borderColor: isLight ? "#cbd5e1" : "#2a342a"
+                          }}
+                        >
+                          <Eye className="w-3.5 h-3.5" style={{ color: isLight ? "#16a34a" : "#4ade80" }} />
+                          <span>Details {u.reviews_count ? `(${u.reviews_count})` : ""}</span>
+                        </button>
 
                         {/* Book Official Button */}
                         <button
@@ -1053,6 +1785,33 @@ export default function UmpiresTab({ umpires, onBook, token, user, onCreated, on
             </div>
           )}
         </>
+      )}
+
+      {/* Centered Official Details & Reviews Modal */}
+      {viewingUmpire && (
+        <UmpireDetailsModal
+          umpire={viewingUmpire}
+          isLight={isLight}
+          user={user}
+          token={token}
+          dateFilter={dateFilter}
+          onClose={() => setViewingUmpire(null)}
+          onBook={(target, df) => {
+            setViewingUmpire(null);
+            onBook(target, df);
+          }}
+          onEdit={() => {
+            const target = viewingUmpire;
+            setViewingUmpire(null);
+            setEditingUmpire(target);
+          }}
+          onUpdated={updated => {
+            onUpdated?.(updated);
+            setViewingUmpire(updated);
+          }}
+          roleColor={roleColor}
+          isOwner={isOwner(viewingUmpire)}
+        />
       )}
 
       {editingUmpire && (

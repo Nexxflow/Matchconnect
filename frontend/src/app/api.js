@@ -78,11 +78,26 @@ export async function apiRequest(path, { method = "GET", body, token } = {}) {
         }
       }
 
-      throw new Error(data.error || `Request failed: ${res.status}`);
+      // Friendly fallback messages instead of raw HTTP status strings
+      let userMessage = data.error;
+      if (!userMessage) {
+        if (res.status === 400) userMessage = "Invalid request details. Please check and try again.";
+        else if (res.status === 401) userMessage = "Your session has expired. Please log in again.";
+        else if (res.status === 403) userMessage = "You do not have permission to perform this action.";
+        else if (res.status === 404) userMessage = "The requested information could not be found.";
+        else if (res.status === 409) userMessage = "This action conflicts with an existing record.";
+        else if (res.status >= 500) userMessage = "Our server encountered a temporary issue. Please try again shortly.";
+        else userMessage = "Operation could not be completed. Please try again.";
+      }
+
+      throw new Error(userMessage);
     }
 
     return data;
   } catch (err) {
+    if (err.name === "TypeError" && err.message && err.message.toLowerCase().includes("fetch")) {
+      err.message = "Unable to connect to MatchConnect server. Please check your internet connection.";
+    }
     console.error("========================================");
     console.error("❌ API ERROR");
     console.error("URL:", `${API_BASE}${cleanPath}`);

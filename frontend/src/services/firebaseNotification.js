@@ -1,5 +1,6 @@
 import { getToken, onMessage } from "firebase/messaging";
 import { getFirebaseMessaging } from "../firebase";
+import { showToast } from "../app/utils/toast.jsx";
 
 export async function requestNotificationPermission() {
   try {
@@ -38,8 +39,8 @@ export async function listenForMessages() {
   onMessage(messaging, (payload) => {
     console.log("Foreground Notification:", payload);
 
-    alert(
-      `${payload.notification.title}\n${payload.notification.body}`
-    );
+    const title = payload?.notification?.title || "MatchConnect";
+    const body = payload?.notification?.body || "";
+    showToast.info(`${title}: ${body}`);
   });
 }

@@ -17,6 +17,8 @@ import { requestNotificationPermission } from "../services/firebaseNotification"
 import { getFirebaseMessaging } from "../firebase";
 import { onMessage } from "firebase/messaging";
 import { GROUNDS } from "./utils/constants";
+import { Toaster } from "./components/ui/sonner.jsx";
+import { showToast } from "./utils/toast.jsx";
 import {
   useTheme,
   useForceDark,
@@ -764,7 +766,9 @@ export default function App() {
         body: myTeam?.id ? { team_id: myTeam.id } : {},
       });
       if (res?.message) {
-        alert(res.message);
+        showToast.success(res.message);
+      } else {
+        showToast.success("Successfully registered for this tournament!");
       }
       if (res?.status === "confirmed") {
         setRegisteredIds(prev => (prev.includes(tournamentId) ? prev : [...prev, tournamentId]));
@@ -776,7 +780,7 @@ export default function App() {
       await loadMyTeamAndRegistrations(auth.token);
       await refreshTournaments();
     } catch (err) {
-      alert(err.message || "Could not register for this tournament.");
+      showToast.error(err, "Could not register for this tournament.");
     }
   };
 
@@ -792,10 +796,11 @@ export default function App() {
       if (res.tournament) {
         setTournaments(prev => prev.map(t => (t.id === tournamentId ? transformTournament(res.tournament) : t)));
       }
+      showToast.delete("Tournament registration cancelled successfully.");
       await loadMyTeamAndRegistrations(auth.token);
       await refreshTournaments();
     } catch (err) {
-      alert(err.message || "Could not cancel tournament registration.");
+      showToast.error(err, "Could not cancel tournament registration.");
     }
   };
 
@@ -867,7 +872,12 @@ export default function App() {
   };
 
   if (resetToken) {
-    return <AuthScreen onAuthSuccess={handleAuthSuccess} resetToken={resetToken} initialMode="reset" theme={theme} />;
+    return (
+      <>
+        <Toaster theme={theme} />
+        <AuthScreen onAuthSuccess={handleAuthSuccess} resetToken={resetToken} initialMode="reset" theme={theme} />
+      </>
+    );
   }
 
   if (!authChecked) {
@@ -875,7 +885,12 @@ export default function App() {
   }
 
   if (!auth.user) {
-    return <AuthScreen onAuthSuccess={handleAuthSuccess} theme={theme} />;
+    return (
+      <>
+        <Toaster theme={theme} />
+        <AuthScreen onAuthSuccess={handleAuthSuccess} theme={theme} />
+      </>
+    );
   }
 
   const content = {
@@ -1123,6 +1138,7 @@ export default function App() {
           theme={theme}
         />
       )}
+      <Toaster theme={theme} />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { API_BASE as SHARED_API_BASE, getStoredToken } from "../api";
+import { showToast } from "../utils/toast.jsx";
 
 /* ============================================================================
    BACKEND CONTRACT (matches matchController.js / liveScoreRoutes.js)
@@ -435,7 +436,7 @@ export default function ScoringApp({
           onScoreNew={() => setView("new")}
           onResume={(id, m) => {
             if (!isMatchCreator(m, user)) {
-              alert("Only the creator of this scoreboard can resume it.");
+              showToast.warning("Only the creator of this scoreboard can resume it.");
               return;
             }
             setActiveMatchId(id);
@@ -1034,8 +1035,9 @@ function MatchHome({ user, onScoreNew, onResume, onViewScoreboard }) {
                           try {
                             await api(`/api/matches/${m.id}`, { method: "DELETE" });
                             setMatches((prev) => prev.filter((item) => item.id !== m.id));
+                            showToast.delete(`Match "${m.team1_name} vs ${m.team2_name}" deleted successfully.`);
                           } catch (err) {
-                            alert(err.message || "Failed to delete match");
+                            showToast.error(err, "Failed to delete match");
                           }
                         }}
                         className={`px-2.5 py-1.5 rounded-lg text-xs font-bold ${BTN_TRANSITION} hover:scale-105`}
@@ -1088,8 +1090,9 @@ function MatchHome({ user, onScoreNew, onResume, onViewScoreboard }) {
                 try {
                   await api(`/api/matches/${matchToDelete.id}`, { method: "DELETE" });
                   setMatches((prev) => prev.filter((item) => item.id !== matchToDelete.id));
+                  showToast.delete(`Completed match "${matchToDelete.team1_name} vs ${matchToDelete.team2_name}" deleted successfully.`);
                 } catch (err) {
-                  alert(err.message || "Failed to delete match");
+                  showToast.error(err, "Failed to delete match");
                 }
               }}
             />
@@ -1597,6 +1600,7 @@ function MatchLiveConsole({ user, matchId, onBack, onChangeStage, onMatchComplet
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [showUndoConfirm, setShowUndoConfirm] = useState(false);
   const [extraPicker, setExtraPicker] = useState(null);
   const [wicketPanelOpen, setWicketPanelOpen] = useState(false);
   const [toast, setToast] = useState(null);
@@ -1972,7 +1976,7 @@ function MatchLiveConsole({ user, matchId, onBack, onChangeStage, onMatchComplet
 
   async function handleUndo() {
     if (scoringQueueRef.current.length > 0) {
-      setToast({ text: "Completing pending balls...", color: COLOR.amber });
+      showToast.warning("Completing pending balls before undoing...");
       return;
     }
     setIsSyncing(true);
@@ -1984,10 +1988,50 @@ function MatchLiveConsole({ user, matchId, onBack, onChangeStage, onMatchComplet
       setPrompts(json.prompts || null);
       setShowBowlerPicker(false);
       loadScorecard();
+      showToast.delete("Last ball undone successfully.");
     } catch (err) {
+      showToast.error(err, "Failed to undo last ball");
       setError(err.message);
     } finally {
       setIsSyncing(false);
+    }
+  }
+
+  async function handleSwapBatsmen() {
+    if (scoringQueueRef.current.length > 0) {
+      showToast.warning("Completing pending balls before swapping batsmen...");
+      return;
+    }
+    const activeBatters = live?.batting?.filter((b) => !b.is_out) || [];
+    if (activeBatters.length < 2) {
+      showToast.warning("Need two active batsmen on crease to swap strike.");
+      return;
+    }
+
+    // Optimistically update local strike state for instantaneous responsiveness
+    setLive((prev) => {
+      if (!prev || !prev.batting) return prev;
+      const updatedBatting = prev.batting.map((b) => {
+        if (!b.is_out) {
+          return { ...b, is_on_strike: !b.is_on_strike };
+        }
+        return b;
+      });
+      return { ...prev, batting: updatedBatting };
+    });
+
+    try {
+      const json = await api(`/api/matches/${matchId}/swap-batsmen`, { method: "POST" });
+      if (json && json.current_innings) {
+        setLive(json);
+      }
+      // Strike swapped – optimistic UI already updated, no toast needed
+    } catch (err) {
+      showToast.error(err, "Failed to swap batsmen");
+      try {
+        const fresh = await api(`/api/matches/${matchId}/live`);
+        setLive(fresh);
+      } catch {}
     }
   }
 
@@ -2517,6 +2561,70 @@ function MatchLiveConsole({ user, matchId, onBack, onChangeStage, onMatchComplet
 
   return (
     <div className="space-y-4">
+      {/* ── Undo Ball Confirmation Modal ── */}
+      {showUndoConfirm && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }}
+        >
+          <div
+            className="relative w-[90%] max-w-sm rounded-2xl p-6 shadow-2xl space-y-5 overflow-hidden"
+            style={{
+              background: isLightMode()
+                ? "linear-gradient(135deg,#fff7ed 0%,#ffffff 100%)"
+                : "linear-gradient(135deg,#1a1200 0%,#0f1620 100%)",
+              border: "1px solid #f97316",
+              boxShadow: "0 24px 60px -12px rgba(249,115,22,0.5)",
+            }}
+          >
+            {/* top accent bar */}
+            <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl" style={{ background: "linear-gradient(90deg,#f97316,#ef4444,#a855f7)" }} />
+
+            {/* Icon + Title */}
+            <div className="flex flex-col items-center gap-2 pt-2">
+              <div
+                className="w-14 h-14 rounded-full flex items-center justify-center text-3xl shadow-lg"
+                style={{ background: "linear-gradient(135deg,#f97316,#ef4444)", boxShadow: "0 8px 24px -6px rgba(249,115,22,0.6)" }}
+              >
+                ↩
+              </div>
+              <h2 className="text-base font-black uppercase tracking-wide text-center" style={{ color: isLightMode() ? "#1e293b" : "#f1f5f9" }}>
+                Undo Last Ball?
+              </h2>
+            </div>
+
+            {/* Message */}
+            <p className="text-xs text-center leading-relaxed" style={{ color: isLightMode() ? "#64748b" : "#94a3b8" }}>
+              This will <span className="font-bold" style={{ color: "#f97316" }}>permanently revert</span> the last recorded delivery — runs, extras, and wickets will be undone.
+            </p>
+
+            {/* Buttons */}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowUndoConfirm(false)}
+                className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider ${BTN_TRANSITION} hover:scale-[1.02]`}
+                style={{
+                  background: isLightMode() ? "#f1f5f9" : COLOR.surfaceRaised,
+                  color: COLOR.inkDim,
+                  border: `1px solid ${COLOR.border}`,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowUndoConfirm(false); handleUndo(); }}
+                className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-white shadow-lg ${BTN_TRANSITION} hover:scale-[1.02]`}
+                style={{ background: "linear-gradient(135deg,#f97316,#ef4444)", boxShadow: "0 6px 20px -6px rgba(249,115,22,0.7)" }}
+              >
+                ↩ Yes, Undo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Google & Cricbuzz Hero Match Header */}
       <div
         className="rounded-2xl p-5 relative overflow-hidden space-y-4"
@@ -2934,7 +3042,7 @@ function MatchLiveConsole({ user, matchId, onBack, onChangeStage, onMatchComplet
               }}
             >
               <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: COLOR.accentGradient }} />
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <span
                   className="text-xs font-extrabold uppercase tracking-widest"
                   style={{
@@ -2946,14 +3054,42 @@ function MatchLiveConsole({ user, matchId, onBack, onChangeStage, onMatchComplet
                 >
                   Scorer Controls
                 </span>
-                <button
-                  onClick={handleUndo}
-                  disabled={isSyncing && scoringQueueRef.current.length > 0}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold ${BTN_TRANSITION}`}
-                  style={{ background: COLOR.surfaceRaised, color: COLOR.inkDim, border: `1px solid ${COLOR.border}` }}
-                >
-                  ↩ Undo Ball
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSwapBatsmen}
+                    disabled={isSyncing || !live?.current_innings || (live?.batting?.filter((b) => !b.is_out).length < 2)}
+                    title="Swap striker and non-striker ends"
+                    className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 ${BTN_TRANSITION} cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-50 disabled:pointer-events-none`}
+                    style={{
+                      background: isLightMode()
+                        ? "linear-gradient(135deg,#f0fdf4 0%,#dcfce7 100%)"
+                        : "linear-gradient(135deg,#0d1a10 0%,#132418 100%)",
+                      color: COLOR.accent,
+                      border: `1px solid ${COLOR.accent}`
+                    }}
+                  >
+                    <span className="text-sm font-black">⇄</span>
+                    <span>Swap Batsman</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (scoringQueueRef.current.length > 0) {
+                        showToast.warning("Completing pending balls before undoing...");
+                        return;
+                      }
+                      setShowUndoConfirm(true);
+                    }}
+                    disabled={isSyncing && scoringQueueRef.current.length > 0}
+                    title="Undo last recorded delivery"
+                    className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 ${BTN_TRANSITION} cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-50 disabled:pointer-events-none`}
+                    style={{ background: COLOR.surfaceRaised, color: COLOR.inkDim, border: `1px solid ${COLOR.border}` }}
+                  >
+                    <span>↩</span>
+                    <span>Undo Ball</span>
+                  </button>
+                </div>
               </div>
 
               {isOverEnded && !currentBowler ? (
@@ -3473,11 +3609,23 @@ function ExtraRunsPicker({ extraType, onCancel, onConfirm }) {
 
 function WicketPanel({ batting, fieldingSquad, onCancel, onConfirm }) {
   const activeBatters = batting.filter((b) => !b.is_out);
+  const strikerBatter = activeBatters.find((b) => b.is_on_strike) || activeBatters[0];
   const [wicketType, setWicketType] = useState("bowled");
   const [dismissedId, setDismissedId] = useState(
-    activeBatters.find((b) => b.is_on_strike)?.player_id || activeBatters[0]?.player_id || null
+    strikerBatter?.player_id || null
   );
   const [fielderId, setFielderId] = useState(null);
+
+  const isRunOut = wicketType === "run_out";
+
+  // Auto-set dismissed player: for run_out let scorer choose; for all others auto-set striker
+  useEffect(() => {
+    if (!isRunOut) {
+      setDismissedId(strikerBatter?.player_id || null);
+    } else {
+      setDismissedId(strikerBatter?.player_id || null); // default to striker, let scorer change
+    }
+  }, [wicketType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const needsFielder = wicketType && NEEDS_FIELDER.has(wicketType);
   const canConfirm = wicketType && dismissedId && (!needsFielder || fielderId);
@@ -3533,7 +3681,8 @@ function WicketPanel({ batting, fieldingSquad, onCancel, onConfirm }) {
         </div>
       </div>
 
-      {/* 2. Dismissed Player */}
+      {/* 2. Dismissed Player — only shown for Run Out; for all other types striker is auto-dismissed */}
+      {isRunOut && (
       <div>
         <label className="text-[11px] font-bold block mb-1.5" style={{ color: COLOR.inkDim }}>Who is out?</label>
         <div className="flex gap-2 flex-wrap">
@@ -3558,6 +3707,7 @@ function WicketPanel({ batting, fieldingSquad, onCancel, onConfirm }) {
           })}
         </div>
       </div>
+      )}
 
       {/* 3. Fielder Picker (Caught, Run Out, Stumped) */}
       {needsFielder && (

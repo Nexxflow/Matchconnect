@@ -60,11 +60,14 @@ function normalizeGroundRow(row) {
     ...row,
     price_per_hour: row.price_per_hour != null ? Number(row.price_per_hour) : null,
     rating: row.rating != null ? Number(row.rating) : 0,
+    reviews_count: row.reviews_count != null ? Number(row.reviews_count) : 0,
     latitude: row.latitude != null ? Number(row.latitude) : null,
     longitude: row.longitude != null ? Number(row.longitude) : null,
     booking_count_today: row.booking_count_today != null ? Number(row.booking_count_today) : 0,
     amenities: row.amenities ?? [],
     tags: row.tags ?? [],
+    images: Array.isArray(row.images) ? row.images : (row.images ? (typeof row.images === 'string' ? JSON.parse(row.images) : row.images) : []),
+    alt_phone: row.alt_phone || null,
     booked_time_slots_today: row.booked_time_slots_today ?? []
   };
 }
@@ -92,10 +95,19 @@ const listGrounds = asyncHandler(async (req, res) => {
        g.*,
        u.name AS posted_by_name,
        u.phone AS posted_by_phone,
+       COALESCE(gr_stats.reviews_count, 0) AS reviews_count,
+       COALESCE(gr_stats.reviews_rating, g.rating, 0) AS rating,
        COALESCE(bt.booking_count_today, 0) AS booking_count_today,
        COALESCE(bt.booked_time_slots_today, '[]'::json) AS booked_time_slots_today
      FROM grounds g
      LEFT JOIN users u ON u.id = g.posted_by_user_id
+     LEFT JOIN LATERAL (
+       SELECT
+         COUNT(*)::int AS reviews_count,
+         ROUND(AVG(gr.rating)::numeric, 1) AS reviews_rating
+       FROM ground_reviews gr
+       WHERE gr.ground_id = g.id
+     ) gr_stats ON TRUE
      LEFT JOIN LATERAL (
        SELECT
          COUNT(*)::int AS booking_count_today,
@@ -121,10 +133,19 @@ const getGround = asyncHandler(async (req, res) => {
        g.*,
        u.name AS posted_by_name,
        u.phone AS posted_by_phone,
+       COALESCE(gr_stats.reviews_count, 0) AS reviews_count,
+       COALESCE(gr_stats.reviews_rating, g.rating, 0) AS rating,
        COALESCE(bt.booking_count_today, 0) AS booking_count_today,
        COALESCE(bt.booked_time_slots_today, '[]'::json) AS booked_time_slots_today
      FROM grounds g
      LEFT JOIN users u ON u.id = g.posted_by_user_id
+     LEFT JOIN LATERAL (
+       SELECT
+         COUNT(*)::int AS reviews_count,
+         ROUND(AVG(gr.rating)::numeric, 1) AS reviews_rating
+       FROM ground_reviews gr
+       WHERE gr.ground_id = g.id
+     ) gr_stats ON TRUE
      LEFT JOIN LATERAL (
        SELECT
          COUNT(*)::int AS booking_count_today,
@@ -175,7 +196,7 @@ const getGroundBookings = asyncHandler(async (req, res) => {
 
 // POST /api/grounds — add a ground
 const createGround = asyncHandler(async (req, res) => {
-  const { name, area, google_maps_url, price_per_hour, availability_mode, available_date, available_time } = req.body;
+  const { name, area, google_maps_url, price_per_hour, availability_mode, available_date, available_time, alt_phone, images } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ error: "Ground name is required" });
@@ -199,9 +220,11 @@ const createGround = asyncHandler(async (req, res) => {
   // and can be sorted by distance. Never blocks creation on failure.
   const { latitude, longitude } = await geocodeArea(resolvedArea);
 
+  const imagesJson = JSON.stringify(Array.isArray(images) ? images : []);
+
   const result = await pool.query(
-    `INSERT INTO grounds (name, area, price_per_hour, google_maps_url, posted_by_user_id, availability_mode, available_date, available_time, latitude, longitude)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `INSERT INTO grounds (name, area, price_per_hour, google_maps_url, posted_by_user_id, availability_mode, available_date, available_time, latitude, longitude, alt_phone, images)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING *`,
     [
       name.trim(),
@@ -213,7 +236,9 @@ const createGround = asyncHandler(async (req, res) => {
       normalizedAvailabilityMode === "scheduled" ? available_date : null,
       normalizedAvailabilityMode === "scheduled" ? available_time : null,
       latitude,
-      longitude
+      longitude,
+      alt_phone ? String(alt_phone).trim() : null,
+      imagesJson
     ]
   );
   const created = await pool.query(
@@ -261,7 +286,7 @@ const updateGround = asyncHandler(async (req, res) => {
     return res.status(403).json({ error: "Only the creator can edit this ground" });
   }
 
-  const { name, area, google_maps_url, price_per_hour, availability_mode, available_date, available_time } = req.body;
+  const { name, area, google_maps_url, price_per_hour, availability_mode, available_date, available_time, alt_phone, images } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: "Ground name is required" });
   if (!area || !area.trim()) return res.status(400).json({ error: "Location is required" });
   if (!price_per_hour || Number(price_per_hour) <= 0) return res.status(400).json({ error: "Price must be greater than 0" });
@@ -285,6 +310,9 @@ const updateGround = asyncHandler(async (req, res) => {
     longitude = geocoded.longitude;
   }
 
+  const resolvedAltPhone = alt_phone !== undefined ? (alt_phone ? String(alt_phone).trim() : null) : existing.rows[0].alt_phone;
+  const resolvedImages = images !== undefined ? JSON.stringify(Array.isArray(images) ? images : []) : existing.rows[0].images;
+
   await pool.query(
     `UPDATE grounds
      SET name = $1,
@@ -295,8 +323,10 @@ const updateGround = asyncHandler(async (req, res) => {
          available_date = $6,
          available_time = $7,
          latitude = $8,
-         longitude = $9
-     WHERE id = $10`,
+         longitude = $9,
+         alt_phone = $10,
+         images = $11
+     WHERE id = $12`,
     [
       name.trim(),
       resolvedArea,
@@ -307,6 +337,8 @@ const updateGround = asyncHandler(async (req, res) => {
       normalizedAvailabilityMode === "scheduled" ? available_time : null,
       latitude,
       longitude,
+      resolvedAltPhone,
+      resolvedImages,
       req.params.id
     ]
   );
@@ -383,4 +415,211 @@ const backfillGroundLocations = asyncHandler(async (req, res) => {
   res.json({ processed: results.length, results });
 });
 
-module.exports = { listGrounds, getGround, getGroundBookings, createGround, updateGround, deleteGround, backfillGroundLocations };
+// ─── Ground Reviews Endpoints ──────────────────────────────────────────────
+
+// GET /api/grounds/:id/reviews
+const getGroundReviews = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const groundRes = await pool.query("SELECT id, name, posted_by_user_id FROM grounds WHERE id = $1", [id]);
+  if (groundRes.rows.length === 0) {
+    return res.status(404).json({ error: "Ground not found" });
+  }
+
+  // Ensure table exists
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ground_reviews (
+      id SERIAL PRIMARY KEY,
+      ground_id UUID REFERENCES grounds(id) ON DELETE CASCADE,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      user_name VARCHAR(120),
+      rating NUMERIC(2,1) NOT NULL,
+      review_text TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+  `);
+
+  const reviewsRes = await pool.query(
+    `SELECT gr.id, gr.ground_id, gr.user_id, gr.user_name, gr.rating::float as rating, gr.review_text, gr.created_at,
+            u.avatar as user_avatar, u.team_name as user_team_name
+     FROM ground_reviews gr
+     LEFT JOIN users u ON u.id = gr.user_id
+     WHERE gr.ground_id = $1
+     ORDER BY gr.created_at DESC`,
+    [id]
+  );
+
+  let hasBooked = false;
+  let isOwner = false;
+
+  if (req.user && req.user.id) {
+    const userId = req.user.id;
+    if (String(groundRes.rows[0].posted_by_user_id) === String(userId)) {
+      isOwner = true;
+    }
+    const bookingCheck = await pool.query(
+      `SELECT id FROM bookings
+       WHERE ground_id = $1
+         AND user_id = $2
+         AND payment_status IN ('paid', 'pending', 'completed')
+       LIMIT 1`,
+      [id, userId]
+    );
+    hasBooked = bookingCheck.rows.length > 0;
+  }
+
+  const reviews = reviewsRes.rows || [];
+  const avg = reviews.length > 0
+    ? Number((reviews.reduce((acc, r) => acc + (Number(r.rating) || 0), 0) / reviews.length).toFixed(1))
+    : 0;
+
+  res.json({
+    ground_id: id,
+    rating: avg,
+    reviews_count: reviews.length,
+    reviews,
+    can_review: hasBooked && !isOwner,
+    has_booked: hasBooked,
+    is_owner: isOwner
+  });
+});
+
+// POST /api/grounds/:id/reviews
+const addGroundReview = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { rating, review_text } = req.body;
+  const userId = req.user?.id;
+
+  if (!userId) {
+    return res.status(401).json({ error: "You must be logged in to leave a review." });
+  }
+
+  const groundRes = await pool.query("SELECT id, name, posted_by_user_id FROM grounds WHERE id = $1", [id]);
+  if (groundRes.rows.length === 0) {
+    return res.status(404).json({ error: "Ground not found." });
+  }
+
+  const ground = groundRes.rows[0];
+
+  // Ground owners cannot review their own ground
+  if (String(ground.posted_by_user_id) === String(userId)) {
+    return res.status(403).json({ error: "Ground owners cannot review their own ground." });
+  }
+
+  // Strictly enforce booking verification: only users who have booked this ground can review it
+  const bookingCheck = await pool.query(
+    `SELECT id FROM bookings
+     WHERE ground_id = $1
+       AND user_id = $2
+       AND payment_status IN ('paid', 'pending', 'completed')
+     LIMIT 1`,
+    [id, userId]
+  );
+
+  if (bookingCheck.rows.length === 0) {
+    return res.status(403).json({
+      error: "Only players who have booked this ground can leave a review."
+    });
+  }
+
+  const numRating = Number(rating);
+  if (!numRating || numRating < 1 || numRating > 5) {
+    return res.status(400).json({ error: "Rating must be between 1 and 5 stars." });
+  }
+
+  if (!review_text || !review_text.trim()) {
+    return res.status(400).json({ error: "Review text is required." });
+  }
+
+  // Get user details
+  const userRes = await pool.query("SELECT name, team_name, avatar FROM users WHERE id = $1", [userId]);
+  const userName = userRes.rows[0]?.name || req.user.name || "Cricket Player";
+  const userTeam = userRes.rows[0]?.team_name || null;
+  const userAvatar = userRes.rows[0]?.avatar || null;
+
+  const insertRes = await pool.query(
+    `INSERT INTO ground_reviews (ground_id, user_id, user_name, rating, review_text)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, ground_id, user_id, user_name, rating::float as rating, review_text, created_at`,
+    [id, userId, userName, numRating, review_text.trim()]
+  );
+
+  const newReview = {
+    ...insertRes.rows[0],
+    user_team_name: userTeam,
+    user_avatar: userAvatar
+  };
+
+  // Recalculate average rating on the ground table
+  await pool.query(
+    `UPDATE grounds
+     SET rating = (
+       SELECT ROUND(AVG(rating)::numeric, 1)
+       FROM ground_reviews
+       WHERE ground_id = $1
+     )
+     WHERE id = $1`,
+    [id]
+  );
+
+  res.status(201).json({
+    review: newReview,
+    message: "Ground review submitted successfully"
+  });
+});
+
+// DELETE /api/grounds/:id/reviews/:reviewId
+const deleteGroundReview = asyncHandler(async (req, res) => {
+  const { id, reviewId } = req.params;
+  const userId = req.user?.id;
+
+  const reviewRes = await pool.query(
+    "SELECT * FROM ground_reviews WHERE id = $1 AND ground_id = $2",
+    [reviewId, id]
+  );
+
+  if (reviewRes.rows.length === 0) {
+    return res.status(404).json({ error: "Review not found" });
+  }
+
+  const review = reviewRes.rows[0];
+
+  // Check if admin or author
+  const isAuthor = Number(review.user_id) === Number(userId);
+  const isAdmin = req.user?.is_admin === true || (req.user?.phone && req.user.phone.includes("6382757532"));
+
+  if (!isAuthor && !isAdmin) {
+    return res.status(403).json({ error: "Only an administrator or the person who posted this review can delete it." });
+  }
+
+  await pool.query("DELETE FROM ground_reviews WHERE id = $1", [reviewId]);
+
+  // Recalculate average rating on the ground table
+  await pool.query(
+    `UPDATE grounds
+     SET rating = COALESCE((
+       SELECT ROUND(AVG(rating)::numeric, 1)
+       FROM ground_reviews
+       WHERE ground_id = $1
+     ), 0)
+     WHERE id = $1`,
+    [id]
+  );
+
+  res.json({
+    success: true,
+    message: "Ground review deleted successfully"
+  });
+});
+
+module.exports = {
+  listGrounds,
+  getGround,
+  getGroundBookings,
+  createGround,
+  updateGround,
+  deleteGround,
+  backfillGroundLocations,
+  getGroundReviews,
+  addGroundReview,
+  deleteGroundReview
+};

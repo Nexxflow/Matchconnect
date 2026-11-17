@@ -9,6 +9,7 @@ import { cn, normalizePhone, formatDateIST } from "../../utils/helpers.jsx";
 import { FORMATS, DEFAULT_OVERS, GROUNDS } from "../../utils/constants";
 import TeamDetailsModal from "../TeamDetailsModal.jsx";
 import CalendarField from "../CalendarField.jsx";
+import { showToast } from "../../utils/toast.jsx";
 
 /* ============================================================================
    SHARED UI — same visual pattern as the Tournaments tab
@@ -555,7 +556,7 @@ function ChallengeForm({ token, user, challenges = [], onCreated, disabledReason
 
     if (missing.length > 0) {
       const msg = `Please update your required profile details (${missing.join(", ")}) in the Profile page first.`;
-      alert(msg);
+      showToast.warning(msg);
       return msg;
     }
     return null;
@@ -1437,11 +1438,14 @@ function AcceptChallengeModal({ challenge, token, user, hasActiveConflict, onClo
 
     if (missing.length > 0) {
       const msg = `Please update your required profile details (${missing.join(", ")}) in the Profile page first.`;
-      alert(msg);
+      showToast.warning(msg);
       return setError(msg);
     }
 
-    if (!token) return setError("You need to be logged in to send a match request.");
+    if (!token) {
+      showToast.warning("You need to be logged in to send a match request.");
+      return setError("You need to be logged in to send a match request.");
+    }
 
     setSubmitting(true);
     setError(null);
@@ -1456,9 +1460,10 @@ function AcceptChallengeModal({ challenge, token, user, hasActiveConflict, onClo
           village_name: user?.village_name || null,
         }
       });
-      alert(res.message || `Match request sent to ${challenge.team}! The team captain will review and accept your request.`);
+      showToast.success(res.message || `Match request sent to ${challenge.team}! The team captain will review and accept your request.`);
       onAccepted(res.challenge);
     } catch (err) {
+      showToast.error(err, "Could not send match request. It may no longer be open.");
       setError(err.message || "Could not send match request. It may no longer be open.");
     } finally {
       setSubmitting(false);
@@ -1583,7 +1588,7 @@ function AcceptChallengeModal({ challenge, token, user, hasActiveConflict, onClo
 /* ============================================================================
    CHALLENGE REQUESTS REVIEW MODAL (for Challenge Creator)
    ============================================================================ */
-export function ChallengeRequestsReviewModal({ challenge, isOpen, onClose, token, onChallengeUpdated, theme, hasActiveConflict }) {
+export function ChallengeRequestsReviewModal({ challenge, isOpen, onClose, token, onChallengeUpdated, theme, hasActiveConflict, onViewTeam }) {
   if (!isOpen || !challenge) return null;
   const isLight = detectLight(theme);
   const t = tokens(isLight);
@@ -1888,6 +1893,27 @@ export function ChallengeRequestsReviewModal({ challenge, isOpen, onClose, token
 
                   {/* Accept and Reject Buttons */}
                   <div className="flex items-center gap-2 pt-1">
+                    {onViewTeam && (
+                      <button
+                        type="button"
+                        onClick={() => onViewTeam({
+                          team: teamName,
+                          team_name: teamName,
+                          contact_no: phone,
+                          creator_name: reqItem.user_name
+                        })}
+                        className={cn(
+                          "py-2 px-3 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1 cursor-pointer shrink-0 shadow-xs hover:scale-105 active:scale-95",
+                          isLight
+                            ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
+                            : "bg-white/10 hover:bg-white/15 text-slate-200 border-white/20"
+                        )}
+                        title={`View ${teamName} performance & stats`}
+                      >
+                        <Users className="w-3.5 h-3.5" />
+                        <span>Team</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       disabled={isProcessing || isSlotConflict}
@@ -2532,6 +2558,8 @@ export default function FindMatchTab({
   const [acceptTarget, setAcceptTarget] = useState(null);
   const [detailsTarget, setDetailsTarget] = useState(null);
   const [viewTeamTarget, setViewTeamTarget] = useState(null);
+  const [returnToChallengeDetails, setReturnToChallengeDetails] = useState(null);
+  const [returnToReview, setReturnToReview] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
   const [reviewTarget, setReviewTarget] = useState(null);
 
@@ -2547,9 +2575,9 @@ export default function FindMatchTab({
         myRequestStatus: null,
         my_request_id: null,
       });
-      alert(`Match request to ${opponent} cancelled.`);
+      showToast.delete(`Match request to ${opponent} cancelled.`);
     } catch (err) {
-      alert(err.message || "Failed to cancel match request.");
+      showToast.error(err, "Failed to cancel match request.");
     }
   };
 
@@ -2932,7 +2960,11 @@ export default function FindMatchTab({
                 theme={theme}
                 onDeleted={onChallengeDeleted}
                 onEdit={() => setEditTarget(ch)}
-                onViewTeam={c => setViewTeamTarget(c)}
+                onViewTeam={c => {
+                  setReturnToChallengeDetails(null);
+                  setReturnToReview(null);
+                  setViewTeamTarget(c);
+                }}
                 onReviewRequests={c => setReviewTarget(c)}
               />
             ))}
@@ -3094,7 +3126,16 @@ export default function FindMatchTab({
                   <OutlineButton isLight={isLight} type="button" onClick={() => setDetailsTarget(c)} className="flex-1">
                     View Details
                   </OutlineButton>
-                  <OutlineButton isLight={isLight} type="button" onClick={() => setViewTeamTarget(c)} title={`View ${c.team} reviews`}>
+                  <OutlineButton
+                    isLight={isLight}
+                    type="button"
+                    onClick={() => {
+                      setReturnToChallengeDetails(null);
+                      setReturnToReview(null);
+                      setViewTeamTarget(c);
+                    }}
+                    title={`View ${c.team} reviews`}
+                  >
                     <Users className="w-4 h-4" /> Reviews ({c.reviewsCount})
                   </OutlineButton>
                 </div>
@@ -3232,10 +3273,29 @@ export default function FindMatchTab({
                   Request to Play
                 </SoftButton>
               )}
-              <OutlineButton isLight={isLight} type="button" onClick={() => setViewTeamTarget(detailsTarget)} className="flex-1">
+              <OutlineButton
+                isLight={isLight}
+                type="button"
+                onClick={() => {
+                  const target = detailsTarget;
+                  setReturnToChallengeDetails(target);
+                  setViewTeamTarget(target);
+                  setDetailsTarget(null);
+                }}
+                className="flex-1"
+                title={`View ${detailsTarget.team} team profile & stats`}
+              >
                 <Users className="w-4 h-4" /> View Team
               </OutlineButton>
-              <OutlineButton isLight={isLight} type="button" onClick={() => setDetailsTarget(null)} className="flex-1">
+              <OutlineButton
+                isLight={isLight}
+                type="button"
+                onClick={() => {
+                  setDetailsTarget(null);
+                  setReturnToChallengeDetails(null);
+                }}
+                className="flex-1"
+              >
                 Close
               </OutlineButton>
             </div>
@@ -3269,6 +3329,11 @@ export default function FindMatchTab({
             onChallengeUpdated?.(updated);
             setReviewTarget(prev => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));
           }}
+          onViewTeam={reqItem => {
+            setReturnToReview(reviewTarget);
+            setReviewTarget(null);
+            setViewTeamTarget(reqItem);
+          }}
           theme={theme}
         />
       )}
@@ -3296,7 +3361,27 @@ export default function FindMatchTab({
           postedByFallback={viewTeamTarget.postedBy || viewTeamTarget.creator_name}
           user={user}
           token={token}
-          onClose={() => setViewTeamTarget(null)}
+          backLabel={returnToChallengeDetails ? "Back to Challenge Details" : returnToReview ? "Back to Match Requests" : null}
+          onBack={() => {
+            setViewTeamTarget(null);
+            if (returnToChallengeDetails) {
+              setDetailsTarget(returnToChallengeDetails);
+              setReturnToChallengeDetails(null);
+            } else if (returnToReview) {
+              setReviewTarget(returnToReview);
+              setReturnToReview(null);
+            }
+          }}
+          onClose={() => {
+            setViewTeamTarget(null);
+            if (returnToChallengeDetails) {
+              setDetailsTarget(returnToChallengeDetails);
+              setReturnToChallengeDetails(null);
+            } else if (returnToReview) {
+              setReviewTarget(returnToReview);
+              setReturnToReview(null);
+            }
+          }}
           theme={theme}
         />
       )}

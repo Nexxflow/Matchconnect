@@ -4,6 +4,7 @@ import { apiRequest, getStoredToken } from "../../api";
 import CreateTournamentForm from "../CreateTournamentForm";
 import { C, cn, Tag, GhostButton } from "../../utils/helpers.jsx";
 import CalendarField from "../CalendarField.jsx";
+import { showToast } from "../../utils/toast.jsx";
 
 const STATUS_META = {
   registering: { label: "Registering", color: "green", gradient: "from-emerald-400 to-green-500" },
@@ -1388,6 +1389,9 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
           status: res.tournament_status || prev?.status || t.status,
         }));
       }
+      if (res?.ok) {
+        showToast.delete("Team removed from tournament successfully.");
+      }
       try {
         const fresh = await apiRequest(`/tournaments/${t.id}`);
         if (fresh?.tournament) {
@@ -1396,7 +1400,7 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
         }
       } catch {}
     } catch (err) {
-      alert(err.message || "Failed to remove team");
+      showToast.error(err, "Failed to remove team");
     } finally {
       setRemovingTeamId(null);
     }
@@ -1434,7 +1438,7 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
   const handleAcceptRequest = async (reg) => {
     const tok = token || getStoredToken();
     if (!tok) {
-      alert("Please log in to accept requests.");
+      showToast.warning("Please log in to accept requests.");
       return;
     }
     const teamName = reg.team_name || reg.name || "Team";
@@ -1472,10 +1476,10 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
             onTournamentUpdated?.(fresh.tournament);
           }
         } catch {}
-        alert(`🎉 Success! Team "${teamName}" has been accepted and confirmed for "${t.name}"! A confirmation notification was sent to their team.`);
+        showToast.success(`Team "${teamName}" accepted and confirmed for "${t.name}"!`);
       }
     } catch (err) {
-      alert(err.message || "Failed to accept registration request");
+      showToast.error(err, "Failed to accept registration request");
     } finally {
       setProcessingRequestId(null);
     }
@@ -1504,10 +1508,10 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
             onTournamentUpdated?.(fresh.tournament);
           }
         } catch {}
-        alert(`❌ Registration request for team "${teamName}" was rejected. Notification sent to inform their team.`);
+        showToast.delete(`Registration request for team "${teamName}" was rejected.`);
       }
     } catch (err) {
-      alert(err.message || "Failed to decline registration request");
+      showToast.error(err, "Failed to decline registration request");
     } finally {
       setProcessingRequestId(null);
     }
@@ -1598,12 +1602,13 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
       await apiRequest(`/tournaments/${t.id}/matches/${matchToDelete.id}`, { method: "DELETE", token });
       setMatches((prev) => prev.filter((m) => m.id !== matchToDelete.id));
       setMatchToDelete(null);
+      showToast.delete("Tournament match deleted successfully.");
       try {
         const data = await apiRequest(`/tournaments/${t.id}`);
         if (data?.tournament) { setDetails(data.tournament); onTournamentUpdated?.(data.tournament); return; }
       } catch {}
       onTournamentUpdated?.({ ...t, matches_count: Math.max((t.matches_count || 1) - 1, 0) });
-    } catch (err) { alert(err.message || "Failed to delete tournament match"); }
+    } catch (err) { showToast.error(err, "Failed to delete tournament match"); }
     finally { setDeletingMatch(false); }
   };
 
@@ -1611,8 +1616,9 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
     setDeletingTournament(true);
     try {
       await apiRequest(`/tournaments/${t.id}`, { method: "DELETE", token });
+      showToast.delete("Tournament deleted successfully.");
       onDelete?.(t.id); setShowDeleteTournamentConfirm(false); onClose();
-    } catch (err) { alert(err.message || "Failed to delete tournament"); }
+    } catch (err) { showToast.error(err, "Failed to delete tournament"); }
     finally { setDeletingTournament(false); }
   };
 
@@ -2077,7 +2083,7 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
                       onClick={() => {
                         const tok = token || getStoredToken();
                         if (!tok) {
-                          alert("Please log in to start tournament match scoring.");
+                          showToast.warning("Please log in to start tournament match scoring.");
                           return;
                         }
                         setShowStartMatchModal(true);
@@ -2106,7 +2112,7 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
                       onClick={() => {
                         const tok = token || getStoredToken();
                         if (!tok) {
-                          alert("Please log in to schedule tournament matches.");
+                          showToast.warning("Please log in to schedule tournament matches.");
                           return;
                         }
                         setShowScheduleMatchModal(true);
@@ -2136,7 +2142,7 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
                       onClick={() => {
                         const tok = token || getStoredToken();
                         if (!tok) {
-                          alert("Please log in to record tournament matches and upload scorecards.");
+                          showToast.warning("Please log in to record tournament matches and upload scorecards.");
                           return;
                         }
                         setSelectedMatch(null);
@@ -2182,7 +2188,7 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
                           onClick={() => {
                             const tok = token || getStoredToken();
                             if (!tok) {
-                              alert("Please log in to start tournament match scoring.");
+                              showToast.warning("Please log in to start tournament match scoring.");
                               return;
                             }
                             setShowStartMatchModal(true);
@@ -2198,7 +2204,7 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
                           onClick={() => {
                             const tok = token || getStoredToken();
                             if (!tok) {
-                              alert("Please log in to schedule tournament matches.");
+                              showToast.warning("Please log in to schedule tournament matches.");
                               return;
                             }
                             setShowScheduleMatchModal(true);
@@ -2214,7 +2220,7 @@ function TournamentDetailsModal({ t, onClose, isMine, isOrganizer, roleLabel, re
                           onClick={() => {
                             const tok = token || getStoredToken();
                             if (!tok) {
-                              alert("Please log in to upload tournament scorecards.");
+                              showToast.warning("Please log in to upload tournament scorecards.");
                               return;
                             }
                             setSelectedMatch(null);
@@ -3595,8 +3601,13 @@ function TournamentCard({ t, isMine, isOrganizer, roleLabel, registered, onRegis
               <button type="button" disabled={deleting}
                 onClick={async () => {
                   setDeleting(true);
-                  try { await apiRequest(`/tournaments/${t.id}`, { method: "DELETE", token }); setShowDeleteConfirm(false); onDelete?.(t.id); }
-                  catch (err) { alert(err.message || "Could not delete tournament"); }
+                  try {
+                    await apiRequest(`/tournaments/${t.id}`, { method: "DELETE", token });
+                    showToast.delete("Tournament deleted successfully.");
+                    setShowDeleteConfirm(false);
+                    onDelete?.(t.id);
+                  }
+                  catch (err) { showToast.error(err, "Could not delete tournament"); }
                   finally { setDeleting(false); }
                 }}
                 className="flex-1 py-2 rounded-xl text-xs font-bold transition-all bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white flex items-center justify-center gap-1.5 shadow-lg shadow-red-500/25 disabled:opacity-50">

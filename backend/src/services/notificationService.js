@@ -539,6 +539,28 @@ const notifyTeamOfFeedback = async (teamName, reviewerName, reviewerTeamName, ra
   }
 };
 
+const notifyReviewReply = async (reviewerUserId, teamName, replyAuthorName, replyText, data = {}) => {
+  if (!reviewerUserId) return;
+  try {
+    const res = await pool.query(`SELECT id, fcm_token FROM users WHERE id = $1`, [reviewerUserId]);
+    const reviewer = res.rows[0];
+    if (!reviewer) return;
+
+    const title = `Reply to your review for ${teamName}! 💬`;
+    const snippet = replyText.length > 70 ? `${replyText.slice(0, 70)}...` : replyText;
+    const body = `${replyAuthorName} from Team ${teamName} replied: "${snippet}"`;
+    const notifData = { type: "review_reply", team_name: teamName, ...data };
+
+    await recordInAppNotifications([reviewer.id], title, body, "review_reply", notifData);
+
+    if (reviewer.fcm_token) {
+      await sendNotification(reviewer.fcm_token, title, body, notifData);
+    }
+  } catch (err) {
+    console.error("❌ [Review Reply Notification] Delivery error:", err.message);
+  }
+};
+
 module.exports = {
   sendNotification,
   sendMulticastNotification,
@@ -546,6 +568,7 @@ module.exports = {
   notifyAllUsersExcept,
   notifyTeammatesOnly,
   notifyTeamOfFeedback,
+  notifyReviewReply,
   notifyChallengeAccepted,
   notifyChallengeCancelled,
   recordInAppNotifications,

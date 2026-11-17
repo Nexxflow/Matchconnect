@@ -1,6 +1,6 @@
 const pool = require("../config/db");
 const asyncHandler = require("../utils/asyncHandler");
-const { notifyTeamOfFeedback } = require("../services/notificationService");
+const { notifyTeamOfFeedback, notifyReviewReply } = require("../services/notificationService");
 
 // Returns the team owned by the logged-in user, or { team: null } if they
 // haven't registered one yet. Used by the frontend to default the "team
@@ -224,6 +224,30 @@ const getTeamDetails = asyncHandler(async (req, res) => {
       [teamName]
     );
     reviews = reviewsRes.rows || [];
+
+    if (reviews.length > 0) {
+      try {
+        const reviewIds = reviews.map(r => r.id);
+        const repliesRes = await pool.query(
+          `SELECT id, review_id, team_name, user_id, user_name, user_team_name, reply_text, created_at
+           FROM team_review_replies
+           WHERE review_id = ANY($1::int[])
+           ORDER BY created_at ASC`,
+          [reviewIds]
+        );
+        const repliesMap = {};
+        for (const rep of repliesRes.rows) {
+          if (!repliesMap[rep.review_id]) repliesMap[rep.review_id] = [];
+          repliesMap[rep.review_id].push(rep);
+        }
+        reviews = reviews.map(r => ({
+          ...r,
+          replies: repliesMap[r.id] || []
+        }));
+      } catch (repErr) {
+        reviews = reviews.map(r => ({ ...r, replies: [] }));
+      }
+    }
   } catch (err) {
     console.warn("Could not query team_reviews in getTeamDetails:", err.message);
   }
@@ -352,7 +376,7 @@ const addTeamReview = asyncHandler(async (req, res) => {
 
 // ============================================================
 // DELETE /api/teams/reviews/:id
-// Only the user who posted the review can delete it
+// Only admin or the reviewed person (who put the review) can delete it
 // ============================================================
 const deleteTeamReview = asyncHandler(async (req, res) => {
   const userId = req.user?.id;
@@ -367,9 +391,12 @@ const deleteTeamReview = asyncHandler(async (req, res) => {
 
   const review = reviewRes.rows[0];
 
-  // Strictly enforce that only the author who posted the review can delete it
-  if (Number(review.reviewer_user_id) !== Number(userId)) {
-    return res.status(403).json({ error: "Only the user who posted this feedback can delete it" });
+  // Strictly enforce that only admin or the user who posted the review can delete it
+  const isAuthor = Number(review.reviewer_user_id) === Number(userId);
+  const isAdmin = Boolean(req.user?.is_admin);
+
+  if (!isAuthor && !isAdmin) {
+    return res.status(403).json({ error: "Only an administrator or the person who posted this review can delete it" });
   }
 
   await pool.query(`DELETE FROM team_reviews WHERE id = $1`, [id]);
@@ -381,9 +408,133 @@ const deleteTeamReview = asyncHandler(async (req, res) => {
   });
 });
 
+// ============================================================
+// POST /api/teams/reviews/:id/replies
+// Only members of the reviewed team (or admins) can reply to reviewed messages
+// ============================================================
+const addTeamReviewReply = asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+  const { id: reviewId } = req.params;
+  const { reply_text } = req.body;
+
+  if (!reply_text || !reply_text.trim()) {
+    return res.status(400).json({ error: "reply_text is required" });
+  }
+
+  // Ensure replies table exists
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS team_review_replies (
+      id SERIAL PRIMARY KEY,
+      review_id INTEGER REFERENCES team_reviews(id) ON DELETE CASCADE,
+      team_name VARCHAR(120) NOT NULL,
+      user_id INTEGER,
+      user_name VARCHAR(120) NOT NULL,
+      user_team_name VARCHAR(120),
+      reply_text TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_team_review_replies_review ON team_review_replies(review_id);
+  `).catch(() => {});
+
+  const reviewRes = await pool.query(`SELECT * FROM team_reviews WHERE id = $1`, [reviewId]);
+  if (reviewRes.rows.length === 0) {
+    return res.status(404).json({ error: "Review not found" });
+  }
+  const review = reviewRes.rows[0];
+
+  // Fetch replying user details
+  const uRes = await pool.query(`SELECT id, name, team_name, is_admin FROM users WHERE id = $1`, [userId]);
+  const user = uRes.rows[0];
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  // Check if user is a member of the reviewed team OR is admin
+  const reviewTeamClean = (review.team_name || "").trim().toLowerCase();
+  const userTeamClean = (user.team_name || "").trim().toLowerCase();
+
+  // Also check teams table for ownership/creation
+  const teamCheck = await pool.query(
+    `SELECT 1 FROM teams
+     WHERE (created_by = $1 OR owner_id::text = $2) AND (
+       LOWER(TRIM(name)) = LOWER(TRIM($3))
+       OR REGEXP_REPLACE(LOWER(TRIM(name)), '[[:space:]]+', ' ', 'g') = REGEXP_REPLACE(LOWER(TRIM($3)), '[[:space:]]+', ' ', 'g')
+     )
+     LIMIT 1`,
+    [userId, String(userId), review.team_name.trim()]
+  ).catch(() => ({ rows: [] }));
+
+  const isTeamMember = userTeamClean === reviewTeamClean || teamCheck.rows.length > 0;
+  const isAdmin = Boolean(user.is_admin);
+
+  if (!isTeamMember && !isAdmin) {
+    return res.status(403).json({ error: "Only team members of this team can reply to this review" });
+  }
+
+  const insertRes = await pool.query(
+    `INSERT INTO team_review_replies (review_id, team_name, user_id, user_name, user_team_name, reply_text)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, review_id, team_name, user_id, user_name, user_team_name, reply_text, created_at`,
+    [review.id, review.team_name, userId, user.name || "Team Member", user.team_name || review.team_name, reply_text.trim()]
+  );
+
+  const reply = insertRes.rows[0];
+
+  // Send notification to the original reviewer
+  if (review.reviewer_user_id && typeof notifyReviewReply === "function") {
+    notifyReviewReply(
+      review.reviewer_user_id,
+      review.team_name,
+      user.name || "Team Member",
+      reply_text.trim(),
+      { review_id: String(review.id), reply_id: String(reply.id) }
+    ).catch(err => console.error("Error sending review reply notification:", err.message));
+  }
+
+  res.status(201).json({
+    ok: true,
+    reply,
+    message: "Reply posted successfully",
+  });
+});
+
+// ============================================================
+// DELETE /api/teams/reviews/:id/replies/:replyId
+// Only admin or the author who posted the reply can delete it
+// ============================================================
+const deleteTeamReviewReply = asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+  const { replyId } = req.params;
+
+  const replyRes = await pool.query(`SELECT * FROM team_review_replies WHERE id = $1`, [replyId]);
+  if (replyRes.rows.length === 0) {
+    return res.status(404).json({ error: "Reply not found" });
+  }
+  const reply = replyRes.rows[0];
+
+  const isAuthor = Number(reply.user_id) === Number(userId);
+  const isAdmin = Boolean(req.user?.is_admin);
+
+  if (!isAuthor && !isAdmin) {
+    return res.status(403).json({ error: "Only an administrator or the person who posted this reply can delete it" });
+  }
+
+  await pool.query(`DELETE FROM team_review_replies WHERE id = $1`, [replyId]);
+
+  res.json({
+    ok: true,
+    message: "Reply deleted successfully",
+    deletedId: Number(replyId),
+  });
+});
+
 module.exports = {
   getMyTeam,
   getTeamDetails,
   addTeamReview,
   deleteTeamReview,
+  addTeamReviewReply,
+  deleteTeamReviewReply,
 };

@@ -97,7 +97,19 @@ async function connectWithRetry(retries = 3, delayMs = 2000) {
             created_at TIMESTAMPTZ DEFAULT now()
           );
 
+          CREATE TABLE IF NOT EXISTS team_review_replies (
+            id SERIAL PRIMARY KEY,
+            review_id INTEGER REFERENCES team_reviews(id) ON DELETE CASCADE,
+            team_name VARCHAR(120) NOT NULL,
+            user_id INTEGER,
+            user_name VARCHAR(120) NOT NULL,
+            user_team_name VARCHAR(120),
+            reply_text TEXT NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT now()
+          );
+
           CREATE INDEX IF NOT EXISTS idx_team_reviews_team ON team_reviews(team_name);
+          CREATE INDEX IF NOT EXISTS idx_team_review_replies_review ON team_review_replies(review_id);
           CREATE INDEX IF NOT EXISTS idx_cancellations_team ON challenge_cancellations(cancelled_by_team_name);
           CREATE INDEX IF NOT EXISTS idx_acceptances_team ON challenge_acceptances(accepted_by_team_name);
 

@@ -4,6 +4,7 @@ import { apiRequest } from "../../api";
 import { C, cn, Tag, normalizePhone, getChallengeSlot } from "../../utils/helpers.jsx";
 import TeamDetailsModal from "../TeamDetailsModal.jsx";
 import { ChallengeRequestsReviewModal } from "./FindMatchTab.jsx";
+import { showToast } from "../../utils/toast.jsx";
 
 // ─── Colorful accent bar ─────────────────────────────────────────────────
 function ColorBar({ gradient = "from-emerald-400 via-green-500 to-teal-500", className = "" }) {
@@ -134,6 +135,7 @@ export default function MyTeamTab({
   const [refreshingStats, setRefreshingStats] = useState(false);
   const [viewSelfTeam, setViewSelfTeam] = useState(false);
   const [reviewChallenge, setReviewChallenge] = useState(null);
+  const [viewOpponentTeam, setViewOpponentTeam] = useState(null);
   const [squadLoading, setSquadLoading] = useState(true);
   const [squadError, setSquadError] = useState(null);
   const [cancellingBookingId, setCancellingBookingId] = useState(null);
@@ -143,9 +145,10 @@ export default function MyTeamTab({
     setCancellingBookingId(booking.id);
     try {
       await apiRequest(`/bookings/${booking.id}`, { method: "DELETE", token });
+      showToast.delete(`Booking for ${booking.name} cancelled successfully.`);
       onCancelBooking?.(booking);
     } catch (err) {
-      alert(err.message || "Failed to cancel booking");
+      showToast.error(err, "Failed to cancel booking");
     } finally {
       setCancellingBookingId(null);
     }
@@ -521,6 +524,24 @@ export default function MyTeamTab({
             onChallengeUpdated?.(updated);
             setReviewChallenge(prev => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));
           }}
+          onViewTeam={reqItem => {
+            setViewOpponentTeam(reqItem);
+          }}
+          theme={theme}
+        />
+      )}
+
+      {/* Opponent Team Details Modal */}
+      {viewOpponentTeam && (
+        <TeamDetailsModal
+          teamName={viewOpponentTeam.team || viewOpponentTeam.team_name}
+          contactFallback={viewOpponentTeam.contact_no}
+          postedByFallback={viewOpponentTeam.postedBy || viewOpponentTeam.creator_name}
+          user={user}
+          token={token}
+          backLabel={reviewChallenge ? "Back to Match Requests" : null}
+          onBack={() => setViewOpponentTeam(null)}
+          onClose={() => setViewOpponentTeam(null)}
           theme={theme}
         />
       )}

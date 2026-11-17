@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { X, Star, Users, CheckCircle, XCircle, AlertCircle, Send, Award, Phone, Calendar, MapPin, MessageSquare, ThumbsUp, Shield, Trash2, Loader2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import { X, Star, Users, CheckCircle, XCircle, AlertCircle, Send, Award, Phone, Calendar, Clock, MapPin, MessageSquare, ThumbsUp, Shield, Trash2, Loader2, ChevronLeft, CornerDownRight } from "lucide-react";
 import { apiRequest } from "../api";
 import { GhostButton, cn } from "../utils/helpers.jsx";
+import { showToast } from "../utils/toast.jsx";
 
 function formatPhoneDisplay(phone) {
   if (!phone) return "";
@@ -94,11 +96,30 @@ export default function TeamDetailsModal({
   contactFallback = null,
   postedByFallback = null,
   theme = "dark",
+  onBack = null,
+  backLabel = null
 }) {
   const isLight = theme === "light";
   const [teamData, setTeamData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Keyboard accessibility & background scroll lock
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        if (onBack) onBack();
+        else onClose?.();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose, onBack]);
 
   // Review form state
   const [ratingInput, setRatingInput] = useState(5);
@@ -108,6 +129,13 @@ export default function TeamDetailsModal({
   const [reviewSuccess, setReviewSuccess] = useState(null);
   const [reviewError, setReviewError] = useState(null);
   const [showReviewForm, setShowReviewForm] = useState(false);
+
+  // Review reply state
+  const [replyingReviewId, setReplyingReviewId] = useState(null);
+  const [replyInputs, setReplyInputs] = useState({});
+  const [submittingReplyId, setSubmittingReplyId] = useState(null);
+  const [deletingReplyId, setDeletingReplyId] = useState(null);
+  const [replyError, setReplyError] = useState(null);
 
   const isOwnTeam = Boolean(
     (user?.team_name && user.team_name.trim().toLowerCase() === String(teamName || "").trim().toLowerCase()) ||
@@ -153,8 +181,11 @@ export default function TeamDetailsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamName]);
 
-  const handleDeleteReview = async (reviewId) => {
-    if (!window.confirm("Are you sure you want to delete your feedback review?")) return;
+  const handleDeleteReview = async (reviewId, isAuthor) => {
+    const confirmMsg = isAuthor
+      ? "Are you sure you want to delete your feedback review?"
+      : "Are you sure you want to delete this review as Admin?";
+    if (!window.confirm(confirmMsg)) return;
     setDeletingReviewId(reviewId);
     try {
       await apiRequest(`/teams/reviews/${reviewId}`, {
@@ -165,28 +196,87 @@ export default function TeamDetailsModal({
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("mc:review_submitted", { detail: { team_name: teamName } }));
       }
+      showToast.delete("Feedback review deleted successfully.");
     } catch (err) {
-      alert(err.message || "Failed to delete review");
+      showToast.error(err, "Failed to delete review");
     } finally {
       setDeletingReviewId(null);
+    }
+  };
+
+  const handleAddReply = async (reviewId) => {
+    const text = (replyInputs[reviewId] || "").trim();
+    if (!text) return;
+    if (!token) {
+      showToast.warning("Please log in to reply.");
+      setReplyError("Please log in to reply.");
+      return;
+    }
+    setSubmittingReplyId(reviewId);
+    setReplyError(null);
+    try {
+      await apiRequest(`/teams/reviews/${reviewId}/replies`, {
+        method: "POST",
+        token,
+        body: { reply_text: text }
+      });
+      setReplyInputs(prev => ({ ...prev, [reviewId]: "" }));
+      setReplyingReviewId(null);
+      await fetchTeamDetails();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("mc:review_submitted", { detail: { team_name: teamName } }));
+      }
+      showToast.success("Reply posted successfully!");
+    } catch (err) {
+      showToast.error(err, "Failed to post reply");
+      setReplyError(err.message || "Failed to post reply");
+    } finally {
+      setSubmittingReplyId(null);
+    }
+  };
+
+  const handleDeleteReply = async (reviewId, replyId, isAuthor) => {
+    const confirmMsg = isAuthor
+      ? "Are you sure you want to delete your reply?"
+      : "Are you sure you want to delete this reply as Admin?";
+    if (!window.confirm(confirmMsg)) return;
+    setDeletingReplyId(replyId);
+    try {
+      await apiRequest(`/teams/reviews/${reviewId}/replies/${replyId}`, {
+        method: "DELETE",
+        token
+      });
+      await fetchTeamDetails();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("mc:review_submitted", { detail: { team_name: teamName } }));
+      }
+      showToast.delete("Reply deleted successfully.");
+    } catch (err) {
+      showToast.error(err, "Failed to delete reply");
+    } finally {
+      setDeletingReplyId(null);
     }
   };
 
   const handleSubmitReview = async e => {
     e.preventDefault();
     if (!token) {
+      showToast.warning("Please log in to submit a review.");
       setReviewError("Please log in to submit a review.");
       return;
     }
     if (isOwnTeam) {
+      showToast.warning("You cannot review your own team. Only opponent teams can leave feedback.");
       setReviewError("You cannot review your own team. Only opponent teams can leave feedback.");
       return;
     }
     if (!reviewTextInput.trim()) {
+      showToast.warning("Please enter your feedback comments.");
       setReviewError("Please enter your feedback comments.");
       return;
     }
     if (ratingInput < 1 || ratingInput > 5) {
+      showToast.warning("Please choose a rating between 1 and 5 stars.");
       setReviewError("Please choose a rating between 1 and 5 stars.");
       return;
     }
@@ -206,6 +296,7 @@ export default function TeamDetailsModal({
         }
       });
 
+      showToast.success("Review submitted successfully!");
       setReviewSuccess("Review submitted successfully!");
       setReviewTextInput("");
       setShowReviewForm(false);
@@ -215,6 +306,7 @@ export default function TeamDetailsModal({
         window.dispatchEvent(new CustomEvent("mc:review_submitted", { detail: { team_name: teamName } }));
       }
     } catch (err) {
+      showToast.error(err, "Could not submit review.");
       setReviewError(err.message || "Could not submit review.");
     } finally {
       setSubmittingReview(false);
@@ -237,10 +329,12 @@ export default function TeamDetailsModal({
   const reviews = teamData?.reviews || [];
   const reviewsCount = teamData?.reviews_count != null ? teamData.reviews_count : reviews.length;
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
-      onClick={onClose}
+      className="fixed inset-0 z-[2500] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
+      onClick={onBack || onClose}
     >
       <div
         className="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 relative shadow-2xl animate-in zoom-in-95 duration-200 border custom-scrollbar"
@@ -251,6 +345,27 @@ export default function TeamDetailsModal({
         onClick={e => e.stopPropagation()}
       >
         <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-600 rounded-t-3xl z-10 pointer-events-none" />
+
+        {/* Back navigation pill if opened from Challenge Details */}
+        {onBack && (
+          <div className="mb-3">
+            <button
+              type="button"
+              onClick={onBack}
+              className={cn(
+                "px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border shadow-xs hover:scale-[1.02] active:scale-[0.98]",
+                isLight
+                  ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300"
+                  : "bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/30"
+              )}
+              title={backLabel || "Back to Challenge Details"}
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>{backLabel || "Back to Challenge Details"}</span>
+            </button>
+          </div>
+        )}
+
         {/* Header with Close */}
         <div className="flex items-start justify-between gap-4 pb-4 border-b" style={{ borderColor: theme === "light" ? "#f1f5f9" : "#222" }}>
           <div className="flex items-center gap-3.5 min-w-0">
@@ -550,11 +665,17 @@ export default function TeamDetailsModal({
                   </p>
                 </div>
               ) : (
-                <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+                <div className="space-y-3 max-h-80 overflow-y-auto pr-1 custom-scrollbar">
                   {reviews.map(r => {
                     const isUnread = Boolean(
                       unreadReviewIds && (unreadReviewIds.has(String(r.id)) || unreadReviewIds.has(Number(r.id)))
                     );
+                    const isReviewAuthor = Boolean(user?.id && Number(r.reviewer_user_id) === Number(user.id));
+                    const canDeleteReview = Boolean(user?.id && (user?.is_admin || isReviewAuthor));
+                    const canReply = Boolean(user?.id && (isOwnTeam || user?.is_admin));
+                    const replies = Array.isArray(r.replies) ? r.replies : [];
+                    const isReplying = replyingReviewId === r.id;
+
                     return (
                       <div
                         key={r.id}
@@ -614,15 +735,19 @@ export default function TeamDetailsModal({
 
                           <div className="flex items-center gap-2">
                             <StarRating rating={r.rating} size="w-3.5 h-3.5" />
-                            {user?.id && Number(r.reviewer_user_id) === Number(user.id) && (
+                            {canDeleteReview && (
                               <button
                                 type="button"
-                                onClick={() => handleDeleteReview(r.id)}
+                                onClick={() => handleDeleteReview(r.id, isReviewAuthor)}
                                 disabled={deletingReviewId === r.id}
-                                title="Delete your review"
+                                title={isReviewAuthor ? "Delete your review" : "Delete review (Admin)"}
                                 className="p-1.5 rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0 disabled:opacity-50 cursor-pointer"
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                {deletingReviewId === r.id ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-red-500" />
+                                ) : (
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                )}
                               </button>
                             )}
                           </div>
@@ -631,6 +756,176 @@ export default function TeamDetailsModal({
                         <p className={cn("text-xs mt-2.5 pl-9 leading-relaxed", isLight ? "text-slate-700 font-medium" : "text-neutral-300")}>
                           "{r.review_text}"
                         </p>
+
+                        {/* Replies & Team response area */}
+                        <div className="mt-3 pl-9 space-y-2">
+                          {/* List of existing replies */}
+                          {replies.length > 0 && (
+                            <div className="space-y-2 pt-1 border-t border-dashed" style={{ borderColor: isLight ? "#e2e8f0" : "#282a28" }}>
+                              {replies.map(rep => {
+                                const isReplyAuthor = Boolean(user?.id && Number(rep.user_id) === Number(user.id));
+                                const canDeleteReply = Boolean(user?.id && (user?.is_admin || isReplyAuthor));
+                                return (
+                                  <div
+                                    key={rep.id}
+                                    className={cn(
+                                      "rounded-xl p-2.5 text-xs border relative transition-all",
+                                      isLight
+                                        ? "bg-emerald-50/70 border-emerald-200 text-slate-800"
+                                        : "bg-emerald-950/25 border-emerald-800/40 text-neutral-200"
+                                    )}
+                                  >
+                                    <div className="flex items-center justify-between gap-2 mb-1">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-bold text-emerald-500 text-[11px] flex items-center gap-1">
+                                          <CornerDownRight className="w-3 h-3 text-emerald-500 inline shrink-0" />
+                                          {rep.user_name || "Team Member"}
+                                        </span>
+                                        <span className={cn(
+                                          "text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-md border",
+                                          isLight
+                                            ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                            : "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                                        )}>
+                                          {rep.user_team_name ? `${rep.user_team_name} (Team)` : "Team Member"}
+                                        </span>
+                                        <span className={cn("text-[10px]", isLight ? "text-slate-500" : "text-neutral-500")}>
+                                          {rep.created_at
+                                            ? new Date(rep.created_at).toLocaleString("en-IN", {
+                                                day: "numeric",
+                                                month: "short",
+                                                hour: "numeric",
+                                                minute: "2-digit",
+                                                hour12: true,
+                                                timeZone: "Asia/Kolkata"
+                                              })
+                                            : "Just now"}
+                                        </span>
+                                      </div>
+
+                                      {canDeleteReply && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteReply(r.id, rep.id, isReplyAuthor)}
+                                          disabled={deletingReplyId === rep.id}
+                                          title={isReplyAuthor ? "Delete your reply" : "Delete reply (Admin)"}
+                                          className="p-1 rounded text-neutral-400 hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0 disabled:opacity-50 cursor-pointer"
+                                        >
+                                          {deletingReplyId === rep.id ? (
+                                            <Loader2 className="w-3 h-3 animate-spin text-red-500" />
+                                          ) : (
+                                            <Trash2 className="w-3 h-3" />
+                                          )}
+                                        </button>
+                                      )}
+                                    </div>
+                                    <p className={cn("text-xs leading-relaxed pl-4 font-normal", isLight ? "text-slate-700" : "text-neutral-300")}>
+                                      {rep.reply_text}
+                                    </p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Reply Toggle for Team Members or Admin */}
+                          {canReply && (
+                            <div className="pt-1 flex items-center justify-start">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReplyingReviewId(isReplying ? null : r.id);
+                                  setReplyError(null);
+                                }}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg transition-all cursor-pointer border",
+                                  isReplying
+                                    ? "bg-emerald-500 text-black border-emerald-500 font-bold"
+                                    : isLight
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                      : "bg-emerald-500/10 text-emerald-400 border-emerald-500/25 hover:bg-emerald-500/20"
+                                )}
+                              >
+                                <CornerDownRight className="w-3.5 h-3.5" />
+                                <span>{isReplying ? "Cancel Reply" : "Reply as Team"}</span>
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Inline Reply Form */}
+                          {isReplying && canReply && (
+                            <div className={cn(
+                              "p-3 rounded-xl border mt-2 animate-in fade-in zoom-in-95 duration-150 space-y-2",
+                              isLight ? "bg-slate-50 border-slate-200" : "bg-[#181a18] border-neutral-800"
+                            )}>
+                              <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-500">
+                                <span className="flex items-center gap-1">
+                                  <CornerDownRight className="w-3 h-3" />
+                                  Replying on behalf of {teamName}
+                                </span>
+                                <span className="text-[10px] text-neutral-400">
+                                  {user?.is_admin ? "Posting as Admin / Team Representative" : "Team Member"}
+                                </span>
+                              </div>
+
+                              <textarea
+                                rows={2}
+                                value={replyInputs[r.id] || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setReplyInputs(prev => ({ ...prev, [r.id]: val }));
+                                }}
+                                placeholder="Write your team's response to this review..."
+                                disabled={submittingReplyId === r.id}
+                                className={cn(
+                                  "w-full px-3 py-2 text-xs rounded-lg border outline-hidden transition-all resize-none",
+                                  isLight
+                                    ? "bg-white text-slate-800 border-slate-300 focus:border-emerald-500"
+                                    : "bg-black/60 text-white border-neutral-700 focus:border-emerald-500"
+                                )}
+                              />
+
+                              {replyError && replyingReviewId === r.id && (
+                                <p className="text-[11px] text-red-500 font-semibold">{replyError}</p>
+                              )}
+
+                              <div className="flex items-center justify-end gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setReplyingReviewId(null);
+                                    setReplyError(null);
+                                  }}
+                                  disabled={submittingReplyId === r.id}
+                                  className={cn(
+                                    "px-2.5 py-1 text-xs rounded-lg border font-medium cursor-pointer transition-colors",
+                                    isLight ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200" : "bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border-neutral-700"
+                                  )}
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddReply(r.id)}
+                                  disabled={submittingReplyId === r.id || !(replyInputs[r.id] || "").trim()}
+                                  className="px-3 py-1 text-xs rounded-lg font-bold bg-emerald-500 text-black hover:bg-emerald-400 disabled:opacity-50 cursor-pointer flex items-center gap-1.5 transition-all shadow-sm"
+                                >
+                                  {submittingReplyId === r.id ? (
+                                    <>
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                      <span>Posting...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Send className="w-3 h-3" />
+                                      <span>Send Reply</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -638,15 +933,31 @@ export default function TeamDetailsModal({
               )}
             </div>
 
-            {/* Bottom Close Button */}
-            <div className="pt-2">
-              <GhostButton onClick={onClose} className="w-full text-center py-2.5">
+            {/* Bottom Actions */}
+            <div className="pt-2 flex items-center gap-2">
+              {onBack && (
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className={cn(
+                    "flex-1 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer border shadow-sm",
+                    isLight
+                      ? "bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-700"
+                      : "bg-emerald-500 text-black hover:bg-emerald-400 border-emerald-400"
+                  )}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span>{backLabel || "Back to Challenge Details"}</span>
+                </button>
+              )}
+              <GhostButton onClick={onClose} className={cn("text-center py-2.5", onBack ? "flex-1" : "w-full")}>
                 Close
               </GhostButton>
             </div>
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

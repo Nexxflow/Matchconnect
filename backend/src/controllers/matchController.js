@@ -2061,6 +2061,57 @@ const endInnings = asyncHandler(async (req, res) => {
   res.json(live);
 });
 
+// ============================================================
+// POST /api/matches/:matchId/swap-batsmen
+// Swaps the on-strike status between the two active batsmen on crease
+// ============================================================
+const swapBatsmen = asyncHandler(async (req, res) => {
+  const { matchId } = req.params;
+
+  const inningsRes = await pool.query(
+    `SELECT id FROM innings WHERE match_id = $1 AND is_completed = false
+     ORDER BY inning_number DESC LIMIT 1`,
+    [matchId]
+  );
+  if (inningsRes.rows.length === 0) {
+    return res.status(400).json({ error: "No active innings found for this match" });
+  }
+  const inningsId = inningsRes.rows[0].id;
+
+  const activeBattersRes = await pool.query(
+    `SELECT player_id, is_on_strike FROM batting_stats WHERE innings_id = $1 AND is_out = false ORDER BY id ASC`,
+    [inningsId]
+  );
+
+  if (activeBattersRes.rows.length < 2) {
+    return res.status(400).json({ error: "Cannot swap strike: need two active batsmen on crease" });
+  }
+
+  const batters = activeBattersRes.rows;
+  const striker = batters.find(b => b.is_on_strike);
+  const nonStriker = batters.find(b => !b.is_on_strike && b.player_id !== striker?.player_id);
+
+  if (!striker || !nonStriker) {
+    await pool.query(
+      `UPDATE batting_stats SET is_on_strike = CASE
+         WHEN player_id = $1 THEN false
+         WHEN player_id = $2 THEN true
+         ELSE is_on_strike
+       END
+       WHERE innings_id = $3`,
+      [batters[0].player_id, batters[1].player_id, inningsId]
+    );
+  } else {
+    await pool.query(
+      `UPDATE batting_stats SET is_on_strike = NOT is_on_strike WHERE innings_id = $1 AND is_out = false`,
+      [inningsId]
+    );
+  }
+
+  const live = await buildLiveState(matchId);
+  res.json(live);
+});
+
 module.exports = {
   listMatches,
   createMatch,
@@ -2083,4 +2134,5 @@ module.exports = {
   cancelChallenge,
   updatePlayerName,
   endInnings,
+  swapBatsmen,
 };

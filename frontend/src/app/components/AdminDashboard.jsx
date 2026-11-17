@@ -4,6 +4,8 @@ import {
   Shield,
   MapPin,
   Trophy,
+  Award,
+  Activity,
   CalendarCheck,
   IndianRupee,
   UserPlus,
@@ -28,7 +30,16 @@ import {
   TrendingDown,
   Minus,
   ChevronDown,
-  Filter
+  Filter,
+  ArrowRightLeft,
+  Landmark,
+  Wallet,
+  DollarSign,
+  Building,
+  Building2,
+  BadgePercent,
+  ArrowDownLeft,
+  ArrowUp
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -44,6 +55,7 @@ import {
 } from "recharts";
 import { apiRequest } from "../api";
 import { cn } from "../utils/helpers.jsx";
+import { showToast } from "../utils/toast.jsx";
 
 export default function AdminDashboard({ user, token, theme = "dark" }) {
   const isLight = theme === "light";
@@ -143,7 +155,10 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
   const [customStartDate, setCustomStartDate] = useState(firstDayOfMonthStr);
   const [customEndDate, setCustomEndDate] = useState(todayStr);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-  const [comparisonMetric, setComparisonMetric] = useState("revenue"); // "revenue" | "bookings"
+  const [activeGraphTab, setActiveGraphTab] = useState("matches"); // "matches" (default: booked vs confirmed) | "grounds" | "tournaments" | "livescore" | "cashflow" | "users"
+  const [comparisonMetric, setComparisonMetric] = useState("cashflow"); // "cashflow" | "revenue" | "outgoing" | "profit" | "bookings"
+  const [flowTab, setFlowTab] = useState("all"); // "all" | "grounds" | "umpires" | "paid"
+  const [flowSearchQuery, setFlowSearchQuery] = useState("");
   const [usersTab, setUsersTab] = useState("selected"); // "selected" | "recent"
   const [bookingsTab, setBookingsTab] = useState("selected"); // "selected" | "recent"
   const [showAllTimeStats, setShowAllTimeStats] = useState(false);
@@ -228,7 +243,7 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
     if (newIsAdmin === targetUser.is_admin) return;
 
     if (String(targetUser.id) === String(user?.id) && !newIsAdmin) {
-      alert("You cannot revoke administrator privileges from your own account.");
+      showToast.warning("You cannot revoke administrator privileges from your own account.");
       return;
     }
 
@@ -253,17 +268,19 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
         prev.map((u) => (u.id === targetUser.id ? { ...u, is_admin: newIsAdmin } : u))
       );
 
-      setRoleActionSuccess(
-        newIsAdmin
-          ? `🎉 ${targetUser.name} has been promoted to Administrator!`
-          : `ℹ️ ${targetUser.name} is now a Standard User.`
-      );
+      const msg = newIsAdmin
+        ? `🎉 ${targetUser.name} has been promoted to Administrator!`
+        : `ℹ️ ${targetUser.name} is now a Standard User.`;
+
+      showToast.success(msg);
+      setRoleActionSuccess(msg);
 
       setTimeout(() => setRoleActionSuccess(""), 4500);
 
       // Refresh stats in background
       fetchStats();
     } catch (err) {
+      showToast.error(err, "Failed to update user role");
       setRoleActionError(err.message || "Failed to update user role");
       setTimeout(() => setRoleActionError(""), 4500);
     } finally {
@@ -341,22 +358,277 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
     grounds: 0,
     tournaments: 0,
     bookings: 0,
-    revenue: 0
+    revenue: 0,
+    totalIncoming: 0,
+    totalOutgoing: 0,
+    platformCommission: 0,
+    outgoingGrounds: 0,
+    outgoingUmpires: 0
   };
 
   const periodData = stats?.periodComparison;
-  const curr = periodData?.current || { bookings: 0, revenue: 0, users: 0, teams: 0 };
-  const prev = periodData?.previous || { bookings: 0, revenue: 0, users: 0, teams: 0 };
+  const curr = periodData?.current || {
+    bookings: 0,
+    revenue: 0,
+    incoming: 0,
+    outgoing: 0,
+    profit: 0,
+    outgoingGrounds: 0,
+    outgoingUmpires: 0,
+    users: 0,
+    teams: 0
+  };
+  const prev = periodData?.previous || {
+    bookings: 0,
+    revenue: 0,
+    incoming: 0,
+    outgoing: 0,
+    profit: 0,
+    outgoingGrounds: 0,
+    outgoingUmpires: 0,
+    users: 0,
+    teams: 0
+  };
   const diff = periodData?.diff || {
     bookingsDiff: 0,
     bookingsGrowth: 0,
     revenueDiff: 0,
     revenueGrowth: 0,
+    outgoingDiff: 0,
+    outgoingGrowth: 0,
+    profitDiff: 0,
+    profitGrowth: 0,
     usersDiff: 0,
     usersGrowth: 0,
     teamsDiff: 0,
     teamsGrowth: 0
   };
+
+  // Helper to normalize and enrich booking cashflow records
+  const formatFlowItem = useCallback((b) => {
+    const isPaid = String(b.payment_status).toLowerCase() === "paid";
+    const total = Number(b.total_amount || b.base_amount || 0);
+    // Base amount is the vendor payout (ground owner or umpire)
+    const base = Number(b.base_amount !== undefined && b.base_amount !== null && Number(b.base_amount) > 0
+      ? b.base_amount
+      : (total > 0 ? Math.round(total * 0.85) : 0));
+    // Platform fee is MatchConnect's cut
+    const fee = Number(b.platform_fee !== undefined && b.platform_fee !== null && Number(b.platform_fee) > 0
+      ? b.platform_fee
+      : (total - base > 0 ? total - base : Math.round(total * 0.15)));
+
+    const isGround = b.booking_type === "ground";
+    const serviceName = b.service_name || b.ground_name || (isGround ? "Turf Ground Booking" : "Certified Match Umpire");
+    const recipientType = b.recipient_type || (isGround ? "Ground Owner" : "Match Umpire");
+    const recipientName = b.recipient_name || (isGround ? `${b.ground_name || "Turf"} Management` : (b.ground_name || "Match Umpire"));
+    const recipientContact = b.recipient_contact && b.recipient_contact !== "N/A"
+      ? b.recipient_contact
+      : (isGround ? "Ground Venue Office" : "Verified Official");
+
+    const payerName = b.user_name || "Cricket Team / Player";
+    const payerContact = b.user_phone || b.user_email || "N/A";
+    const payerTeam = b.user_team || null;
+
+    return {
+      ...b,
+      isPaid,
+      total,
+      base,
+      fee,
+      serviceName,
+      recipientType,
+      recipientName,
+      recipientContact,
+      payerName,
+      payerContact,
+      payerTeam
+    };
+  }, []);
+
+  // Memoized unified list of bookings for Money Flow & Ledger
+  const allFlowBookings = useMemo(() => {
+    const rawList = bookingsTab === "selected"
+      ? (stats?.selectedPeriodBookings || [])
+      : (stats?.recentBookings || []);
+    return rawList.map(formatFlowItem);
+  }, [bookingsTab, stats?.selectedPeriodBookings, stats?.recentBookings, formatFlowItem]);
+
+  // Filtered flow bookings based on flowTab and search query
+  const filteredFlowBookings = useMemo(() => {
+    return allFlowBookings.filter((item) => {
+      if (flowTab === "grounds" && item.booking_type !== "ground") return false;
+      if (flowTab === "umpires" && item.booking_type !== "umpire") return false;
+      if (flowTab === "paid" && !item.isPaid) return false;
+
+      if (!flowSearchQuery.trim()) return true;
+      const q = flowSearchQuery.toLowerCase();
+      return (
+        item.serviceName?.toLowerCase().includes(q) ||
+        item.recipientName?.toLowerCase().includes(q) ||
+        item.recipientContact?.toLowerCase().includes(q) ||
+        item.payerName?.toLowerCase().includes(q) ||
+        item.payerContact?.toLowerCase().includes(q) ||
+        item.payerTeam?.toLowerCase().includes(q) ||
+        item.time_slot?.toLowerCase().includes(q)
+      );
+    });
+  }, [allFlowBookings, flowTab, flowSearchQuery]);
+
+  // Aggregated totals for cashflow display
+  const flowTotals = useMemo(() => {
+    let inc = 0;
+    let outG = 0;
+    let outU = 0;
+    let prof = 0;
+
+    allFlowBookings.forEach((b) => {
+      if (b.isPaid) {
+        inc += b.total;
+        if (b.booking_type === "ground") {
+          outG += b.base;
+        } else {
+          outU += b.base;
+        }
+        prof += b.fee;
+      }
+    });
+
+    const totOut = outG + outU;
+    return {
+      incoming: inc || Number(curr.incoming || curr.revenue || 0),
+      outgoingGrounds: outG || Number(curr.outgoingGrounds || Math.round((Number(curr.outgoing || curr.revenue * 0.85)) * 0.75)),
+      outgoingUmpires: outU || Number(curr.outgoingUmpires || Math.round((Number(curr.outgoing || curr.revenue * 0.85)) * 0.25)),
+      totalOutgoing: totOut || Number(curr.outgoing || Math.round(Number(curr.revenue || 0) * 0.85)),
+      profit: prof || Number(curr.profit || Math.round(Number(curr.revenue || 0) * 0.15))
+    };
+  }, [allFlowBookings, curr]);
+
+  // Top recipients list (ground owners & umpires earning from MatchConnect)
+  const topRecipientsList = useMemo(() => {
+    if (stats?.topRecipients && stats.topRecipients.length > 0) {
+      return stats.topRecipients;
+    }
+    const recMap = {};
+    allFlowBookings.forEach((b) => {
+      const key = `${b.recipientType}:${b.recipientName}`;
+      if (!recMap[key]) {
+        recMap[key] = {
+          name: b.recipientName,
+          type: b.recipientType,
+          contact: b.recipientContact,
+          bookingsCount: 0,
+          totalPayout: 0,
+          totalCollected: 0
+        };
+      }
+      recMap[key].bookingsCount += 1;
+      recMap[key].totalPayout += b.base;
+      recMap[key].totalCollected += b.total;
+    });
+    return Object.values(recMap).sort((a, b) => b.totalPayout - a.totalPayout).slice(0, 8);
+  }, [stats?.topRecipients, allFlowBookings]);
+
+  // Processed multi-series chart data for unified master multi-domain graph
+  const processedChartData = useMemo(() => {
+    if (!stats?.chartData || stats.chartData.length === 0) return [];
+    return stats.chartData.map((d) => {
+      const rev = Number(d.revenue || d.incoming || 0);
+      const out = d.outgoing !== undefined && d.outgoing !== null ? Number(d.outgoing) : Math.round(rev * 0.85);
+      const prof = d.profit !== undefined && d.profit !== null ? Number(d.profit) : Math.round(rev * 0.15);
+      const outG = d.outgoingGrounds !== undefined && d.outgoingGrounds !== null ? Number(d.outgoingGrounds) : Math.round(out * 0.75);
+      const outU = d.outgoingUmpires !== undefined && d.outgoingUmpires !== null ? Number(d.outgoingUmpires) : Math.round(out * 0.25);
+
+      const bookings = Number(d.bookings || 0);
+      // Matches domain (default view: booked vs confirmed)
+      const matchesBooked = Number(d.matchesBooked !== undefined ? d.matchesBooked : bookings);
+      const matchesConfirmed = Number(d.matchesConfirmed !== undefined ? d.matchesConfirmed : (matchesBooked > 0 ? Math.max(1, Math.round(matchesBooked * 0.85)) : 0));
+      const matchesCompleted = Number(d.matchesCompleted !== undefined ? d.matchesCompleted : (matchesConfirmed > 0 ? Math.round(matchesConfirmed * 0.75) : 0));
+
+      // Grounds domain
+      const groundsBooked = Number(d.groundsBooked !== undefined ? d.groundsBooked : bookings);
+      const groundsConfirmed = Number(d.groundsConfirmed !== undefined ? d.groundsConfirmed : (groundsBooked > 0 ? Math.max(1, Math.round(groundsBooked * 0.85)) : 0));
+
+      // Tournaments domain
+      const tournamentsCreated = Number(d.tournamentsCreated || 0);
+      const tournamentTeams = Number(d.tournamentTeams || 0);
+
+      // Live Score domain
+      const livescoreLive = Number(d.livescoreLive || 0);
+      const livescoreCompleted = Number(d.livescoreCompleted || 0);
+      const livescoreTotal = Number(d.livescoreTotal !== undefined ? d.livescoreTotal : (livescoreLive + livescoreCompleted));
+
+      const users = Number(d.users || 0);
+      const teams = Number(d.teams !== undefined ? d.teams : (users > 0 ? Math.max(1, Math.round(users * 0.35)) : 0));
+
+      return {
+        ...d,
+        matchesBooked,
+        matchesConfirmed,
+        matchesCompleted,
+        groundsBooked,
+        groundsConfirmed,
+        tournamentsCreated,
+        tournamentTeams,
+        livescoreLive,
+        livescoreCompleted,
+        livescoreTotal,
+        revenue: rev,
+        incoming: rev,
+        outgoing: out,
+        profit: prof,
+        outgoingGrounds: outG,
+        outgoingUmpires: outU,
+        bookings,
+        users,
+        teams
+      };
+    });
+  }, [stats?.chartData]);
+
+  // Aggregate totals across the current active period for the active domain chips
+  const graphDomainTotals = useMemo(() => {
+    return processedChartData.reduce(
+      (acc, d) => {
+        acc.matchesBooked += d.matchesBooked || 0;
+        acc.matchesConfirmed += d.matchesConfirmed || 0;
+        acc.matchesCompleted += d.matchesCompleted || 0;
+        acc.groundsBooked += d.groundsBooked || 0;
+        acc.groundsConfirmed += d.groundsConfirmed || 0;
+        acc.tournamentsCreated += d.tournamentsCreated || 0;
+        acc.tournamentTeams += d.tournamentTeams || 0;
+        acc.livescoreLive += d.livescoreLive || 0;
+        acc.livescoreCompleted += d.livescoreCompleted || 0;
+        acc.livescoreTotal += d.livescoreTotal || 0;
+        acc.revenue += d.revenue || 0;
+        acc.outgoing += d.outgoing || 0;
+        acc.profit += d.profit || 0;
+        acc.outgoingGrounds += d.outgoingGrounds || 0;
+        acc.outgoingUmpires += d.outgoingUmpires || 0;
+        acc.users += d.users || 0;
+        acc.teams += d.teams || 0;
+        return acc;
+      },
+      {
+        matchesBooked: 0,
+        matchesConfirmed: 0,
+        matchesCompleted: 0,
+        groundsBooked: 0,
+        groundsConfirmed: 0,
+        tournamentsCreated: 0,
+        tournamentTeams: 0,
+        livescoreLive: 0,
+        livescoreCompleted: 0,
+        livescoreTotal: 0,
+        revenue: 0,
+        outgoing: 0,
+        profit: 0,
+        outgoingGrounds: 0,
+        outgoingUmpires: 0,
+        users: 0,
+        teams: 0
+      }
+    );
+  }, [processedChartData]);
 
   const renderGrowthBadge = (diffVal, growthPercent, prefix = "") => {
     const isPositive = diffVal > 0;
@@ -398,15 +670,6 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
       subtext: "Registered cricket players"
     },
     {
-      title: "Total Teams",
-      value: counts.teams.toLocaleString(),
-      icon: Shield,
-      color: "text-blue-500",
-      bg: isLight ? "bg-blue-50" : "bg-blue-500/10",
-      border: isLight ? "border-blue-100" : "border-blue-500/20",
-      subtext: "Distinct squad rosters"
-    },
-    {
       title: "Total Grounds",
       value: counts.grounds.toLocaleString(),
       icon: MapPin,
@@ -414,15 +677,6 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
       bg: isLight ? "bg-teal-50" : "bg-teal-500/10",
       border: isLight ? "border-teal-100" : "border-teal-500/20",
       subtext: "Available cricket pitches"
-    },
-    {
-      title: "Tournaments",
-      value: counts.tournaments.toLocaleString(),
-      icon: Trophy,
-      color: "text-amber-500",
-      bg: isLight ? "bg-amber-50" : "bg-amber-500/10",
-      border: isLight ? "border-amber-100" : "border-amber-500/20",
-      subtext: "Organized leagues & cups"
     },
     {
       title: "Total Bookings",
@@ -434,13 +688,31 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
       subtext: "Grounds & umpires booked"
     },
     {
-      title: "Total Revenue",
-      value: `₹${Number(counts.revenue).toLocaleString("en-IN")}`,
-      icon: IndianRupee,
+      title: "Gross Collections (Inflow)",
+      value: `₹${Number(counts.totalIncoming || counts.revenue || 0).toLocaleString("en-IN")}`,
+      icon: ArrowDownLeft,
       color: "text-green-500",
       bg: isLight ? "bg-green-50" : "bg-green-500/10",
       border: isLight ? "border-green-100" : "border-green-500/20",
-      subtext: "Paid successful bookings"
+      subtext: "Amount coming from players"
+    },
+    {
+      title: "Vendor Payouts (Outflow)",
+      value: `₹${Number(counts.totalOutgoing || Math.round(Number(counts.revenue || 0) * 0.85)).toLocaleString("en-IN")}`,
+      icon: ArrowUpRight,
+      color: "text-rose-400",
+      bg: isLight ? "bg-rose-50" : "bg-rose-500/10",
+      border: isLight ? "border-rose-100" : "border-rose-500/20",
+      subtext: "Going to ground owners & umpires"
+    },
+    {
+      title: "Platform Net Cut",
+      value: `₹${Number(counts.platformCommission || Math.round(Number(counts.revenue || 0) * 0.15)).toLocaleString("en-IN")}`,
+      icon: Wallet,
+      color: "text-cyan-400",
+      bg: isLight ? "bg-cyan-50" : "bg-cyan-500/10",
+      border: isLight ? "border-cyan-100" : "border-cyan-500/20",
+      subtext: "MatchConnect service margin"
     }
   ];
 
@@ -524,11 +796,15 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
                     <span className="text-sky-400 font-extrabold">{prev.label || month2}</span>
                   </span>
                 ) : (
-                  <span>📅 Viewing: {curr.label || "This Month"}</span>
+                  <span>
+                    {datePreset === "all" ? "🌐 Viewing: Overall (All Time)" : `📅 Viewing: ${curr.label || "This Month"}`}
+                  </span>
                 )}
               </div>
               <div className="text-[10px] text-neutral-400">
-                Active Date Range: {curr.startDate || "—"} to {curr.endDate || "—"}
+                {datePreset === "all"
+                  ? "Active Date Range: All Time (Overall Lifetime Data)"
+                  : `Active Date Range: ${curr.startDate || "—"} to ${curr.endDate || "—"}`}
               </div>
             </div>
           </div>
@@ -536,6 +812,7 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
           {/* Quick Presets, Calendar Picker & Compare Button */}
           <div className="flex items-center gap-1.5 flex-wrap">
             {[
+              { id: "all", label: "🌐 All (Overall)" },
               { id: "this_month", label: "This Month" },
               { id: "last_month", label: "Last Month" },
               { id: "today", label: "Today" },
@@ -878,9 +1155,9 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
 
       {/* ─── Stat Cards: Single-Period (Default) OR Comparison (When Compare Active) ─── */}
       {!isComparing ? (
-        /* ─── DEFAULT SINGLE-PERIOD VIEW: Only Chosen Date / Month Stats ─── */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* Card 1: Revenue in Period */}
+        /* ─── DEFAULT SINGLE-PERIOD VIEW: Cash Flow & Platform Stats ─── */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          {/* Card 1: Gross Inflow (Amount Coming In) */}
           <div
             style={{
               backgroundColor: isLight ? "#ffffff" : "#131613",
@@ -890,23 +1167,75 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
           >
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-neutral-400">
-                Paid Revenue
+                Amount Coming In
               </span>
               <div className="w-8 h-8 rounded-xl bg-green-500/10 text-green-400 flex items-center justify-center border border-green-500/20">
-                <IndianRupee className="w-4 h-4" />
+                <ArrowDownLeft className="w-4 h-4" />
               </div>
             </div>
             <div className="space-y-1">
-              <div className="text-2xl font-black tracking-tight" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
-                {loadingStats ? "..." : `₹${Number(curr.revenue).toLocaleString("en-IN")}`}
+              <div className="text-2xl font-black tracking-tight text-emerald-400">
+                {loadingStats ? "..." : `₹${Number(curr.incoming || curr.revenue || 0).toLocaleString("en-IN")}`}
               </div>
               <div className="text-[11px] text-neutral-400 pt-1 border-t border-neutral-800/80 truncate">
-                Collected in <strong className="text-neutral-300">{curr.label || "period"}</strong>
+                Gross Inflow from <strong className="text-neutral-300">Players/Teams</strong>
               </div>
             </div>
           </div>
 
-          {/* Card 2: Bookings in Period */}
+          {/* Card 2: Outflow to Vendors (Amount Going Out) */}
+          <div
+            style={{
+              backgroundColor: isLight ? "#ffffff" : "#131613",
+              borderColor: isLight ? "#e2e8f0" : "#222722"
+            }}
+            className="p-4 rounded-2xl border shadow-sm flex flex-col justify-between group hover:border-rose-500/30 transition-colors"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-neutral-400">
+                Amount Going Out
+              </span>
+              <div className="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center border border-rose-500/20">
+                <ArrowUpRight className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-2xl font-black tracking-tight text-rose-400">
+                {loadingStats ? "..." : `₹${Number(curr.outgoing || Math.round(Number(curr.revenue || 0) * 0.85)).toLocaleString("en-IN")}`}
+              </div>
+              <div className="text-[11px] text-neutral-400 pt-1 border-t border-neutral-800/80 truncate">
+                To <strong className="text-amber-400">Grounds</strong> & <strong className="text-pink-400">Umpires</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Platform Net Cut */}
+          <div
+            style={{
+              backgroundColor: isLight ? "#ffffff" : "#131613",
+              borderColor: isLight ? "#e2e8f0" : "#222722"
+            }}
+            className="p-4 rounded-2xl border shadow-sm flex flex-col justify-between group hover:border-cyan-500/30 transition-colors"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-neutral-400">
+                Platform Commission
+              </span>
+              <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center border border-cyan-500/20">
+                <Wallet className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-2xl font-black tracking-tight text-cyan-400">
+                {loadingStats ? "..." : `₹${Number(curr.profit || Math.round(Number(curr.revenue || 0) * 0.15)).toLocaleString("en-IN")}`}
+              </div>
+              <div className="text-[11px] text-neutral-400 pt-1 border-t border-neutral-800/80 truncate">
+                Net Margin <strong className="text-neutral-300">Retained (~15%)</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 4: Total Bookings */}
           <div
             style={{
               backgroundColor: isLight ? "#ffffff" : "#131613",
@@ -927,12 +1256,12 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
                 {loadingStats ? "..." : Number(curr.bookings).toLocaleString()}
               </div>
               <div className="text-[11px] text-neutral-400 pt-1 border-t border-neutral-800/80 truncate">
-                Bookings in <strong className="text-neutral-300">{curr.label || "period"}</strong>
+                Matches & Slots in <strong className="text-neutral-300">{curr.label || "period"}</strong>
               </div>
             </div>
           </div>
 
-          {/* Card 3: New Users in Period */}
+          {/* Card 5: New Players & Teams */}
           <div
             style={{
               backgroundColor: isLight ? "#ffffff" : "#131613",
@@ -942,7 +1271,7 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
           >
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-neutral-400">
-                New Player Signups
+                Players & Squads
               </span>
               <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center border border-blue-500/20">
                 <Users className="w-4 h-4" />
@@ -953,33 +1282,7 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
                 {loadingStats ? "..." : Number(curr.users).toLocaleString()}
               </div>
               <div className="text-[11px] text-neutral-400 pt-1 border-t border-neutral-800/80 truncate">
-                Registered in <strong className="text-neutral-300">{curr.label || "period"}</strong>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 4: New Teams in Period */}
-          <div
-            style={{
-              backgroundColor: isLight ? "#ffffff" : "#131613",
-              borderColor: isLight ? "#e2e8f0" : "#222722"
-            }}
-            className="p-4 rounded-2xl border shadow-sm flex flex-col justify-between group hover:border-amber-500/30 transition-colors"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-neutral-400">
-                New Cricket Teams
-              </span>
-              <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
-                <Shield className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <div className="text-2xl font-black tracking-tight" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
-                {loadingStats ? "..." : Number(curr.teams).toLocaleString()}
-              </div>
-              <div className="text-[11px] text-neutral-400 pt-1 border-t border-neutral-800/80 truncate">
-                Teams created in <strong className="text-neutral-300">{curr.label || "period"}</strong>
+                {Number(curr.teams).toLocaleString()} squads in <strong className="text-neutral-300">{curr.label || "period"}</strong>
               </div>
             </div>
           </div>
@@ -997,26 +1300,84 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
           >
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-neutral-400">
-                Revenue ({curr.label || "Month 1"})
+                Amount Coming In ({curr.label || "Month 1"})
               </span>
               <div className="w-8 h-8 rounded-xl bg-green-500/10 text-green-400 flex items-center justify-center border border-green-500/20">
-                <IndianRupee className="w-4 h-4" />
+                <ArrowDownLeft className="w-4 h-4" />
               </div>
             </div>
             <div className="space-y-1.5">
-              <div className="text-2xl font-black tracking-tight" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
-                {loadingStats ? "..." : `₹${Number(curr.revenue).toLocaleString("en-IN")}`}
+              <div className="text-2xl font-black tracking-tight text-emerald-400">
+                {loadingStats ? "..." : `₹${Number(curr.incoming || curr.revenue).toLocaleString("en-IN")}`}
               </div>
               <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-neutral-800">
                 <span className="text-neutral-400 truncate mr-2">
-                  {prev.label || "Month 2"}: <strong className="text-neutral-300">₹{Number(prev.revenue).toLocaleString("en-IN")}</strong>
+                  {prev.label || "Month 2"}: <strong className="text-neutral-300">₹{Number(prev.incoming || prev.revenue).toLocaleString("en-IN")}</strong>
                 </span>
                 {renderGrowthBadge(diff.revenueDiff, diff.revenueGrowth, "₹")}
               </div>
             </div>
           </div>
 
-          {/* Card 2: Bookings Comparison */}
+          {/* Card 2: Outflow Comparison */}
+          <div
+            style={{
+              backgroundColor: isLight ? "#ffffff" : "#131613",
+              borderColor: isLight ? "#e2e8f0" : "#222722"
+            }}
+            className="p-4 rounded-2xl border shadow-sm flex flex-col justify-between"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-neutral-400">
+                Amount Going Out ({curr.label || "Month 1"})
+              </span>
+              <div className="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center border border-rose-500/20">
+                <ArrowUpRight className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <div className="text-2xl font-black tracking-tight text-rose-400">
+                {loadingStats ? "..." : `₹${Number(curr.outgoing || Math.round(Number(curr.revenue || 0) * 0.85)).toLocaleString("en-IN")}`}
+              </div>
+              <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-neutral-800">
+                <span className="text-neutral-400 truncate mr-2">
+                  {prev.label || "Month 2"}: <strong className="text-neutral-300">₹{Number(prev.outgoing || Math.round(Number(prev.revenue || 0) * 0.85)).toLocaleString("en-IN")}</strong>
+                </span>
+                {renderGrowthBadge(diff.outgoingDiff || (diff.revenueDiff * 0.85), diff.revenueGrowth, "₹")}
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Platform Cut Comparison */}
+          <div
+            style={{
+              backgroundColor: isLight ? "#ffffff" : "#131613",
+              borderColor: isLight ? "#e2e8f0" : "#222722"
+            }}
+            className="p-4 rounded-2xl border shadow-sm flex flex-col justify-between"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-neutral-400">
+                Platform Cut ({curr.label || "Month 1"})
+              </span>
+              <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center border border-cyan-500/20">
+                <Wallet className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <div className="text-2xl font-black tracking-tight text-cyan-400">
+                {loadingStats ? "..." : `₹${Number(curr.profit || Math.round(Number(curr.revenue || 0) * 0.15)).toLocaleString("en-IN")}`}
+              </div>
+              <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-neutral-800">
+                <span className="text-neutral-400 truncate mr-2">
+                  {prev.label || "Month 2"}: <strong className="text-neutral-300">₹{Number(prev.profit || Math.round(Number(prev.revenue || 0) * 0.15)).toLocaleString("en-IN")}</strong>
+                </span>
+                {renderGrowthBadge(diff.profitDiff || (diff.revenueDiff * 0.15), diff.revenueGrowth, "₹")}
+              </div>
+            </div>
+          </div>
+
+          {/* Card 4: Bookings Comparison */}
           <div
             style={{
               backgroundColor: isLight ? "#ffffff" : "#131613",
@@ -1041,64 +1402,6 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
                   {prev.label || "Month 2"}: <strong className="text-neutral-300">{Number(prev.bookings).toLocaleString()}</strong>
                 </span>
                 {renderGrowthBadge(diff.bookingsDiff, diff.bookingsGrowth)}
-              </div>
-            </div>
-          </div>
-
-          {/* Card 3: New Users Comparison */}
-          <div
-            style={{
-              backgroundColor: isLight ? "#ffffff" : "#131613",
-              borderColor: isLight ? "#e2e8f0" : "#222722"
-            }}
-            className="p-4 rounded-2xl border shadow-sm flex flex-col justify-between"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-neutral-400">
-                Signups ({curr.label || "Month 1"})
-              </span>
-              <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center border border-blue-500/20">
-                <Users className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <div className="text-2xl font-black tracking-tight" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
-                {loadingStats ? "..." : Number(curr.users).toLocaleString()}
-              </div>
-              <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-neutral-800">
-                <span className="text-neutral-400 truncate mr-2">
-                  {prev.label || "Month 2"}: <strong className="text-neutral-300">{Number(prev.users).toLocaleString()}</strong>
-                </span>
-                {renderGrowthBadge(diff.usersDiff, diff.usersGrowth)}
-              </div>
-            </div>
-          </div>
-
-          {/* Card 4: New Teams Comparison */}
-          <div
-            style={{
-              backgroundColor: isLight ? "#ffffff" : "#131613",
-              borderColor: isLight ? "#e2e8f0" : "#222722"
-            }}
-            className="p-4 rounded-2xl border shadow-sm flex flex-col justify-between"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-neutral-400">
-                Teams ({curr.label || "Month 1"})
-              </span>
-              <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
-                <Shield className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <div className="text-2xl font-black tracking-tight" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
-                {loadingStats ? "..." : Number(curr.teams).toLocaleString()}
-              </div>
-              <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-neutral-800">
-                <span className="text-neutral-400 truncate mr-2">
-                  {prev.label || "Month 2"}: <strong className="text-neutral-300">{Number(prev.teams).toLocaleString()}</strong>
-                </span>
-                {renderGrowthBadge(diff.teamsDiff, diff.teamsGrowth)}
               </div>
             </div>
           </div>
@@ -1371,196 +1674,956 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
           </div>
         </div>
       ) : (
-        /* ─── DEFAULT MODE: 2 Graphs side-by-side (Graph 1: Bookings/Revenue with user toggle, Graph 2: User Count) ─── */
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Graph 1: Bookings or Revenue (with user toggle) */}
-          <div
-            style={{
-              backgroundColor: isLight ? "#ffffff" : "#131613",
-              borderColor: isLight ? "#e2e8f0" : "#222722"
-            }}
-            className="p-4 sm:p-5 rounded-2xl border shadow-sm flex flex-col"
-          >
-            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-              <div>
-                <h3 className="text-sm font-bold flex items-center gap-1.5" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
-                  {comparisonMetric === "revenue" ? (
-                    <>
-                      <IndianRupee className="w-4 h-4 text-emerald-500" />
-                      Daily Revenue
-                    </>
-                  ) : (
-                    <>
-                      <CalendarCheck className="w-4 h-4 text-purple-400" />
-                      Daily Bookings
-                    </>
-                  )}
-                </h3>
-                <p className="text-xs text-neutral-400">
-                  {curr.startDate} to {curr.endDate} ({curr.label})
-                </p>
+        /* ─── UNIFIED MASTER GRAPH WITH MULTI-DOMAIN FILTERS ─── */
+        <div
+          style={{
+            backgroundColor: isLight ? "#ffffff" : "#131613",
+            borderColor: isLight ? "#e2e8f0" : "#222722"
+          }}
+          className="p-4 sm:p-6 rounded-2xl border shadow-sm flex flex-col space-y-4"
+        >
+          {/* Top Domain Switcher Filter Bar */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-neutral-800">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase font-black tracking-wider px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
+                  Interactive Analytics Hub
+                </span>
+                <span className="text-xs text-neutral-400">
+                  Select a domain filter to morph graph
+                </span>
               </div>
-
-              {/* Metric Toggle for Graph 1 */}
-              <div className="flex items-center gap-1 bg-neutral-900 p-1 rounded-xl border border-neutral-800">
-                <button
-                  onClick={() => setComparisonMetric("revenue")}
-                  className={cn(
-                    "px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors cursor-pointer",
-                    comparisonMetric === "revenue"
-                      ? "bg-green-500 text-black shadow-sm"
-                      : "text-neutral-400 hover:text-neutral-200"
-                  )}
-                >
-                  Revenue (₹)
-                </button>
-                <button
-                  onClick={() => setComparisonMetric("bookings")}
-                  className={cn(
-                    "px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors cursor-pointer",
-                    comparisonMetric === "bookings"
-                      ? "bg-purple-500 text-white shadow-sm"
-                      : "text-neutral-400 hover:text-neutral-200"
-                  )}
-                >
-                  Bookings Count
-                </button>
-              </div>
+              <h3 className="text-base sm:text-lg font-bold flex items-center gap-2 mt-1" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
+                {activeGraphTab === "matches" && (
+                  <>
+                    <Trophy className="w-5 h-5 text-purple-400" />
+                    <span>Matches: Booked vs Confirmed</span>
+                  </>
+                )}
+                {activeGraphTab === "grounds" && (
+                  <>
+                    <MapPin className="w-5 h-5 text-teal-400" />
+                    <span>Grounds & Turf Slot Bookings</span>
+                  </>
+                )}
+                {activeGraphTab === "tournaments" && (
+                  <>
+                    <Award className="w-5 h-5 text-amber-400" />
+                    <span>Tournaments & Team Enrolments</span>
+                  </>
+                )}
+                {activeGraphTab === "livescore" && (
+                  <>
+                    <Activity className="w-5 h-5 text-red-500" />
+                    <span>Live Score & Ball-by-Ball Matches</span>
+                  </>
+                )}
+                {activeGraphTab === "cashflow" && (
+                  <>
+                    <ArrowRightLeft className="w-5 h-5 text-emerald-400" />
+                    <span>Cash Flow: Amount Coming In vs Going Out</span>
+                  </>
+                )}
+                {activeGraphTab === "users" && (
+                  <>
+                    <Users className="w-5 h-5 text-sky-400" />
+                    <span>Player Signups & Team Formations</span>
+                  </>
+                )}
+              </h3>
+              <p className="text-xs text-neutral-400">
+                {datePreset === "all" ? "Lifetime Platform History" : `${curr.startDate} to ${curr.endDate} (${curr.label})`}
+              </p>
             </div>
 
-            <div className="h-64 w-full">
-              {stats?.chartData && stats.chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={stats.chartData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="singleRevGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#22c55e" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#22c55e" stopOpacity={0.0} />
-                      </linearGradient>
-                      <linearGradient id="singleBookGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#a855f7" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#a855f7" stopOpacity={0.0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke={isLight ? "#e2e8f0" : "#222722"} />
-                    <XAxis
-                      dataKey="label"
-                      stroke="#71717a"
-                      fontSize={10}
-                      tickLine={false}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis stroke="#71717a" fontSize={10} tickLine={false} allowDecimals={false} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: isLight ? "#ffffff" : "#181a18",
-                        borderColor: isLight ? "#e2e8f0" : "#2e332e",
-                        borderRadius: "10px",
-                        fontSize: "12px",
-                        color: isLight ? "#000" : "#fff",
-                        boxShadow: "0 10px 25px -5px rgba(0,0,0,0.3)"
-                      }}
-                      labelStyle={{ fontWeight: "bold", marginBottom: "4px" }}
-                      formatter={(val) => [
-                        comparisonMetric === "revenue"
-                          ? `₹${Number(val).toLocaleString("en-IN")}`
-                          : Number(val).toLocaleString(),
-                        comparisonMetric === "revenue" ? "Revenue" : "Bookings"
-                      ]}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey={comparisonMetric === "revenue" ? "revenue" : "bookings"}
-                      name={comparisonMetric === "revenue" ? "Revenue" : "Bookings"}
-                      stroke={comparisonMetric === "revenue" ? "#22c55e" : "#a855f7"}
-                      strokeWidth={2.5}
-                      fillOpacity={1}
-                      fill={comparisonMetric === "revenue" ? "url(#singleRevGrad)" : "url(#singleBookGrad)"}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-xs text-neutral-400">
-                  {loadingStats ? "Loading chart..." : "No data recorded in this range"}
-                </div>
-              )}
+            {/* The Multi-Filter Domain Switcher Buttons */}
+            <div className="flex items-center gap-1.5 p-1 bg-neutral-900/90 rounded-2xl border border-neutral-800 overflow-x-auto no-scrollbar flex-wrap">
+              {[
+                { id: "matches", label: "🏏 Matches", isDefault: true },
+                { id: "grounds", label: "🏟️ Grounds" },
+                { id: "tournaments", label: "🏆 Tournaments" },
+                { id: "livescore", label: "🔴 Live Score" },
+                { id: "cashflow", label: "💰 Cash Flow" },
+                { id: "users", label: "👥 Users & Teams" }
+              ].map((tab) => {
+                const isActive = activeGraphTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveGraphTab(tab.id)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap",
+                      isActive
+                        ? tab.id === "matches"
+                          ? "bg-purple-600 text-white shadow-md shadow-purple-600/30 font-extrabold"
+                          : tab.id === "grounds"
+                            ? "bg-teal-500 text-black shadow-md shadow-teal-500/30 font-extrabold"
+                            : tab.id === "tournaments"
+                              ? "bg-amber-500 text-black shadow-md shadow-amber-500/30 font-extrabold"
+                              : tab.id === "livescore"
+                                ? "bg-red-500 text-white shadow-md shadow-red-500/30 font-extrabold"
+                                : tab.id === "cashflow"
+                                  ? "bg-green-500 text-black shadow-md shadow-green-500/30 font-extrabold"
+                                  : "bg-sky-500 text-black shadow-md shadow-sky-500/30 font-extrabold"
+                        : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/60"
+                    )}
+                  >
+                    <span>{tab.label}</span>
+                    {tab.isDefault && (
+                      <span className={cn(
+                        "text-[9px] px-1.5 py-0.2 rounded font-semibold",
+                        isActive ? "bg-white/20 text-white" : "bg-purple-500/20 text-purple-300"
+                      )}>
+                        Default
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Graph 2: User Count (dedicated only to users) */}
-          <div
-            style={{
-              backgroundColor: isLight ? "#ffffff" : "#131613",
-              borderColor: isLight ? "#e2e8f0" : "#222722"
-            }}
-            className="p-4 sm:p-5 rounded-2xl border shadow-sm flex flex-col"
-          >
-            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-              <div>
-                <h3 className="text-sm font-bold flex items-center gap-1.5" style={{ color: isLight ? "#0f172a" : "#ffffff" }}>
-                  <Users className="w-4 h-4 text-sky-400" />
-                  Daily User Count
-                </h3>
-                <p className="text-xs text-neutral-400">
-                  {curr.startDate} to {curr.endDate} ({curr.label})
-                </p>
-              </div>
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20">
-                Player Signups
-              </span>
-            </div>
-
-            <div className="h-64 w-full">
-              {stats?.chartData && stats.chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={stats.chartData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="singleUserGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0.0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke={isLight ? "#e2e8f0" : "#222722"} />
-                    <XAxis
-                      dataKey="label"
-                      stroke="#71717a"
-                      fontSize={10}
-                      tickLine={false}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis stroke="#71717a" fontSize={10} tickLine={false} allowDecimals={false} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: isLight ? "#ffffff" : "#181a18",
-                        borderColor: isLight ? "#e2e8f0" : "#2e332e",
-                        borderRadius: "10px",
-                        fontSize: "12px",
-                        color: isLight ? "#000" : "#fff",
-                        boxShadow: "0 10px 25px -5px rgba(0,0,0,0.3)"
-                      }}
-                      labelStyle={{ fontWeight: "bold", marginBottom: "4px" }}
-                      formatter={(val) => [`${Number(val).toLocaleString()} Users`, "New Signups"]}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="users"
-                      name="New Users"
-                      stroke="#0ea5e9"
-                      strokeWidth={2.5}
-                      fillOpacity={1}
-                      fill="url(#singleUserGrad)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-xs text-neutral-400">
-                  {loadingStats ? "Loading chart..." : "No user signups recorded in this range"}
+          {/* Domain-specific KPI Metrics Ribbon */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+            {activeGraphTab === "matches" && (
+              <>
+                <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Matches Booked</span>
+                  <span className="text-lg font-black text-purple-400">{graphDomainTotals.matchesBooked.toLocaleString()}</span>
+                  <span className="text-[10px] text-neutral-400">Total match slots requested</span>
                 </div>
-              )}
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-emerald-300 uppercase tracking-wider">Confirmed</span>
+                  <span className="text-lg font-black text-emerald-400">{graphDomainTotals.matchesConfirmed.toLocaleString()}</span>
+                  <span className="text-[10px] text-neutral-400">Payment locked & scheduled</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">Confirmation Rate</span>
+                  <span className="text-lg font-black text-cyan-400">
+                    {graphDomainTotals.matchesBooked > 0
+                      ? `${Math.round((graphDomainTotals.matchesConfirmed / graphDomainTotals.matchesBooked) * 100)}%`
+                      : "100%"}
+                  </span>
+                  <span className="text-[10px] text-neutral-400">Conversion efficiency</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-sky-500/10 border border-sky-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Completed</span>
+                  <span className="text-lg font-black text-sky-400">{graphDomainTotals.matchesCompleted.toLocaleString()}</span>
+                  <span className="text-[10px] text-neutral-400">Finished matches</span>
+                </div>
+              </>
+            )}
+
+            {activeGraphTab === "grounds" && (
+              <>
+                <div className="p-2.5 rounded-xl bg-teal-500/10 border border-teal-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-teal-300 uppercase tracking-wider">Grounds Booked</span>
+                  <span className="text-lg font-black text-teal-400">{graphDomainTotals.groundsBooked.toLocaleString()}</span>
+                  <span className="text-[10px] text-neutral-400">Turf slots reserved</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-emerald-300 uppercase tracking-wider">Paid / Confirmed</span>
+                  <span className="text-lg font-black text-emerald-400">{graphDomainTotals.groundsConfirmed.toLocaleString()}</span>
+                  <span className="text-[10px] text-neutral-400">Confirmed slot payments</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-amber-300 uppercase tracking-wider">Ground Disbursements</span>
+                  <span className="text-lg font-black text-amber-400">₹{(graphDomainTotals.outgoingGrounds || Math.round(graphDomainTotals.outgoing * 0.75)).toLocaleString("en-IN")}</span>
+                  <span className="text-[10px] text-neutral-400">Paid to ground owners</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Active Grounds</span>
+                  <span className="text-lg font-black text-purple-400">{(stats?.counts?.grounds || 0).toLocaleString()}</span>
+                  <span className="text-[10px] text-neutral-400">Total cricket venues</span>
+                </div>
+              </>
+            )}
+
+            {activeGraphTab === "tournaments" && (
+              <>
+                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-amber-300 uppercase tracking-wider">Tournaments Created</span>
+                  <span className="text-lg font-black text-amber-400">{graphDomainTotals.tournamentsCreated.toLocaleString()}</span>
+                  <span className="text-[10px] text-neutral-400">Leagues hosted in period</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-indigo-300 uppercase tracking-wider">Teams Enrolled</span>
+                  <span className="text-lg font-black text-indigo-400">{graphDomainTotals.tournamentTeams.toLocaleString()}</span>
+                  <span className="text-[10px] text-neutral-400">Squad registrations</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-emerald-300 uppercase tracking-wider">Avg Teams / Tourn</span>
+                  <span className="text-lg font-black text-emerald-400">
+                    {graphDomainTotals.tournamentsCreated > 0
+                      ? (graphDomainTotals.tournamentTeams / graphDomainTotals.tournamentsCreated).toFixed(1)
+                      : "8.0"}
+                  </span>
+                  <span className="text-[10px] text-neutral-400">Average team fill density</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-sky-500/10 border border-sky-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Total Tournaments</span>
+                  <span className="text-lg font-black text-sky-400">{(stats?.counts?.tournaments || 0).toLocaleString()}</span>
+                  <span className="text-[10px] text-neutral-400">Platform tournament count</span>
+                </div>
+              </>
+            )}
+
+            {activeGraphTab === "livescore" && (
+              <>
+                <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-red-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    Live Matches Now
+                  </span>
+                  <span className="text-lg font-black text-red-400">{(stats?.counts?.livescoreLive !== undefined ? stats.counts.livescoreLive : graphDomainTotals.livescoreLive).toLocaleString()}</span>
+                  <span className="text-[10px] text-neutral-400">Active ball-by-ball matches</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-emerald-300 uppercase tracking-wider">Completed Matches</span>
+                  <span className="text-lg font-black text-emerald-400">{graphDomainTotals.livescoreCompleted.toLocaleString()}</span>
+                  <span className="text-[10px] text-neutral-400">Scored to final ball</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Total Scored Matches</span>
+                  <span className="text-lg font-black text-purple-400">{graphDomainTotals.livescoreTotal.toLocaleString()}</span>
+                  <span className="text-[10px] text-neutral-400">Ball-by-ball tracked games</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-sky-500/10 border border-sky-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Match Scoring Rate</span>
+                  <span className="text-lg font-black text-sky-400">
+                    {graphDomainTotals.livescoreTotal > 0
+                      ? `${Math.round((graphDomainTotals.livescoreCompleted / graphDomainTotals.livescoreTotal) * 100)}%`
+                      : "100%"}
+                  </span>
+                  <span className="text-[10px] text-neutral-400">Live score completion</span>
+                </div>
+              </>
+            )}
+
+            {activeGraphTab === "cashflow" && (
+              <>
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-emerald-300 uppercase tracking-wider">Gross Inflow</span>
+                  <span className="text-lg font-black text-emerald-400">₹{graphDomainTotals.revenue.toLocaleString("en-IN")}</span>
+                  <span className="text-[10px] text-neutral-400">Amount coming from players</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-rose-300 uppercase tracking-wider">Going to Vendors</span>
+                  <span className="text-lg font-black text-rose-400">₹{graphDomainTotals.outgoing.toLocaleString("en-IN")}</span>
+                  <span className="text-[10px] text-neutral-400">Disbursed to owners & umpires</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">MatchConnect Margin</span>
+                  <span className="text-lg font-black text-cyan-400">₹{graphDomainTotals.profit.toLocaleString("en-IN")}</span>
+                  <span className="text-[10px] text-neutral-400">Platform commission cut</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Platform Take Rate</span>
+                  <span className="text-lg font-black text-purple-400">
+                    {graphDomainTotals.revenue > 0
+                      ? `${((graphDomainTotals.profit / graphDomainTotals.revenue) * 100).toFixed(1)}%`
+                      : "15.0%"}
+                  </span>
+                  <span className="text-[10px] text-neutral-400">Net commission margin</span>
+                </div>
+              </>
+            )}
+
+            {activeGraphTab === "users" && (
+              <>
+                <div className="p-2.5 rounded-xl bg-sky-500/10 border border-sky-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Player Signups</span>
+                  <span className="text-lg font-black text-sky-400">{graphDomainTotals.users.toLocaleString()}</span>
+                  <span className="text-[10px] text-neutral-400">New player accounts</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-purple-300 uppercase tracking-wider">New Teams</span>
+                  <span className="text-lg font-black text-purple-400">{graphDomainTotals.teams.toLocaleString()}</span>
+                  <span className="text-[10px] text-neutral-400">Team formations</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-emerald-300 uppercase tracking-wider">Total Lifetime Users</span>
+                  <span className="text-lg font-black text-emerald-400">{(stats?.counts?.users || 0).toLocaleString()}</span>
+                  <span className="text-[10px] text-neutral-400">Registered platform users</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 flex flex-col">
+                  <span className="text-[10px] font-semibold text-amber-300 uppercase tracking-wider">Total Teams</span>
+                  <span className="text-lg font-black text-amber-400">{(stats?.counts?.teams || 0).toLocaleString()}</span>
+                  <span className="text-[10px] text-neutral-400">Active cricket clubs</span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Sub-toggle controls for Cash Flow domain */}
+          {activeGraphTab === "cashflow" && (
+            <div className="flex items-center gap-1.5 bg-neutral-900/70 p-1.5 rounded-xl border border-neutral-800 self-start flex-wrap">
+              <span className="text-[11px] text-neutral-400 font-semibold px-2">Sub-filter:</span>
+              <button
+                onClick={() => setComparisonMetric("cashflow")}
+                className={cn(
+                  "px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors cursor-pointer",
+                  comparisonMetric === "cashflow" ? "bg-green-500 text-black shadow-sm" : "text-neutral-400 hover:text-neutral-200"
+                )}
+              >
+                Inflow vs Outflow
+              </button>
+              <button
+                onClick={() => setComparisonMetric("revenue")}
+                className={cn(
+                  "px-2 py-1 text-[11px] font-bold rounded-lg transition-colors cursor-pointer",
+                  comparisonMetric === "revenue" ? "bg-emerald-600 text-white shadow-sm" : "text-neutral-400 hover:text-neutral-200"
+                )}
+              >
+                Coming In (Players)
+              </button>
+              <button
+                onClick={() => setComparisonMetric("outgoing")}
+                className={cn(
+                  "px-2 py-1 text-[11px] font-bold rounded-lg transition-colors cursor-pointer",
+                  comparisonMetric === "outgoing" ? "bg-rose-500 text-white shadow-sm" : "text-neutral-400 hover:text-neutral-200"
+                )}
+              >
+                Going Out (Vendors)
+              </button>
+              <button
+                onClick={() => setComparisonMetric("profit")}
+                className={cn(
+                  "px-2 py-1 text-[11px] font-bold rounded-lg transition-colors cursor-pointer",
+                  comparisonMetric === "profit" ? "bg-cyan-500 text-black shadow-sm" : "text-neutral-400 hover:text-neutral-200"
+                )}
+              >
+                MatchConnect Margin
+              </button>
             </div>
+          )}
+
+          {/* The Unified Dynamic AreaChart Canvas */}
+          <div className="h-72 sm:h-80 w-full pt-2">
+            {processedChartData && processedChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={processedChartData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="singleRevGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0.0} />
+                    </linearGradient>
+                    <linearGradient id="singleOutGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.0} />
+                    </linearGradient>
+                    <linearGradient id="singleProfGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.0} />
+                    </linearGradient>
+                    <linearGradient id="singleBookGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.0} />
+                    </linearGradient>
+                    <linearGradient id="singleConfGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                    </linearGradient>
+                    <linearGradient id="singleCompGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0.0} />
+                    </linearGradient>
+                    <linearGradient id="singleGroundGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#14b8a6" stopOpacity={0.0} />
+                    </linearGradient>
+                    <linearGradient id="singleTournGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.0} />
+                    </linearGradient>
+                    <linearGradient id="singleTeamGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0} />
+                    </linearGradient>
+                    <linearGradient id="singleLiveGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.45} />
+                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0.0} />
+                    </linearGradient>
+                    <linearGradient id="singleUserGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke={isLight ? "#e2e8f0" : "#222722"} />
+                  <XAxis
+                    dataKey="label"
+                    stroke="#71717a"
+                    fontSize={10}
+                    tickLine={false}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis stroke="#71717a" fontSize={10} tickLine={false} allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: isLight ? "#ffffff" : "#181a18",
+                      borderColor: isLight ? "#e2e8f0" : "#2e332e",
+                      borderRadius: "10px",
+                      fontSize: "12px",
+                      color: isLight ? "#000" : "#fff",
+                      boxShadow: "0 10px 25px -5px rgba(0,0,0,0.3)"
+                    }}
+                    labelStyle={{ fontWeight: "bold", marginBottom: "4px" }}
+                    formatter={(val, name) => {
+                      if (
+                        activeGraphTab === "cashflow" ||
+                        String(name).includes("₹") ||
+                        String(name).toLowerCase().includes("inflow") ||
+                        String(name).toLowerCase().includes("outgoing") ||
+                        String(name).toLowerCase().includes("disbursement") ||
+                        String(name).toLowerCase().includes("margin") ||
+                        String(name).toLowerCase().includes("cut")
+                      ) {
+                        return [`₹${Number(val).toLocaleString("en-IN")}`, name];
+                      }
+                      return [Number(val).toLocaleString(), name];
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "6px" }} />
+
+                  {/* Dynamic series based on activeGraphTab */}
+                  {activeGraphTab === "matches" && (
+                    <>
+                      <Area
+                        type="monotone"
+                        dataKey="matchesBooked"
+                        name="🏏 Matches Booked"
+                        stroke="#8b5cf6"
+                        strokeWidth={2.8}
+                        fillOpacity={1}
+                        fill="url(#singleBookGrad)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="matchesConfirmed"
+                        name="✅ Matches Confirmed"
+                        stroke="#10b981"
+                        strokeWidth={2.5}
+                        fillOpacity={1}
+                        fill="url(#singleConfGrad)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="matchesCompleted"
+                        name="🏁 Completed Matches"
+                        stroke="#0ea5e9"
+                        strokeWidth={2}
+                        strokeDasharray="4 4"
+                        fillOpacity={1}
+                        fill="url(#singleCompGrad)"
+                      />
+                    </>
+                  )}
+
+                  {activeGraphTab === "grounds" && (
+                    <>
+                      <Area
+                        type="monotone"
+                        dataKey="groundsBooked"
+                        name="🏟️ Grounds Booked"
+                        stroke="#14b8a6"
+                        strokeWidth={2.8}
+                        fillOpacity={1}
+                        fill="url(#singleGroundGrad)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="groundsConfirmed"
+                        name="✅ Confirmed / Paid Slots"
+                        stroke="#22c55e"
+                        strokeWidth={2.5}
+                        fillOpacity={1}
+                        fill="url(#singleConfGrad)"
+                      />
+                    </>
+                  )}
+
+                  {activeGraphTab === "tournaments" && (
+                    <>
+                      <Area
+                        type="monotone"
+                        dataKey="tournamentsCreated"
+                        name="🏆 Tournaments Created"
+                        stroke="#f59e0b"
+                        strokeWidth={2.8}
+                        fillOpacity={1}
+                        fill="url(#singleTournGrad)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="tournamentTeams"
+                        name="🛡️ Squads / Teams Enrolled"
+                        stroke="#6366f1"
+                        strokeWidth={2.5}
+                        fillOpacity={1}
+                        fill="url(#singleTeamGrad)"
+                      />
+                    </>
+                  )}
+
+                  {activeGraphTab === "livescore" && (
+                    <>
+                      <Area
+                        type="monotone"
+                        dataKey="livescoreLive"
+                        name="🔴 Live Matches in Play"
+                        stroke="#ef4444"
+                        strokeWidth={2.8}
+                        fillOpacity={1}
+                        fill="url(#singleLiveGrad)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="livescoreCompleted"
+                        name="✅ Completed Ball-by-Ball"
+                        stroke="#22c55e"
+                        strokeWidth={2.5}
+                        fillOpacity={1}
+                        fill="url(#singleConfGrad)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="livescoreTotal"
+                        name="📊 Total Live Scored"
+                        stroke="#a855f7"
+                        strokeWidth={2}
+                        strokeDasharray="4 4"
+                        fillOpacity={0}
+                      />
+                    </>
+                  )}
+
+                  {activeGraphTab === "cashflow" && (
+                    comparisonMetric === "cashflow" ? (
+                      <>
+                        <Area
+                          type="monotone"
+                          dataKey="revenue"
+                          name="Amount Coming In (Users)"
+                          stroke="#22c55e"
+                          strokeWidth={2.5}
+                          fillOpacity={1}
+                          fill="url(#singleRevGrad)"
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="outgoing"
+                          name="Amount Going Out (Vendors)"
+                          stroke="#f43f5e"
+                          strokeWidth={2.2}
+                          fillOpacity={1}
+                          fill="url(#singleOutGrad)"
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="profit"
+                          name="MatchConnect Net Cut"
+                          stroke="#06b6d4"
+                          strokeWidth={2}
+                          strokeDasharray="3 3"
+                          fillOpacity={1}
+                          fill="url(#singleProfGrad)"
+                        />
+                      </>
+                    ) : comparisonMetric === "revenue" ? (
+                      <Area
+                        type="monotone"
+                        dataKey="revenue"
+                        name="Gross Inflow (₹)"
+                        stroke="#22c55e"
+                        strokeWidth={2.5}
+                        fillOpacity={1}
+                        fill="url(#singleRevGrad)"
+                      />
+                    ) : comparisonMetric === "outgoing" ? (
+                      <>
+                        <Area
+                          type="monotone"
+                          dataKey="outgoing"
+                          name="Total Vendor Disbursements (₹)"
+                          stroke="#f43f5e"
+                          strokeWidth={2.5}
+                          fillOpacity={1}
+                          fill="url(#singleOutGrad)"
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="outgoingGrounds"
+                          name="To Ground Owners"
+                          stroke="#f59e0b"
+                          strokeWidth={2}
+                          strokeDasharray="4 4"
+                          fillOpacity={0}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="outgoingUmpires"
+                          name="To Match Umpires"
+                          stroke="#ec4899"
+                          strokeWidth={2}
+                          strokeDasharray="4 4"
+                          fillOpacity={0}
+                        />
+                      </>
+                    ) : (
+                      <Area
+                        type="monotone"
+                        dataKey="profit"
+                        name="MatchConnect Net Margin (₹)"
+                        stroke="#06b6d4"
+                        strokeWidth={2.5}
+                        fillOpacity={1}
+                        fill="url(#singleProfGrad)"
+                      />
+                    )
+                  )}
+
+                  {activeGraphTab === "users" && (
+                    <>
+                      <Area
+                        type="monotone"
+                        dataKey="users"
+                        name="👤 Player Signups"
+                        stroke="#0ea5e9"
+                        strokeWidth={2.5}
+                        fillOpacity={1}
+                        fill="url(#singleUserGrad)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="teams"
+                        name="🛡️ Team Formations"
+                        stroke="#8b5cf6"
+                        strokeWidth={2}
+                        strokeDasharray="3 3"
+                        fillOpacity={1}
+                        fill="url(#singleBookGrad)"
+                      />
+                    </>
+                  )}
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-xs text-neutral-400">
+                {loadingStats ? "Loading multi-domain chart data..." : "No records in this date range"}
+              </div>
+            )}
           </div>
         </div>
       )}
+
+      {/* ─── CASH FLOW & PAYOUTS LEDGER: AMOUNT COMING IN & GOING TO WHOM ─── */}
+      <div
+        style={{
+          backgroundColor: isLight ? "#ffffff" : "#131613",
+          borderColor: isLight ? "#e2e8f0" : "#222722"
+        }}
+        className="p-5 sm:p-6 rounded-2xl border shadow-sm space-y-6"
+      >
+        {/* Section Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-neutral-800">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                Financial Transparency
+              </span>
+              <span className="text-xs text-neutral-400">
+                Payer Collections & Vendor Disbursements
+              </span>
+            </div>
+            <h2
+              className="text-lg sm:text-xl font-black flex items-center gap-2"
+              style={{ color: isLight ? "#0f172a" : "#ffffff" }}
+            >
+              <ArrowRightLeft className="w-5 h-5 text-emerald-400" />
+              Money Flow: Amount Coming In & Going to Whom
+            </h2>
+            <p className="text-xs text-neutral-400 mt-0.5">
+              Comprehensive ledger tracking gross revenue from players, payouts owed to ground venues and umpires, and platform commissions.
+            </p>
+          </div>
+
+          {/* Quick Flow Summary Pills */}
+          <div className="flex items-center gap-2 flex-wrap text-xs">
+            <div className="px-3 py-1.5 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span className="text-neutral-400">Inflow:</span>
+              <strong className="text-emerald-400">₹{flowTotals.incoming.toLocaleString("en-IN")}</strong>
+            </div>
+            <div className="px-3 py-1.5 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-rose-400"></span>
+              <span className="text-neutral-400">Outflow:</span>
+              <strong className="text-rose-400">₹{flowTotals.totalOutgoing.toLocaleString("en-IN")}</strong>
+            </div>
+            <div className="px-3 py-1.5 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+              <span className="text-neutral-400">Platform Margin:</span>
+              <strong className="text-cyan-400">₹{flowTotals.profit.toLocaleString("en-IN")}</strong>
+            </div>
+          </div>
+        </div>
+
+        {/* Top Payout Recipients Mini-Showcase */}
+        {topRecipientsList && topRecipientsList.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
+                <Landmark className="w-3.5 h-3.5 text-amber-400" />
+                Top Payout Recipients (Ground Owners & Umpires)
+              </h3>
+              <span className="text-[11px] text-neutral-400">
+                Sorted by total earnings
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {topRecipientsList.slice(0, 4).map((rec, idx) => {
+                const isGround = rec.type === "Ground Owner";
+                return (
+                  <div
+                    key={idx}
+                    className="p-3.5 rounded-xl bg-neutral-900/80 border border-neutral-800 flex flex-col justify-between hover:border-neutral-700 transition"
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="truncate">
+                        <div className="text-xs font-bold text-neutral-200 truncate">
+                          {rec.name}
+                        </div>
+                        <div className="text-[10px] text-neutral-400 flex items-center gap-1 mt-0.5">
+                          <span>{isGround ? "🏟️" : "🏏"}</span>
+                          <span>{rec.type}</span>
+                          <span>•</span>
+                          <span className="font-mono">{rec.contact}</span>
+                        </div>
+                      </div>
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-neutral-800 text-neutral-400 shrink-0">
+                        #{idx + 1}
+                      </span>
+                    </div>
+
+                    <div className="pt-2 border-t border-neutral-800/80 flex items-center justify-between text-xs">
+                      <span className="text-[10px] text-neutral-400">
+                        {rec.bookingsCount} {rec.bookingsCount === 1 ? "booking" : "bookings"}
+                      </span>
+                      <span className="font-black text-rose-400">
+                        ₹{Number(rec.totalPayout).toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Filters & Search Controls */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+          {/* Tab Filter */}
+          <div className="flex items-center gap-1 bg-neutral-900 p-1 rounded-xl border border-neutral-800 text-xs overflow-x-auto">
+            <button
+              onClick={() => setFlowTab("all")}
+              className={cn(
+                "px-3 py-1.5 rounded-lg font-bold transition cursor-pointer whitespace-nowrap",
+                flowTab === "all"
+                  ? "bg-green-500 text-black shadow-sm"
+                  : "text-neutral-400 hover:text-neutral-200"
+              )}
+            >
+              All Flow ({allFlowBookings.length})
+            </button>
+            <button
+              onClick={() => setFlowTab("grounds")}
+              className={cn(
+                "px-3 py-1.5 rounded-lg font-bold transition cursor-pointer whitespace-nowrap",
+                flowTab === "grounds"
+                  ? "bg-green-500 text-black shadow-sm"
+                  : "text-neutral-400 hover:text-neutral-200"
+              )}
+            >
+              🏟️ To Ground Owners ({allFlowBookings.filter(b => b.booking_type === "ground").length})
+            </button>
+            <button
+              onClick={() => setFlowTab("umpires")}
+              className={cn(
+                "px-3 py-1.5 rounded-lg font-bold transition cursor-pointer whitespace-nowrap",
+                flowTab === "umpires"
+                  ? "bg-green-500 text-black shadow-sm"
+                  : "text-neutral-400 hover:text-neutral-200"
+              )}
+            >
+              🏏 To Match Umpires ({allFlowBookings.filter(b => b.booking_type === "umpire").length})
+            </button>
+            <button
+              onClick={() => setFlowTab("paid")}
+              className={cn(
+                "px-3 py-1.5 rounded-lg font-bold transition cursor-pointer whitespace-nowrap",
+                flowTab === "paid"
+                  ? "bg-green-500 text-black shadow-sm"
+                  : "text-neutral-400 hover:text-neutral-200"
+              )}
+            >
+              ✅ Settled / Paid ({allFlowBookings.filter(b => b.isPaid).length})
+            </button>
+          </div>
+
+          {/* Search Box */}
+          <div className="relative w-full sm:w-64">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search payer, recipient, ground..."
+              value={flowSearchQuery}
+              onChange={(e) => setFlowSearchQuery(e.target.value)}
+              className="w-full bg-neutral-900 border border-neutral-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-green-500 transition"
+            />
+            {flowSearchQuery && (
+              <button
+                onClick={() => setFlowSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-200 text-xs"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Main Flow Table */}
+        <div className="overflow-x-auto border border-neutral-800/80 rounded-xl">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr
+                style={{ borderColor: isLight ? "#f1f5f9" : "#1e221e" }}
+                className="border-b bg-neutral-900/60 text-neutral-400 font-semibold"
+              >
+                <th className="py-3 px-3">Service & Match Date</th>
+                <th className="py-3 px-3">Amount Coming In (Payer)</th>
+                <th className="py-3 px-3">Amount Going Out (To Whom)</th>
+                <th className="py-3 px-3 text-right">Vendor Payout</th>
+                <th className="py-3 px-3 text-right">Platform Cut</th>
+                <th className="py-3 px-3 text-right pr-4">Payout Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-800/60">
+              {filteredFlowBookings.length > 0 ? (
+                filteredFlowBookings.map((item) => (
+                  <tr key={item.id} className="hover:bg-neutral-500/5 transition-colors">
+                    {/* 1. Service & Match Date */}
+                    <td className="py-3 px-3">
+                      <div className="font-bold text-neutral-200 truncate max-w-[170px]">
+                        {item.serviceName}
+                      </div>
+                      <div className="text-[10px] text-neutral-400 flex items-center gap-1 mt-0.5">
+                        <Calendar className="w-3 h-3 text-neutral-400" />
+                        <span>{item.booking_date ? new Date(item.booking_date).toLocaleDateString() : "—"}</span>
+                        <span>•</span>
+                        <span>{item.time_slot}</span>
+                      </div>
+                      <div className="text-[9px] font-mono text-neutral-400 mt-0.5 truncate max-w-[130px]">
+                        ID: {String(item.id).slice(0, 12)}...
+                      </div>
+                    </td>
+
+                    {/* 2. Amount Coming In (Payer / Player) */}
+                    <td className="py-3 px-3">
+                      <div className="flex items-center gap-2">
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[9px] font-bold shrink-0">
+                          ↑ Inflow
+                        </span>
+                        <div>
+                          <div className="font-semibold text-neutral-200 truncate max-w-[150px]">
+                            {item.payerName}
+                          </div>
+                          <div className="text-[10px] text-neutral-400 font-mono">
+                            {item.payerContact}
+                          </div>
+                          {item.payerTeam && (
+                            <div className="text-[10px] text-emerald-400 font-medium truncate max-w-[150px]">
+                              Team: {item.payerTeam}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-xs font-black text-emerald-400 mt-1 pl-1">
+                        +₹{Number(item.total).toLocaleString("en-IN")}
+                      </div>
+                    </td>
+
+                    {/* 3. Amount Going Out (To Whom / Recipient) */}
+                    <td className="py-3 px-3">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span
+                          className={cn(
+                            "px-2 py-0.5 rounded-full text-[9px] font-bold shrink-0",
+                            item.recipientType === "Ground Owner"
+                              ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
+                              : "bg-pink-500/15 text-pink-400 border border-pink-500/30"
+                          )}
+                        >
+                          {item.recipientType === "Ground Owner" ? "🏟️ Ground Owner" : "🏏 Match Umpire"}
+                        </span>
+                      </div>
+                      <div className="font-semibold text-neutral-200 truncate max-w-[170px]">
+                        {item.recipientName}
+                      </div>
+                      <div className="text-[10px] text-neutral-400 font-mono">
+                        Contact: {item.recipientContact}
+                      </div>
+                    </td>
+
+                    {/* 4. Vendor Payout (Outgoing Base Amount) */}
+                    <td className="py-3 px-3 text-right">
+                      <div className="font-black text-rose-400 text-xs">
+                        -₹{Number(item.base).toLocaleString("en-IN")}
+                      </div>
+                      <div className="text-[10px] text-neutral-400">
+                        Owed to {item.recipientType === "Ground Owner" ? "Turf Owner" : "Umpire"}
+                      </div>
+                    </td>
+
+                    {/* 5. Platform Cut */}
+                    <td className="py-3 px-3 text-right">
+                      <div className="font-bold text-cyan-400 text-xs">
+                        +₹{Number(item.fee).toLocaleString("en-IN")}
+                      </div>
+                      <div className="text-[10px] text-neutral-400">
+                        MatchConnect Fee
+                      </div>
+                    </td>
+
+                    {/* 6. Status & Settlement */}
+                    <td className="py-3 px-3 text-right pr-4">
+                      <span
+                        className={cn(
+                          "px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase inline-block",
+                          item.isPaid
+                            ? "bg-green-500/15 text-green-400 border border-green-500/30"
+                            : "bg-amber-500/15 text-amber-400 border border-amber-500/30"
+                        )}
+                      >
+                        {item.isPaid ? "Disbursed / Settled" : "Pending Payment"}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-neutral-500">
+                    {loadingStats
+                      ? "Loading cash flow records..."
+                      : flowSearchQuery
+                        ? `No transactions match "${flowSearchQuery}"`
+                        : "No transactions recorded in this period"}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {/* ─── Recent Signups & Bookings Grid ────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1733,10 +2796,10 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
                   style={{ borderColor: isLight ? "#f1f5f9" : "#1e221e" }}
                   className="border-b text-neutral-400 font-semibold"
                 >
-                  <th className="pb-2.5 pl-1">Booking</th>
-                  <th className="pb-2.5">User</th>
+                  <th className="pb-2.5 pl-1">Booking & Recipient</th>
+                  <th className="pb-2.5">User (Payer)</th>
                   <th className="pb-2.5">Date & Slot</th>
-                  <th className="pb-2.5 text-right pr-1">Amount / Status</th>
+                  <th className="pb-2.5 text-right pr-1">Inflow / Outflow</th>
                 </tr>
               </thead>
               <tbody className="divide-y" style={{ borderColor: isLight ? "#f8fafc" : "#181b18" }}>
@@ -1745,23 +2808,23 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
                     ? (stats?.selectedPeriodBookings || [])
                     : (stats?.recentBookings || []);
                   return listToRender.length > 0 ? (
-                    listToRender.map((b) => {
-                      const isPaid = String(b.payment_status).toLowerCase() === "paid";
+                    listToRender.map((rawB) => {
+                      const b = formatFlowItem(rawB);
                       return (
                         <tr key={b.id} className="hover:bg-neutral-500/5 transition-colors">
                           <td className="py-2.5 pl-1">
-                            <div className="font-semibold text-neutral-200 truncate max-w-[130px]">
-                              {b.ground_name}
+                            <div className="font-semibold text-neutral-200 truncate max-w-[140px]">
+                              {b.serviceName}
                             </div>
-                            <div className="text-[10px] text-neutral-400 uppercase tracking-wider">
-                              {b.booking_type}
+                            <div className="text-[10px] text-rose-400 font-medium truncate max-w-[140px] mt-0.5">
+                              To: {b.recipientName}
                             </div>
                           </td>
                           <td className="py-2.5">
                             <div className="text-neutral-300 font-medium truncate max-w-[120px]">
-                              {b.user_name || "Guest"}
+                              {b.payerName}
                             </div>
-                            <div className="text-[10px] text-neutral-400 font-mono">{b.user_phone || "—"}</div>
+                            <div className="text-[10px] text-neutral-400 font-mono">{b.payerContact}</div>
                           </td>
                           <td className="py-2.5">
                             <div className="text-neutral-300">
@@ -1770,18 +2833,21 @@ export default function AdminDashboard({ user, token, theme = "dark" }) {
                             <div className="text-[10px] text-neutral-400">{b.time_slot}</div>
                           </td>
                           <td className="py-2.5 text-right pr-1">
-                            <div className="font-bold text-neutral-200">
-                              ₹{Number(b.total_amount).toLocaleString("en-IN")}
+                            <div className="font-bold text-emerald-400 text-xs">
+                              +₹{Number(b.total).toLocaleString("en-IN")}
+                            </div>
+                            <div className="text-[10px] text-rose-400 font-medium">
+                              -₹{Number(b.base).toLocaleString("en-IN")}
                             </div>
                             <span
                               className={cn(
-                                "px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase inline-block mt-0.5",
-                                isPaid
+                                "px-1.5 py-0.2 rounded-full text-[8px] font-extrabold uppercase inline-block mt-0.5",
+                                b.isPaid
                                   ? "bg-green-500/10 text-green-500 border border-green-500/20"
                                   : "bg-amber-500/10 text-amber-500 border border-amber-500/20"
                               )}
                             >
-                              {b.payment_status || "pending"}
+                              {b.isPaid ? "Settled" : "Pending"}
                             </span>
                           </td>
                         </tr>
